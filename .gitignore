@@ -1,0 +1,7 @@
+_preset/
+_ctl/
+__pycache__/
+.env
+*.pem
+.idea/
+.DS_Store

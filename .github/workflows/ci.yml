@@ -1,0 +1,44 @@
+# Reusable workflow: the CI of a host repository. It runs the setup of the preset and the
+# check commands, the same ones the agent is told to run (see examples/ci.yml).
+# The resulting check run is named "<caller job> / ci", normally "ci / ci".
+name: ci
+on:
+  workflow_call:
+    inputs:
+      engine_ref:
+        description: Tag or commit of the engine to run; must match the ref after "@" in the caller's "uses"
+        type: string
+        default: main
+      engine_repository:
+        description: Repository that holds the engine (change it only for a fork)
+        type: string
+        default: PeppeColi/peppec
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          persist-credentials: false
+      # Agent branches are checked with the configuration of the base branch, so the agent
+      # cannot weaken its own checks; any other branch uses its own configuration
+      - if: startsWith(github.head_ref, 'agent/')
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: _base
+          sparse-checkout: .github
+          persist-credentials: false
+      - id: cfg
+        run: bash _ctl/scripts/config.sh
+        env:
+          PEPPEC_CONFIG: ${{ startsWith(github.head_ref, 'agent/') && '_base/.github/peppec.yml' || '.github/peppec.yml' }}
+      - uses: ./_preset
+      - run: bash -euxo pipefail -c "$CHECK"
+        env:
+          CHECK: ${{ steps.cfg.outputs.check }}

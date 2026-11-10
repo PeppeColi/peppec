@@ -1,0 +1,9 @@
+# Copy to the host that runs the bot, next to .env and data/app.pem.
+services:
+  peppec-bot:
+    image: ghcr.io/peppecoli/peppec-bot:1
+    env_file: .env
+    volumes:
+      # Holds the app's private key (app.pem) and the last processed Telegram update
+      - ./data:/data
+    restart: unless-stopped

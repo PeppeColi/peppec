@@ -1,0 +1,233 @@
+# Reusable workflow: the queue orchestrator and the agent.
+# The host repository calls it from its own agent.yml, which keeps the triggers,
+# the concurrency group and the permissions (see examples/agent.yml).
+name: agent
+on:
+  workflow_call:
+    inputs:
+      engine_ref:
+        description: Tag or commit of the engine to run; must match the ref after "@" in the caller's "uses"
+        type: string
+        default: main
+      engine_repository:
+        description: Repository that holds the engine (change it only for a fork)
+        type: string
+        default: PeppeColi/peppec
+      force:
+        description: Ignore the work window
+        type: boolean
+        default: false
+      ci_check:
+        description: Name of the check run that must pass before the review
+        type: string
+        default: ci / ci
+      ci_workflow:
+        description: File name of the host's CI workflow, used to fetch the logs of failed checks
+        type: string
+        default: ci.yml
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+      AGENT_TOKEN:
+        required: false
+      APP_PRIVATE_KEY:
+        required: false
+      TELEGRAM_BOT_TOKEN:
+        required: false
+      TELEGRAM_CHAT_ID:
+        required: false
+
+env:
+  REPO: ${{ github.repository }}
+  TZ_NAME: ${{ vars.TZ_NAME }}
+  CONTROL_ISSUE: ${{ vars.CONTROL_ISSUE }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  CTL: _ctl/scripts
+
+jobs:
+  decide:
+    if: github.event.pull_request.head.repo.fork != true
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.d.outputs.action }}
+      issue: ${{ steps.d.outputs.issue }}
+      pr: ${{ steps.d.outputs.pr }}
+      sha: ${{ steps.d.outputs.sha }}
+      model: ${{ steps.d.outputs.model }}
+      round: ${{ steps.d.outputs.round }}
+      ci_tries: ${{ steps.d.outputs.ci_tries }}
+      reason: ${{ steps.d.outputs.reason }}
+      minutes: ${{ steps.d.outputs.minutes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          sparse-checkout: scripts
+          persist-credentials: false
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - id: d
+        run: bash "$CTL/decide.sh"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          WORK_START_HOUR: ${{ vars.WORK_START_HOUR }}
+          WORK_END_HOUR: ${{ vars.WORK_END_HOUR }}
+          MAX_REVIEW_ROUNDS: ${{ vars.MAX_REVIEW_ROUNDS }}
+          OPUS_FROM_ROUND: ${{ vars.OPUS_FROM_ROUND }}
+          MAX_CI_ATTEMPTS: ${{ vars.MAX_CI_ATTEMPTS }}
+          MAX_ISSUE_MINUTES: ${{ vars.MAX_ISSUE_MINUTES }}
+          STALL_MINUTES: ${{ vars.STALL_MINUTES }}
+          QUOTA_RETRY_MINUTES: ${{ vars.QUOTA_RETRY_MINUTES }}
+          CI_CHECK: ${{ inputs.ci_check }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_MERGED: ${{ github.event.pull_request.merged }}
+          EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          FORCE: ${{ inputs.force }}
+      - if: failure()
+        run: |
+          [ "$GITHUB_EVENT_NAME" != schedule ] || [ "$(date +%-M)" -lt 15 ] || exit 0
+          source "$CTL/lib.sh"
+          notify "The decide step failed: $RUN_URL"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+  control:
+    needs: decide
+    if: contains(fromJSON('["stop","merge","notify_ready","rerequest"]'), needs.decide.outputs.action)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          sparse-checkout: scripts
+          persist-credentials: false
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - run: bash "$CTL/control.sh"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ACTION: ${{ needs.decide.outputs.action }}
+          ISSUE: ${{ needs.decide.outputs.issue }}
+          PR: ${{ needs.decide.outputs.pr }}
+          SHA: ${{ needs.decide.outputs.sha }}
+          AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
+          REASON: ${{ needs.decide.outputs.reason }}
+
+  agent:
+    needs: decide
+    if: contains(fromJSON('["start","fix_ci","fix_review"]'), needs.decide.outputs.action)
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.decide.outputs.minutes) }}
+    env:
+      ACTION: ${{ needs.decide.outputs.action }}
+      ISSUE: ${{ needs.decide.outputs.issue }}
+      PR: ${{ needs.decide.outputs.pr }}
+      ROUND: ${{ needs.decide.outputs.round }}
+      CI_TRIES: ${{ needs.decide.outputs.ci_tries }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0, persist-credentials: false }
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          persist-credentials: false
+      # Runs while the workspace is still on main: the configuration never comes from the
+      # agent's branch. It also copies the chosen preset to ./_preset
+      - id: cfg
+        run: bash "$CTL/config.sh"
+      - id: task
+        run: bash "$CTL/task.sh"
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_TOKEN }}
+          OWNER_LOGIN: ${{ vars.OWNER_LOGIN }}
+          APP_LOGIN: ${{ vars.APP_LOGIN }}
+          CI_WORKFLOW: ${{ inputs.ci_workflow }}
+      - uses: ./_preset
+      - id: clock
+        run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - id: claude
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.AGENT_TOKEN }}
+          # The action refuses runs started by a bot, except the ones listed here
+          allowed_bots: "${{ steps.task.outputs.app_slug }},coderabbitai"
+          prompt: ${{ steps.cfg.outputs.prompt }}
+          claude_args: >-
+            --model ${{ needs.decide.outputs.model }}
+            --max-turns 150
+            ${{ steps.cfg.outputs.tool_args }}
+      # The commands Claude ran could have altered the scripts: take a fresh copy of the engine
+      # before the steps that receive the GitHub tokens
+      - run: rm -rf _ctl
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          sparse-checkout: scripts
+          persist-credentials: false
+      # The app token is created only after Claude has finished, so Claude never sees it
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - run: bash "$CTL/after.sh"
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_TOKEN }}
+          AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GIT_NAME: ${{ vars.AGENT_GIT_NAME }}
+          GIT_EMAIL: ${{ vars.AGENT_GIT_EMAIL }}
+          OUTCOME: ${{ steps.claude.outcome }}
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+          TITLE: ${{ steps.task.outputs.title }}
+          CLAUDE_START: ${{ steps.clock.outputs.start }}
+          PROTECTED_PATHS: ${{ steps.cfg.outputs.protected_paths }}
+
+  timeout:
+    needs: [decide, agent]
+    if: always() && (needs.agent.result == 'cancelled' || needs.agent.result == 'failure')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          sparse-checkout: scripts
+          persist-credentials: false
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - run: bash "$CTL/control.sh"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ACTION: stop
+          ISSUE: ${{ needs.decide.outputs.issue }}
+          PR: ${{ needs.decide.outputs.pr }}
+          SKIP_IF_BLOCKED: ${{ needs.agent.result == 'failure' }}
+          REASON: ${{ needs.agent.result == 'cancelled' && 'time limit reached' || 'the agent job failed' }}

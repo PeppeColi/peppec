@@ -1,0 +1,46 @@
+# Reusable workflow: the morning summary on Telegram (see examples/summary.yml).
+name: summary
+on:
+  workflow_call:
+    inputs:
+      engine_ref:
+        description: Tag or commit of the engine to run; must match the ref after "@" in the caller's "uses"
+        type: string
+        default: main
+      engine_repository:
+        description: Repository that holds the engine (change it only for a fork)
+        type: string
+        default: PeppeColi/peppec
+    secrets:
+      APP_PRIVATE_KEY:
+        required: true
+      TELEGRAM_BOT_TOKEN:
+        required: true
+      TELEGRAM_CHAT_ID:
+        required: true
+
+jobs:
+  summary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          sparse-checkout: scripts
+          persist-credentials: false
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - run: bash _ctl/scripts/summary.sh
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          TZ_NAME: ${{ vars.TZ_NAME }}
+          SUMMARY_HOUR: ${{ vars.SUMMARY_HOUR }}
+          CLAUDE_TOKEN_EXPIRES: ${{ vars.CLAUDE_TOKEN_EXPIRES }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

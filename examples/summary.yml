@@ -1,0 +1,22 @@
+# Copy to .github/workflows/summary.yml in your repository.
+# GitHub cron runs in UTC: list the UTC hours that can match SUMMARY_HOUR in your time zone
+# with and without daylight saving (07:00 and 08:00 UTC for 09:00 in Central Europe).
+# The script sends the summary only on the run that matches.
+name: summary
+on:
+  schedule:
+    - cron: '0 7,8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  summary:
+    uses: PeppeColi/peppec/.github/workflows/summary.yml@v1
+    with:
+      engine_ref: v1
+    secrets:
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

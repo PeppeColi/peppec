@@ -1,0 +1,31 @@
+# Defaults of the rust-v1 preset. A repository can override them in .github/peppec.yml.
+
+# Short description of the project, used in the first line of the agent's prompt
+description: Rust
+
+# Commands that must all pass: run by CI as they are, and by the agent before it finishes
+check: |
+  cargo fmt --all -- --check
+  cargo build --all-targets
+  cargo clippy --all-targets -- -D warnings
+  cargo test
+
+# Extra rules added to the agent's prompt
+notes:
+  - Format the code with `cargo fmt --all`.
+
+# Tools the agent may use besides reading and editing files
+allowed_tools:
+  - Bash(cargo:*)
+disallowed_tools:
+  - Bash(cargo run:*)
+  - Bash(cargo publish:*)
+
+# Files the agent must not change: they define how the code is checked
+protected_paths:
+  - clippy.toml
+  - .clippy.toml
+  - rustfmt.toml
+  - .rustfmt.toml
+  - rust-toolchain
+  - rust-toolchain.toml

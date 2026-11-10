@@ -1,0 +1,44 @@
+# Checks the presets on every pull request: the rules of CONTRIBUTING.md that can be
+# verified automatically, then setup and check commands of each preset on its fixture.
+# It runs with "pull_request", so code from forks never sees a secret.
+name: presets
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    outputs:
+      presets: ${{ steps.list.outputs.presets }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/lint-presets.sh
+      - id: list
+        run: echo "presets=$(ls presets | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  fixture:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: ${{ fromJSON(needs.lint.outputs.presets) }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: cfg
+        run: |
+          printf 'preset: %s\n' "$PRESET" > "$RUNNER_TEMP/peppec.yml"
+          bash scripts/config.sh
+        env:
+          PRESET: ${{ matrix.preset }}
+          PEPPEC_CONFIG: ${{ runner.temp }}/peppec.yml
+      - uses: ./_preset
+      - run: bash -euxo pipefail -c "$CHECK"
+        working-directory: presets/${{ matrix.preset }}/fixture
+        env:
+          CHECK: ${{ steps.cfg.outputs.check }}

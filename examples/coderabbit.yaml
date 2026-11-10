@@ -1,0 +1,13 @@
+# Copy to .coderabbit.yaml in the root of your repository.
+language: en-US
+reviews:
+  profile: chill
+  # Reviews are requested by the workflow, once per commit, when the checks are green
+  auto_review:
+    enabled: false
+    drafts: false
+  # The approval is the "review passed" signal
+  auto_approvals:
+    enabled: true
+  # The pull request author, that is the agent, cannot force the approval with a comment
+  allow_author_approval: false

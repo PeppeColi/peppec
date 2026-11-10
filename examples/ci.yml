@@ -1,0 +1,16 @@
+# Copy to .github/workflows/ci.yml in your repository.
+# The check run it produces is named "ci / ci": require that name in the branch ruleset.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: PeppeColi/peppec/.github/workflows/ci.yml@v1
+    with:
+      engine_ref: v1

@@ -1,0 +1,42 @@
+# Copy to .github/workflows/agent.yml in your repository.
+# Keep the ref after "@" and engine_ref identical.
+name: agent
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+  pull_request_review:
+    types: [submitted]
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Ignore the work window
+        type: boolean
+        default: false
+
+# Only one run at a time: each run reads the state back from GitHub and picks one move
+concurrency:
+  group: agent
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  agent:
+    if: github.event.pull_request.head.repo.fork != true
+    uses: PeppeColi/peppec/.github/workflows/agent.yml@v1
+    with:
+      engine_ref: v1
+      force: ${{ inputs.force || false }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
