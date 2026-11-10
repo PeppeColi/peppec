@@ -10,7 +10,7 @@ A preset runs inside other people's repositories, in the same job that later use
 
 ```text
 presets/<name>-v<N>/
-├── action.yml     # composite action: toolchain, dependencies, cache
+├── action.yml     # composite action: toolchain, dependencies, cache; declares the "options" input
 ├── preset.yml     # defaults used by CI and by the agent
 ├── README.md      # what it installs, what it checks, its limits
 └── fixture/       # minimal project the preset is tested on
@@ -27,7 +27,9 @@ presets/<name>-v<N>/
 | `disallowed_tools` | Exceptions to the above: at least running and publishing the project |
 | `protected_paths` | Files that define how the code is checked. The agent's changes to them are refused |
 
-Use [`presets/rust-v1`](presets/rust-v1) as a model.
+`action.yml` must declare an `options` input: it receives, as a JSON string, the `options` mapping of the host's configuration. Read it through an environment variable, never by writing `${{ inputs.options }}` inside a script. Document the options in the README.
+
+Use [`presets/rust-v1`](presets/rust-v1) and [`presets/php-v1`](presets/php-v1) as models.
 
 ## Rules
 
@@ -43,7 +45,7 @@ Use [`presets/rust-v1`](presets/rust-v1) as a model.
 
 ## Test it locally
 
-`scripts/lint-presets.sh` checks rules 1, 3 and 4 and the layout. It needs `yq` and `jq`:
+`scripts/lint-presets.sh` checks rules 1, 3 and 4, the layout and the `options` input. It needs `yq` and `jq`:
 
 ```bash
 bash scripts/lint-presets.sh

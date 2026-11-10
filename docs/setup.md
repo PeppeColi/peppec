@@ -25,7 +25,7 @@ All `gh` commands run on your computer, signed in as `<USER>`.
 1. Add the working folders of the workflows to `.gitignore`:
 
 ```bash
-printf '.agent/\n_ctl/\n_preset/\n_base/\n' >> .gitignore
+printf '.agent/\n_ctl/\n_preset/\n_extra/\n_base/\n' >> .gitignore
 ```
 
 2. Protect `main`: **Settings → Rules → Rulesets → New branch ruleset**, target `main`, enable "Require a pull request before merging" (0 approvals) and "Block force pushes". Under **Bypass list** add the **Repository admin** role, so you can push the setup files straight to `main`. The required status check is added in Phase 5.
@@ -171,11 +171,35 @@ curl -fsSL "$base/peppec.yml" -o .github/peppec.yml
 ```
 
 2. In `.github/peppec.yml` choose the [preset](../presets) for your project. Each preset's README lists what it installs and checks; any default can be overridden.
-3. In `summary.yml`, adjust the cron hours to your time zone as explained in the file.
-4. Commit and push to `main` from your account. Check that the `ci` workflow passes.
-5. Go back to the ruleset of Phase 1 and add **`ci / ci`** to "Require status checks to pass".
+3. If the tests need something the preset does not install, add your own setup action as described below.
+4. In `summary.yml`, adjust the cron hours to your time zone as explained in the file.
+5. Commit and push to `main` from your account. Check that the `ci` workflow passes.
+6. Go back to the ruleset of Phase 1 and add **`ci / ci`** to "Require status checks to pass".
 
 Workflow and configuration changes are always yours to make: the agent's token cannot touch workflows, and the agent's changes under `.github` are refused.
+
+### Services and other project-specific setup
+
+A preset is generic: it installs the language and the dependencies. A database for the tests, a system package or a file to generate belong to your project, in a small action of your own that runs right after the preset, both in CI and for the agent.
+
+```yaml
+# .github/actions/services/action.yml
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=test postgres:16
+    - shell: bash
+      run: cp .env.testing.example .env.testing
+```
+
+```yaml
+# .github/peppec.yml
+preset: php-v1
+extra_setup: .github/actions/services
+```
+
+The action must live under `.github/`, so the agent cannot change it. Like the rest of the configuration, it is read from `main`.
 
 ## Phase 6 — Telegram bot
 

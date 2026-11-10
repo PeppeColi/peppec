@@ -1,0 +1,49 @@
+# Defaults of the php-v1 preset. A repository can override them in .github/peppec.yml.
+
+# Short description of the project, used in the first line of the agent's prompt
+description: PHP, dependencies managed with Composer
+
+# Commands that must all pass: run by CI as they are, and by the agent before it finishes.
+# Projects with a formatter or a static analyser add their commands by overriding this value.
+check: |
+  composer validate --no-check-publish
+  vendor/bin/phpunit
+
+# Extra rules added to the agent's prompt
+notes:
+  - Run the project's tools as `vendor/bin/<tool>`, without a leading `./`.
+  - Add dependencies with `composer require`; never edit `composer.lock` by hand.
+
+# Tools the agent may use besides reading and editing files
+allowed_tools:
+  - Bash(composer:*)
+  - Bash(php:*)
+  - Bash(vendor/bin/phpunit:*)
+  - Bash(vendor/bin/pest:*)
+  - Bash(vendor/bin/phpstan:*)
+  - Bash(vendor/bin/psalm:*)
+  - Bash(vendor/bin/pint:*)
+  - Bash(vendor/bin/php-cs-fixer:*)
+  - Bash(vendor/bin/phpcs:*)
+  - Bash(vendor/bin/phpcbf:*)
+disallowed_tools:
+  - Bash(php -S:*)
+  - Bash(php artisan serve:*)
+  - Bash(composer global:*)
+
+# Files the agent must not change: they define how the code is checked
+protected_paths:
+  - .php-version
+  - phpunit.xml
+  - phpunit.xml.dist
+  - phpunit.dist.xml
+  - phpstan.neon
+  - phpstan.neon.dist
+  - phpstan.dist.neon
+  - psalm.xml
+  - psalm.xml.dist
+  - pint.json
+  - .php-cs-fixer.php
+  - .php-cs-fixer.dist.php
+  - phpcs.xml
+  - phpcs.xml.dist

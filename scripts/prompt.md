@@ -1,7 +1,7 @@
 You are working in this repository ({{description}}). Your task is in .agent/task.md: read it first.
 Rules:
 - Follow the repository's CLAUDE.md, if present.
-- Change only the files you need. Do not touch _ctl/, _preset/ or .agent/ (except for the question below).
+- Change only the files you need. Do not touch _ctl/, _preset/, _extra/ or .agent/ (except for the question below).
 - Never change these protected paths; if the task requires it, ask a question instead:
 {{protected_paths}}
 - Before finishing, run these checks and fix until they all pass:

@@ -11,3 +11,11 @@ preset: rust-v1
 #   cargo test --all-features
 # protected_paths:
 #   - Makefile
+#
+# Options of the preset, listed in its README:
+# options:
+#   php-version: "8.3"
+#
+# A setup action of this repository, run after the preset's: services, system packages.
+# It must live under .github/.
+# extra_setup: .github/actions/services

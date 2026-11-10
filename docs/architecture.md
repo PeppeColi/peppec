@@ -63,6 +63,8 @@ check: |
   cargo test --all-features
 ```
 
+Two more keys cover what a preset cannot know: `options` passes values to the preset (a language version, extensions), and `extra_setup` names a setup action of the host, run after the preset's, for services and system packages.
+
 CI and the agent use the same definition: CI runs the setup and the check commands, and the agent's prompt tells it to run the same commands until they pass.
 
 The configuration is always read from `main`. Pull requests from `agent/*` branches are checked with the configuration of the base branch, so the agent cannot weaken its own checks.

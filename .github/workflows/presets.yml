@@ -29,16 +29,24 @@ jobs:
       matrix:
         preset: ${{ fromJSON(needs.lint.outputs.presets) }}
     steps:
+      # Same layout as a host repository: the project at the root, the engine in _ctl
       - uses: actions/checkout@v4
+        with: { path: _ctl }
       - id: cfg
         run: |
-          printf 'preset: %s\n' "$PRESET" > "$RUNNER_TEMP/peppec.yml"
-          bash scripts/config.sh
+          cp -R "_ctl/presets/$PRESET/fixture/." .
+          if [ ! -f .github/peppec.yml ]; then
+            mkdir -p .github
+            printf 'preset: %s\n' "$PRESET" > .github/peppec.yml
+          fi
+          bash _ctl/scripts/config.sh
         env:
           PRESET: ${{ matrix.preset }}
-          PEPPEC_CONFIG: ${{ runner.temp }}/peppec.yml
       - uses: ./_preset
+        with:
+          options: ${{ steps.cfg.outputs.options }}
+      - if: steps.cfg.outputs.extra_setup != ''
+        uses: ./_extra
       - run: bash -euxo pipefail -c "$CHECK"
-        working-directory: presets/${{ matrix.preset }}/fixture
         env:
           CHECK: ${{ steps.cfg.outputs.check }}

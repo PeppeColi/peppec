@@ -2,11 +2,14 @@
 # Resolves the configuration of the host repository (PEPPEC_CONFIG, by default
 # .github/peppec.yml in the workspace) against the presets of the engine checkout this script
 # lives in, and copies the chosen preset to a fixed path so the workflow can run it with
-# "uses: ./_preset" (the "uses" key does not accept expressions).
+# "uses: ./_preset" (the "uses" key does not accept expressions). The optional extra setup
+# action of the host is copied to ./_extra in the same way.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONF="${PEPPEC_CONFIG:-${GITHUB_WORKSPACE:-$PWD}/.github/peppec.yml}"
+HOST="$(cd "$(dirname "$CONF")/.." 2> /dev/null && pwd || true)"
 DEST="${GITHUB_WORKSPACE:-$PWD}/_preset"
+EXTRA="${GITHUB_WORKSPACE:-$PWD}/_extra"
 BASE_TOOLS="Read,Write,Edit,Glob,Grep"
 die() { echo "::error::$1"; exit 1; }
 
@@ -22,7 +25,8 @@ PDIR="$ROOT/presets/$preset"
 cfg=$(jq -n --argjson p "$(yq -o=json '.' "$PDIR/preset.yml")" --argjson c "$conf" '
   ($p + ($c | del(.preset)))
   | .protected_paths = ([".github"] + ($p.protected_paths // []) + ($c.protected_paths // []) | unique)
-  | .notes //= [] | .allowed_tools //= [] | .disallowed_tools //= []')
+  | .notes //= [] | .allowed_tools //= [] | .disallowed_tools //= []
+  | .options //= {} | .extra_setup //= ""')
 
 problems=$(jq -r '
   def strings(f): (f | type) == "array" and all(f[]; type == "string");
@@ -32,7 +36,12 @@ problems=$(jq -r '
     ((["notes", "allowed_tools", "disallowed_tools", "protected_paths"][]) as $k
       | select(strings(.[$k]) | not) | "\($k) must be a list of strings"),
     ((["allowed_tools", "disallowed_tools"][]) as $k
-      | select(strings(.[$k]) and (plain(.[$k]) | not)) | "\($k) entries cannot contain quotes, commas or line breaks")
+      | select(strings(.[$k]) and (plain(.[$k]) | not)) | "\($k) entries cannot contain quotes, commas or line breaks"),
+    (select((.options | type) != "object") | "options must be a mapping"),
+    (select((.extra_setup | type) != "string"
+       or (.extra_setup != "" and (.extra_setup | test("^\\.github/[A-Za-z0-9._/-]+$") | not))
+       or (.extra_setup | test("\\.\\.")))
+     | "extra_setup must be the path of an action directory under .github/")
   ] | .[]' <<< "$cfg")
 [ -z "$problems" ] || die "Invalid configuration: ${problems//$'\n'/; }"
 
@@ -53,8 +62,15 @@ prompt=$(jq -r --rawfile t "$ROOT/scripts/prompt.md" '
   | reduce ($v | keys[]) as $k ($t; split($k) | join($v[$k]))
   | split("\n") | map(select(. != "")) | join("\n")' <<< "$cfg")
 
-rm -rf "$DEST"
+rm -rf "$DEST" "$EXTRA"
 cp -R "$PDIR" "$DEST"
+# The extra setup comes from the same checkout as the configuration, never from the agent's branch
+extra_setup=$(jq -r '.extra_setup' <<< "$cfg")
+if [ -n "$extra_setup" ]; then
+  [ -f "$HOST/$extra_setup/action.yml" ] || [ -f "$HOST/$extra_setup/action.yaml" ] \
+    || die "extra_setup: no action.yml in $extra_setup"
+  cp -R "$HOST/$extra_setup" "$EXTRA"
+fi
 
 out() {
   local d="PEPPEC_${RANDOM}${RANDOM}${RANDOM}"
@@ -64,7 +80,10 @@ out preset "$preset"
 out check "$check"
 out protected_paths "$protected"
 out tool_args "$tool_args"
+out options "$(jq -c '.options' <<< "$cfg")"
+out extra_setup "$extra_setup"
 out prompt "$prompt"
 echo "Preset: $preset"
 echo "Protected paths: ${protected//$'\n'/, }"
 echo "Tools: $tool_args"
+echo "Extra setup: ${extra_setup:-none}"

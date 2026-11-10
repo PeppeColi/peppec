@@ -1,5 +1,9 @@
 name: rust-v1
 description: Rust stable toolchain with clippy and rustfmt, plus the cargo build cache
+inputs:
+  options:
+    description: 'JSON object from the "options" key of .github/peppec.yml; this preset has none'
+    default: '{}'
 runs:
   using: composite
   steps:
