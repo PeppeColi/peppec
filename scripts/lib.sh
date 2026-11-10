@@ -1,6 +1,8 @@
 # scripts/lib.sh
 notify() {
   local text="${1:0:4000}"
+  # Also in the job log, so the reason of a stop can be read without Telegram
+  echo "notify: $text"
   curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     -d chat_id="$TELEGRAM_CHAT_ID" --data-urlencode text="$text" > /dev/null
 }
