@@ -34,7 +34,10 @@ Reply to this message to unblock it."
 fi
 
 pushed=false
-git add -A -- . ':(exclude).agent' ':(exclude)_ctl' ':(exclude)_preset' ':(exclude)_extra'
+# Stage everything, then drop the working folders of the workflow from the index. Naming them
+# as excluded pathspecs makes "git add" fail when the host's .gitignore lists them
+git add -A
+git rm -r -q -f --cached --ignore-unmatch -- .agent _ctl _preset _extra
 
 # Protected paths (git pathspecs, one per line): changes to them are never committed
 prot=()
