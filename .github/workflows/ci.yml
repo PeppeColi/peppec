@@ -39,6 +39,11 @@ jobs:
         env:
           PEPPEC_CONFIG: ${{ startsWith(github.head_ref, 'agent/') && '_base/.github/peppec.yml' || '.github/peppec.yml' }}
       - uses: ./_preset
+        with:
+          options: ${{ steps.cfg.outputs.options }}
+      # Optional setup action of the host repository (extra_setup in .github/peppec.yml)
+      - if: steps.cfg.outputs.extra_setup != ''
+        uses: ./_extra
       - run: bash -euxo pipefail -c "$CHECK"
         env:
           CHECK: ${{ steps.cfg.outputs.check }}

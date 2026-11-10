@@ -1,0 +1,41 @@
+name: php-v1
+description: PHP with Composer, dependencies installed from composer.json and cached
+inputs:
+  options:
+    description: 'JSON object from the "options" key of .github/peppec.yml: php-version, extensions'
+    default: '{}'
+runs:
+  using: composite
+  steps:
+    # PHP version: the option, then .php-version, then composer.json (config.platform.php,
+    # or the lowest version allowed by require.php), then the default
+    - id: php
+      shell: bash
+      env:
+        OPTIONS: ${{ inputs.options }}
+      run: |
+        v=$(jq -r '."php-version" // empty' <<< "$OPTIONS")
+        if [ -z "$v" ] && [ -f .php-version ]; then v=$(tr -d '[:space:]' < .php-version); fi
+        if [ -z "$v" ] && [ -f composer.json ]; then
+          v=$(jq -r '.config.platform.php // .require.php // empty' composer.json)
+        fi
+        v=$(grep -oE '[0-9]+\.[0-9]+' <<< "$v" | head -n 1 || true)
+        echo "version=${v:-8.4}" >> "$GITHUB_OUTPUT"
+        echo "extensions=$(jq -r '.extensions // empty' <<< "$OPTIONS")" >> "$GITHUB_OUTPUT"
+    # Third-party actions are pinned to a commit, never to a tag
+    - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+      with:
+        php-version: ${{ steps.php.outputs.version }}
+        extensions: ${{ steps.php.outputs.extensions }}
+        tools: composer:v2
+        coverage: none
+    - id: composer
+      shell: bash
+      run: echo "cache=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.composer.outputs.cache }}
+        key: composer-${{ runner.os }}-php${{ steps.php.outputs.version }}-${{ hashFiles('composer.lock', 'composer.json') }}
+        restore-keys: composer-${{ runner.os }}-php${{ steps.php.outputs.version }}-
+    - shell: bash
+      run: composer install --no-interaction --no-progress --prefer-dist

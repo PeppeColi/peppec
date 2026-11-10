@@ -49,6 +49,7 @@ jobs:
 | Preset | For |
 | --- | --- |
 | [`rust-v1`](presets/rust-v1) | Rust projects built with Cargo |
+| [`php-v1`](presets/php-v1) | PHP projects that manage their dependencies with Composer |
 
 A preset is a directory with a setup action, default check commands and a small test project. New presets are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
 

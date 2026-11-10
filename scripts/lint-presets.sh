@@ -20,6 +20,8 @@ for dir in "$ROOT"/presets/*/; do
   done < <(yq -o=json '.' "${dir}action.yml" | jq -r '.runs.steps[]? | .uses // empty')
   [ "$(yq -o=json '.' "${dir}action.yml" | jq -r '.runs.using // ""')" = composite ] \
     || err "$name: action.yml must be a composite action"
+  [ "$(yq -o=json '.' "${dir}action.yml" | jq -r '.inputs.options | type')" = object ] \
+    || err "$name: action.yml must declare the 'options' input"
 
   # The agent gets only the tools of the language, and the checks stay protected
   p=$(yq -o=json '.' "${dir}preset.yml")

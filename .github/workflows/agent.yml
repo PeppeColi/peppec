@@ -158,6 +158,11 @@ jobs:
           APP_LOGIN: ${{ vars.APP_LOGIN }}
           CI_WORKFLOW: ${{ inputs.ci_workflow }}
       - uses: ./_preset
+        with:
+          options: ${{ steps.cfg.outputs.options }}
+      # Optional setup action of the host repository (extra_setup in .github/peppec.yml)
+      - if: steps.cfg.outputs.extra_setup != ''
+        uses: ./_extra
       - id: clock
         run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
       - id: claude

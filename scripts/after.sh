@@ -34,7 +34,7 @@ Reply to this message to unblock it."
 fi
 
 pushed=false
-git add -A -- . ':(exclude).agent' ':(exclude)_ctl' ':(exclude)_preset'
+git add -A -- . ':(exclude).agent' ':(exclude)_ctl' ':(exclude)_preset' ':(exclude)_extra'
 
 # Protected paths (git pathspecs, one per line): changes to them are never committed
 prot=()

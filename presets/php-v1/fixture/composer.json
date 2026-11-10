@@ -1,0 +1,22 @@
+{
+    "name": "peppec/fixture",
+    "description": "Minimal project used to test the php-v1 preset",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fixture\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Fixture\\Tests\\": "tests/"
+        }
+    }
+}
