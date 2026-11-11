@@ -5,6 +5,7 @@
 #   peppec init     run inside a clone of the host repository; safe to run again
 #   peppec doctor   check an installation (-R owner/repo, or the current clone)
 #   peppec bot      prepare the folder to copy to the machine that runs the Telegram bot
+#   peppec update   replace this script with the current one of the engine
 set -euo pipefail
 
 ENGINE="${PEPPEC_ENGINE:-PeppeColi/peppec}"
@@ -579,6 +580,26 @@ cmd_bot() {
   note "     rm -rf $OUT_DIR"
 }
 
+# ---------- update ----------
+cmd_update() {
+  preflight
+  local self="${BASH_SOURCE[0]}" tmp
+  case "$self" in /dev/*|/proc/*) die "this copy is not a file on disk: nothing to update";; esac
+  [ -f "$self" ] && [ -w "$self" ] || die "cannot write $self"
+  tmp=$(mktemp "$(dirname "$self")/.peppec.XXXXXX") || die "cannot write in $(dirname "$self")"
+  if ! engine_file cli/peppec > "$tmp" 2> /dev/null || ! bash -n "$tmp" 2> /dev/null; then
+    rm -f "$tmp"; die "could not download a valid cli/peppec from $ENGINE@$REF"
+  fi
+  if cmp -s "$tmp" "$self"; then
+    rm -f "$tmp"; ok "already up to date with $ENGINE@$REF"
+  else
+    chmod +x "$tmp"
+    # A rename, not an overwrite: bash is still reading the old file
+    mv "$tmp" "$self"
+    ok "updated to $ENGINE@$REF: $self"
+  fi
+}
+
 usage() {
   cat << EOF
 PEPPEC command line (engine $ENGINE@$REF)
@@ -591,6 +612,8 @@ Usage:
       Check an installation and list what is missing or wrong.
   peppec bot [-R owner/repo] [--key <app.pem>] [--out <dir>]
       Prepare the folder to copy to the machine that runs the Telegram bot.
+  peppec update
+      Replace this script with the current one of the engine.
 
 Options:
   --ref <ref>   Engine version to install (default: v1)
@@ -618,6 +641,7 @@ case "$COMMAND" in
   init) cmd_init;;
   doctor) cmd_doctor;;
   bot) cmd_bot;;
+  update) cmd_update;;
   ""|help|-h|--help) usage;;
   *) die "unknown command: $COMMAND (try 'peppec help')";;
 esac

@@ -28,14 +28,23 @@ The full picture is in [docs/architecture.md](docs/architecture.md).
 
 ## Install
 
-The command line does most of the work. Inside a clone of your repository:
+The command line does most of the work. Install it once, outside your projects:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v1/cli/peppec -o peppec && chmod +x peppec
-./peppec init      # labels, settings, variables, secrets, workflow files, branch protection
-./peppec doctor    # checks the installation
-./peppec bot       # prepares the folder for the machine that runs the Telegram bot
+mkdir -p ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v1/cli/peppec -o ~/.local/bin/peppec
+chmod +x ~/.local/bin/peppec
 ```
+
+Then, inside a clone of your repository:
+
+```bash
+peppec init      # labels, settings, variables, secrets, workflow files, branch protection
+peppec doctor    # checks the installation
+peppec bot       # prepares the folder for the machine that runs the Telegram bot
+```
+
+If `~/.local/bin` is not in your `PATH`, call it with its full path. `peppec update` replaces the script with the current version.
 
 It asks for what only you can provide: the GitHub App, the tokens, your preferences. [docs/setup.md](docs/setup.md) explains each step and how to do everything by hand.
 
