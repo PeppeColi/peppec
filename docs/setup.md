@@ -105,6 +105,8 @@ Labels, merges, counters and the Telegram bot act through a GitHub App of yours,
 
 Never write these values in a file of the repository, in an issue or in a note.
 
+`peppec init` can do steps 1 and 2 for you: it opens GitHub with the settings below already filled in, you confirm, and it receives the App ID and the private key, which it saves in your home folder. Then it opens the page of step 3. By hand:
+
 1. Create the app: **Settings → Developer settings → GitHub Apps → New GitHub App**.
    - Name: any free name; the name in the app's URL is your `<APP_SLUG>`.
    - Homepage URL: the repository URL.

@@ -48,7 +48,7 @@ One bot can follow several repositories: `peppec bot -R owner/first -R owner/sec
 
 If `~/.local/bin` is not in your `PATH`, call it with its full path. `peppec update` replaces the script with the current version.
 
-It asks for what only you can provide: the GitHub App, the tokens, your preferences. [docs/setup.md](docs/setup.md) explains each step and how to do everything by hand.
+It asks for what only you can provide: the tokens and your preferences. It creates the GitHub App with you, in the browser: you only confirm. [docs/setup.md](docs/setup.md) explains each step and how to do everything by hand.
 
 Your repository ends up with three small workflow files that call this one, a one-line configuration and a set of labels, variables and secrets:
 
