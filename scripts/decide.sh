@@ -88,11 +88,12 @@ esac
 reviews=$(gh api "repos/$REPO/pulls/$pr/reviews?per_page=100" --jq '[.[] | select(.user.login == "coderabbitai[bot]")]')
 state=$(jq -r --arg sha "$sha" '[.[] | select(.commit_id == $sha and (.state == "APPROVED" or .state == "CHANGES_REQUESTED"))] | last | .state // "none"' <<< "$reviews")
 
-# CodeRabbit gives no new verdict on a commit with nothing it reviews (a lockfile, a deleted
-# file): it only edits its reply to our request into "Review finished". In that case the
-# previous approval stands, provided that all of these hold:
+# CodeRabbit gives no new verdict on a commit with nothing it reviews. Its reply to our request
+# then says "Review finished" (nothing left to review, for example a deleted file) or "Path
+# filters excluded N files from this review" (only files it never reviews, for example a
+# lockfile). In that case the previous approval stands, provided that all of these hold:
 # - CodeRabbit submitted no review at all on this commit, and its latest verdict is an approval;
-# - it answered the request made for this commit declaring the review finished.
+# - it answered the request made for this commit with one of those two sentences.
 # If the wording of that reply ever changes, this simply stops matching and the queue waits.
 carried_approval() {
   jq -e --arg sha "$sha" '
@@ -105,7 +106,7 @@ carried_approval() {
         (map(select(.body | contains("<!-- peppec:rerequest=" + $sha + " -->"))) | last | .created_at) as $asked
         | $asked != null
           and any(.[]; .login == "coderabbitai[bot]" and .created_at >= $asked
-                       and (.body | test("Review finished"; "i")))' > /dev/null
+                       and (.body | test("Review finished|Path filters excluded [0-9]+ files? from this review"; "i")))' > /dev/null
 }
 if [ "$state" = none ] && carried_approval; then
   echo "CodeRabbit found nothing to review in $sha: the previous approval stands"
