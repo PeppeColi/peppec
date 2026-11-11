@@ -11,7 +11,7 @@ if [ "$ACTION" = start ]; then
   add_label "$ISSUE" "in progress"; rm_label "$ISSUE" "ready"
 fi
 mkdir -p .agent; rm -f .agent/question.md
-I=$(gh issue view "$ISSUE" -R "$REPO" --json title,body,comments)
+I=$(gh issue view "$ISSUE" -R "$REPO" --json title,body)
 echo "title=$(jq -r .title <<< "$I")" >> "$GITHUB_OUTPUT"
 # The app's short name, for the bots allowed to trigger Claude: "name[bot]" -> "name"
 echo "app_slug=${APP_LOGIN%\[bot\]}" >> "$GITHUB_OUTPUT"
@@ -19,9 +19,11 @@ echo "app_slug=${APP_LOGIN%\[bot\]}" >> "$GITHUB_OUTPUT"
   echo "# Issue #$ISSUE: $(jq -r .title <<< "$I")"
   echo; jq -r .body <<< "$I"
   echo; echo "## Authorized comments"
-  jq -r --arg a "$OWNER_LOGIN" --arg b "$APP_LOGIN" \
-    '.comments[] | select(.author.login == $a or .author.login == $b)
-     | select(.body | startswith("<!-- peppec:") | not) | "- \(.author.login): \(.body)"' <<< "$I"
+  # Read with the REST API: "gh issue view" names the app without "[bot]", so the answers
+  # and hints the Telegram bot posts as the app would not match APP_LOGIN
+  gh api --paginate "repos/$REPO/issues/$ISSUE/comments?per_page=100" | jq -r --arg a "$OWNER_LOGIN" --arg b "$APP_LOGIN" \
+    '.[] | select(.user.login == $a or .user.login == $b)
+     | select(.body | startswith("<!-- peppec:") | not) | "- \(.user.login): \(.body)"'
   if [ "$ACTION" = fix_ci ]; then
     echo; echo "## Failed checks (last 200 lines)"
     run=$(gh run list -R "$REPO" --workflow "$CI_WORKFLOW" --branch "$B" --limit 1 --json databaseId --jq '.[0].databaseId')
