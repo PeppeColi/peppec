@@ -88,6 +88,7 @@ ci 4|Check fix attempt 4
 ci 5|Check fix attempt 5
 paused|Queue paused (control panel)
 auto mode|Automatic merge enabled (control panel)
+always on|New issues start at any hour, not only at night (control panel)
 EOF
 ```
 
@@ -155,7 +156,7 @@ Pause and merge mode are labels on a "Control panel" issue, so you can see them 
 ```bash
 R=<USER>/<REPO>
 gh issue create -R "$R" --title "Control panel" \
-  --body "Labels: paused = queue stopped; auto mode = automatic merge. Do not close."
+  --body "Labels: paused = queue stopped; auto mode = automatic merge; always on = work at any hour. Do not close."
 gh issue pin <N_CONTROL> -R "$R"
 ```
 
@@ -190,7 +191,7 @@ gh variable set AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal tok
 
 | Variable | Meaning |
 | --- | --- |
-| `WORK_START_HOUR`, `WORK_END_HOUR` | Hours between which new issues are started, in `TZ_NAME`. The window may cross midnight |
+| `WORK_START_HOUR`, `WORK_END_HOUR` | Hours between which new issues are started, in `TZ_NAME`. The window may cross midnight. Ignored while the schedule is `always` |
 | `MAX_ISSUE_MINUTES` | The agent's total working time per issue. Waits for quota, CI and CodeRabbit do not count |
 | `STALL_MINUTES` | How long a pull request may wait for a CI result; a review may take twice as long |
 | `OPUS_FROM_ROUND` | Review round from which Opus replaces Sonnet on simple issues |

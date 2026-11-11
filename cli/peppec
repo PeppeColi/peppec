@@ -36,7 +36,8 @@ ci 3|Check fix attempt 3
 ci 4|Check fix attempt 4
 ci 5|Check fix attempt 5
 paused|Queue paused (control panel)
-auto mode|Automatic merge enabled (control panel)'
+auto mode|Automatic merge enabled (control panel)
+always on|New issues start at any hour, not only at night (control panel)'
 
 # name|default|question; an empty default means the value is computed or asked without one
 NUMBERS='WORK_START_HOUR|22|Hour at which agents may start new issues (0-23)
@@ -219,7 +220,7 @@ init_control_panel() {
   if [ -n "$CONTROL" ]; then ok "issue #$CONTROL"; return; fi
   local url
   url=$(gh issue create -R "$REPO" --title "Control panel" \
-    --body "Labels: paused = queue stopped; auto mode = automatic merge. Do not close.")
+    --body "Labels: paused = queue stopped; auto mode = automatic merge; always on = work at any hour. Do not close.")
   CONTROL="${url##*/}"
   gh issue pin "$CONTROL" -R "$REPO" > /dev/null 2>&1 || true
   ok "issue #$CONTROL (created and pinned)"
@@ -647,6 +648,7 @@ cmd_doctor() {
     else
       ok "issue #$control open"
       case "$state" in *"auto mode"*) note "merge mode: automatic";; *) note "merge mode: manual";; esac
+      case "$state" in *"always on"*) note "schedule: always";; *) note "schedule: nightly";; esac
       case "$state" in *paused*) warn "the queue is paused";; esac
     fi
   fi

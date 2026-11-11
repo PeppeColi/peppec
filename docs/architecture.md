@@ -94,6 +94,8 @@ Waits for quota, CI and CodeRabbit do not count as working time. Counters move o
 
 Agents start new issues only inside the work window (`WORK_START_HOUR`–`WORK_END_HOUR`). An issue already in progress is always finished. In manual mode, merging a pull request starts the next issue right away, at any hour.
 
+The schedule is `nightly` by default. With `/schedule always` (the `always on` label on the control panel) new issues start at any hour and the work window is ignored. During the day the agents draw on the same Claude quota you use yourself: that is why nightly is the default. Pausing works in both schedules.
+
 When the Claude quota runs out, the issue gets the `awaiting quota` label, you get a notification, and the workflow retries after `QUOTA_RETRY_MINUTES`.
 
 ## Merge modes
@@ -114,6 +116,7 @@ The bot answers only your chat and acts on GitHub as the app.
 | `/unblock [repo] [n]` | Clears pause and blocks, resets the issue's time budget and counters, restarts |
 | `/hint [repo] <n> <text>` | Comments the hint on the issue, unblocks it and restarts |
 | `/mode [repo] manual` or `/mode [repo] automatic` | Switches the merge mode |
+| `/schedule [repo] nightly` or `/schedule [repo] always` | Switches between the work window and working at any hour |
 | `/version` | The bot's version |
 | Reply to a "Question on #N" message | Posts the reply on the issue and restarts the work |
 
@@ -138,7 +141,7 @@ With one repository, `repo` is never needed. With several:
 | `ci 1`–`5` | Pull request | Workflow | Attempts to make the checks pass |
 | `ready to merge` | Pull request | Workflow | Review passed, waiting for you |
 | `needs human` | Issue and pull request | Workflow | Limits exceeded, queue stopped |
-| `paused` / `auto mode` | Control panel issue | Bot | Global pause and merge mode |
+| `paused` / `auto mode` / `always on` | Control panel issue | Bot | Global pause, merge mode and schedule |
 
 Two hidden counters are kept as comments (`<!-- peppec:KEY=VALUE -->`): the minutes worked on an issue and the commit a review was requested for.
 

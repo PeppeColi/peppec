@@ -107,6 +107,7 @@ class Repo:
         c = self.labels(self.control)
         out = [self.name,
                f"Mode: {'automatic' if 'auto mode' in c else 'manual'}",
+               f"Schedule: {'always' if 'always on' in c else 'nightly'}",
                f"Paused: {'yes' if 'paused' in c else 'no'}"]
         n = self.active()
         if n:
@@ -258,9 +259,19 @@ def handle(msg):
             repo.rm(repo.control, "auto mode")
         repo.dispatch()
         send(f"Mode of {repo.name} set to {arg}.")
+    elif cmd == "/schedule":
+        if arg not in ("nightly", "always"):
+            return send("Usage: /schedule [repo] nightly | always")
+        need(repo, "/schedule <repo> nightly | always")
+        if arg == "always":
+            repo.add(repo.control, "always on")
+        else:
+            repo.rm(repo.control, "always on")
+        repo.dispatch()
+        send(f"Schedule of {repo.name} set to {arg}.")
     else:
         send("Commands: /status [repo], /pause [repo], /unblock [repo] [n], /hint [repo] <n> <text>, "
-             "/mode [repo] manual|automatic, /version.\n"
+             "/mode [repo] manual|automatic, /schedule [repo] nightly|always, /version.\n"
              "Without a repository, /status and /pause apply to all of them. The other commands need it "
              "when there is more than one, unless you send them as a reply to a notification.\n"
              "To answer a question, reply to its message.\n"

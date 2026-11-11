@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$(TZ=$TZ_NAME date +%-H)" != "$SUMMARY_HOUR" ]; then exit 0; fi
-since=$(TZ=$TZ_NAME date -d 'yesterday 22:00' -Iseconds)
+since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
 list() { jq -r '.[] | "- #\(.number) \(.title)"'; }
 merged=$(gh pr list -R "$REPO" --state merged --search "merged:>=$since" --json number,title | list)
 blocked=$(gh issue list -R "$REPO" --state open --label "needs human" --json number,title | list)
@@ -23,9 +23,9 @@ expires_soon "${CLAUDE_TOKEN_EXPIRES:-}" "the Claude token" \
   "Run 'claude setup-token' and update CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_TOKEN_EXPIRES."
 expires_soon "${AGENT_TOKEN_EXPIRES:-}" "your personal token (AGENT_TOKEN)" \
   "Regenerate it on GitHub and update AGENT_TOKEN and AGENT_TOKEN_EXPIRES: when it expires the queue stops."
-notify "Overnight summary
+notify "Daily summary
 
-Merged PRs:
+Merged PRs in the last 24 hours:
 ${merged:-none}
 
 Blocked:
