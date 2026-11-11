@@ -12,13 +12,13 @@ if [ "$OUTCOME" != success ]; then
   log=${EXEC_FILE:-/dev/null}; [ -f "$log" ] || log=/dev/null
   if grep -qiE '\b401\b|invalid.{0,20}token|authentication' "$log"; then
     add_label "$ISSUE" "needs human"
-    notify "Claude token rejected while working on #$ISSUE: run 'claude setup-token' and update the CLAUDE_CODE_OAUTH_TOKEN secret."
+    notify_blocked "Claude token rejected while working on #$ISSUE: run 'claude setup-token' and update the CLAUDE_CODE_OAUTH_TOKEN secret."
   elif grep -qiE 'usage limit|limit reached|rate limit|resets at' "$log"; then
     add_label "$ISSUE" "awaiting quota"
     notify "Claude quota exhausted while working on #$ISSUE: will retry automatically."
   else
     add_label "$ISSUE" "needs human"
-    notify "Agent error on #$ISSUE: $RUN_URL"
+    notify_blocked "Agent error on #$ISSUE: $RUN_URL"
   fi
   exit 0
 fi
@@ -53,7 +53,7 @@ if [ "${#prot[@]}" -gt 0 ]; then
   touched=$(git diff --cached --name-only -- "${prot[@]}")
   if [ -n "$touched" ]; then
     add_label "$ISSUE" "needs human"
-    notify "The agent changed protected files on #$ISSUE, nothing was committed:
+    notify_blocked "The agent changed protected files on #$ISSUE, nothing was committed:
 $touched
 $RUN_URL"
     exit 0
@@ -82,7 +82,7 @@ fi
 
 if [ "$pushed" = false ]; then
   add_label "$ISSUE" "needs human"
-  notify "The agent produced no changes on #$ISSUE."
+  notify_blocked "The agent produced no changes on #$ISSUE."
   exit 0
 fi
 

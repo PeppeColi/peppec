@@ -121,12 +121,16 @@ When the Claude quota runs out, the issue gets the `awaiting quota` label, you g
 
 The bot answers only your chat and acts on GitHub as the app.
 
+There is little to type. `/status` answers with one message per repository, and under each one the buttons that change it: pause or resume the queue, switch the merge mode and the schedule, unblock the issue in progress or give it a hint. The notifications about a blocked issue carry the Unblock and Hint buttons too. A Hint button asks for the text: write it as the reply the bot opens for you. Typing `/` shows the list of the commands.
+
+The commands still work when typed in full:
+
 | Command | Effect |
 | --- | --- |
-| `/status [repo]` | Mode, pause, current issue with labels, issues in queue |
+| `/status [repo]` | Mode, schedule, pause, current issue with labels, issues in queue, and the buttons |
 | `/pause [repo]` | Stops the whole queue |
 | `/unblock [repo] [n]` | Clears pause and blocks, resets the issue's time budget and counters, restarts |
-| `/hint [repo] <n> <text>` | Comments the hint on the issue, unblocks it and restarts |
+| `/hint [repo] <n> <text>` | Comments the hint on the issue, unblocks it and restarts; without the text, the bot asks for it |
 | `/mode [repo] manual` or `/mode [repo] automatic` | Switches the merge mode |
 | `/schedule [repo] nightly` or `/schedule [repo] always` | Switches between the work window and working at any hour |
 | `/version` | The bot's version |
@@ -138,7 +142,9 @@ With one repository, `repo` is never needed. With several:
 
 - `repo` is the name of the repository, or `owner/name` if two of them have the same name;
 - `/status` and `/pause` without a repository apply to all of them;
-- the other commands need the repository, unless you send them as a reply to a notification: `/unblock` in reply to a "Queue stopped" message acts on the repository of that message.
+- the other commands need the repository, unless you send them as a reply to a notification: `/unblock` in reply to a "Queue stopped" message acts on the repository of that message. A command that misses the repository or the value is answered with the buttons.
+
+The Resume button only lifts the pause; `/unblock` and the Unblock button also clear the blocks of the issue and reset its time budget. The buttons on the notifications need a bot of version 1.9 or later.
 
 ## Labels
 

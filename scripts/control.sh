@@ -11,7 +11,7 @@ case "$ACTION" in
     fi
     add_label "$ISSUE" "needs human"
     if [ -n "${PR:-}" ]; then add_label "$PR" "needs human"; fi
-    notify "Queue stopped on #$ISSUE: $REASON. $RUN_URL";;
+    notify_blocked "Queue stopped on #$ISSUE: $REASON. $RUN_URL";;
   merge)
     gh pr merge "$PR" -R "$REPO" --squash
     rm_label "$ISSUE" "in progress"
