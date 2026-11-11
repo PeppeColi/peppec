@@ -20,8 +20,9 @@ SECRETS="CLAUDE_CODE_OAUTH_TOKEN AGENT_TOKEN APP_PRIVATE_KEY TELEGRAM_BOT_TOKEN 
 WORK_DIRS=".agent/ _ctl/ _preset/ _extra/ _base/"
 
 LABELS='ready|Ready to be picked up by the agents
-complexity: simple|Handled by Sonnet
-complexity: complex|Handled by Opus
+size: S|Small issue, for the lightest model (Haiku by default)
+size: M|Medium issue, the default (Sonnet by default)
+size: L|Large issue, for the strongest model (Opus by default)
 in progress|An agent is working on this issue
 question open|The agent is waiting for an answer
 awaiting quota|Paused until the Claude quota resets
@@ -42,13 +43,13 @@ auto mode|Automatic merge enabled (control panel)'
 NUMBERS='WORK_START_HOUR|22|Hour at which agents may start new issues (0-23)
 WORK_END_HOUR|9|Hour at which agents stop starting new issues (0-23)
 MAX_REVIEW_ROUNDS|3|Review rounds before the queue stops
-OPUS_FROM_ROUND|3|Review round from which Opus replaces Sonnet on simple issues
+LARGE_FROM_ROUND|3|Review round from which the model of size L takes over
 MAX_CI_ATTEMPTS|5|Attempts to fix the checks, per review round
 MAX_ISSUE_MINUTES|120|Agent working time per issue, in minutes
 STALL_MINUTES|120|Minutes a pull request may wait for a CI result
 QUOTA_RETRY_MINUTES|60|Minutes between retries when the Claude quota is exhausted
 SUMMARY_HOUR|9|Hour of the daily summary (0-23)'
-VARIABLES="CONTROL_ISSUE OWNER_LOGIN APP_ID APP_LOGIN AGENT_GIT_NAME AGENT_GIT_EMAIL TZ_NAME WORK_START_HOUR WORK_END_HOUR MAX_REVIEW_ROUNDS OPUS_FROM_ROUND MAX_CI_ATTEMPTS MAX_ISSUE_MINUTES STALL_MINUTES QUOTA_RETRY_MINUTES SUMMARY_HOUR CLAUDE_TOKEN_EXPIRES"
+VARIABLES="CONTROL_ISSUE OWNER_LOGIN APP_ID APP_LOGIN AGENT_GIT_NAME AGENT_GIT_EMAIL TZ_NAME WORK_START_HOUR WORK_END_HOUR MAX_REVIEW_ROUNDS LARGE_FROM_ROUND MAX_CI_ATTEMPTS MAX_ISSUE_MINUTES STALL_MINUTES QUOTA_RETRY_MINUTES SUMMARY_HOUR CLAUDE_TOKEN_EXPIRES"
 
 # ---------- output ----------
 if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=""; G=""; Y=""; R=""; N=""; fi
