@@ -53,10 +53,15 @@ VARIABLES="CONTROL_ISSUE OWNER_LOGIN APP_ID APP_LOGIN AGENT_GIT_NAME AGENT_GIT_E
 if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=""; G=""; Y=""; R=""; N=""; fi
 PROBLEMS=0
 WARNINGS=0
+PROBLEM_LIST=""
 step() { printf '\n%s%s%s\n' "$B" "$1" "$N"; }
 ok() { printf '  %s✓%s %s\n' "$G" "$N" "$1"; }
 warn() { printf '  %s!%s %s\n' "$Y" "$N" "$1"; WARNINGS=$((WARNINGS + 1)); }
-bad() { printf '  %s✗%s %s\n' "$R" "$N" "$1"; PROBLEMS=$((PROBLEMS + 1)); }
+bad() {
+  printf '  %s✗%s %s\n' "$R" "$N" "$1"
+  PROBLEMS=$((PROBLEMS + 1))
+  PROBLEM_LIST="$PROBLEM_LIST  - $1"$'\n'
+}
 note() { printf '    %s\n' "$1"; }
 die() { printf '%serror:%s %s\n' "$R" "$N" "$1" >&2; exit 1; }
 
@@ -95,8 +100,17 @@ resolve_repo() {
   fi
   gh api "repos/$REPO" --jq .full_name > /dev/null 2>&1 || die "cannot access $REPO"
 }
-engine_file() { gh api -H "Accept: application/vnd.github.raw" "repos/$ENGINE/contents/$1?ref=$REF"; }
-host_file() { gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/$1" 2> /dev/null; }
+# gh prints the body of an error response on stdout: this keeps only the output of calls
+# that succeed, and fails otherwise
+api() {
+  local out
+  if out=$(gh api "$@" 2> /dev/null); then printf '%s\n' "$out"; else return 1; fi
+}
+engine_file() { api -H "Accept: application/vnd.github.raw" "repos/$ENGINE/contents/$1?ref=$REF"; }
+host_file() { api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/$1"; }
+open_url() {
+  if command -v open > /dev/null 2>&1; then open "$1"; elif command -v xdg-open > /dev/null 2>&1; then xdg-open "$1"; else return 1; fi
+}
 var_of() { jq -r --arg n "$1" '.[] | select(.name == $n) | .value' <<< "$VARS_JSON"; }
 load_vars() { VARS_JSON=$(gh variable list -R "$REPO" --json name,value); }
 set_var() { # set_var NAME VALUE: writes only when the value changes
@@ -274,6 +288,25 @@ init_variables() {
   done 3<<< "$NUMBERS"
 }
 
+# The personal token is the one people confuse with the app's key or with gh's own token
+explain_agent_token() {
+  local name="peppec workflow - ${REPO##*/}" url
+  url="https://github.com/settings/personal-access-tokens/new?$(jq -rn --arg n "${name:0:40}" \
+    --arg d "Pushes PEPPEC agent commits and opens pull requests. If it expires, the queue stops: regenerate it and update AGENT_TOKEN." \
+    '"name=\($n | @uri)&description=\($d | @uri)&expires_in=365&contents=write&issues=write&pull_requests=write&actions=read"')"
+  note "${B}AGENT_TOKEN${N}: a personal access token of your GitHub account."
+  note "It is not the app's key, and not the token gh uses on this computer."
+  note "The workflow uses it to push the agent's commits and open pull requests in your name."
+  note "Create a fine-grained token; this link fills in name, description, expiry and permissions:"
+  note "  $url"
+  note "On that page:"
+  note "  Repository access:  Only select repositories → $REPO"
+  note "  Permissions:        Contents, Issues, Pull requests → Read and write; Actions → Read-only"
+  note "                      (leave Workflows out: the agent must not change them)"
+  note "  Expiration:         one year; when it expires the queue stops until you replace it"
+  if confirm "Open the link in the browser now?" y; then open_url "$url" || note "Could not open a browser: copy the link."; fi
+}
+
 init_secrets() {
   step "Secrets"
   note "Values are read without echo and sent straight to GitHub: nothing is written to disk."
@@ -283,12 +316,17 @@ init_secrets() {
     value="${!name:-}"
     if [ -z "$value" ] && [ "$YES" = false ]; then
       if [ "$existing" = true ] && ! confirm "$name is already set: replace it?" n; then ok "$name (kept)"; continue; fi
+      echo
       case "$name" in
-        CLAUDE_CODE_OAUTH_TOKEN) note "Run 'claude setup-token' in another terminal and paste the token.";;
-        AGENT_TOKEN) note "Fine-grained token for $REPO: Contents, Issues, Pull requests read and write; Actions read."
-                     note "https://github.com/settings/personal-access-tokens/new";;
-        TELEGRAM_BOT_TOKEN) note "From @BotFather: /newbot, or /mybots → API Token.";;
+        CLAUDE_CODE_OAUTH_TOKEN)
+          note "${B}CLAUDE_CODE_OAUTH_TOKEN${N}: lets the agent use Claude Code with your subscription."
+          note "Run 'claude setup-token' in another terminal and paste the token it prints.";;
+        AGENT_TOKEN) explain_agent_token;;
+        TELEGRAM_BOT_TOKEN)
+          note "${B}TELEGRAM_BOT_TOKEN${N}: the token of your Telegram bot, used to send you notifications."
+          note "From @BotFather: /newbot for a new bot, or /mybots → your bot → API Token.";;
         TELEGRAM_CHAT_ID)
+          note "${B}TELEGRAM_CHAT_ID${N}: the chat the notifications go to, and the only one the bot obeys."
           if [ -n "${BOT_TOKEN:-}" ]; then
             note "Send any message to your bot now, then press Enter (empty to type the ID yourself)."
             read -r -p "  " _ || true
@@ -297,7 +335,8 @@ init_secrets() {
           fi;;
       esac
       if [ -z "$value" ]; then
-        if [ "$name" = TELEGRAM_CHAT_ID ]; then ask value "TELEGRAM_CHAT_ID" ""; else ask_hidden value "$name"; fi
+        if [ "$name" = TELEGRAM_CHAT_ID ]; then ask value "TELEGRAM_CHAT_ID" ""
+        else ask_hidden value "Paste $name (it will not be shown)"; fi
       fi
     fi
     if [ -z "$value" ]; then
@@ -311,7 +350,8 @@ init_secrets() {
       AGENT_TOKEN)
         if [ "$(GH_TOKEN="$value" gh api "repos/$REPO" --jq .permissions.push 2> /dev/null)" = true ]; then
           ok "the token can write to $REPO"
-        else bad "the token cannot write to $REPO: not stored"; continue; fi;;
+        else bad "AGENT_TOKEN cannot write to $REPO: not stored. Check its repository access and permissions"; continue; fi
+        NEW_AGENT_TOKEN=true;;
       TELEGRAM_BOT_TOKEN)
         if telegram "$value" getMe | jq -e .ok > /dev/null 2>&1; then ok "Telegram accepts the bot token"; BOT_TOKEN="$value"
         else bad "Telegram rejects the bot token: not stored"; continue; fi;;
@@ -320,7 +360,16 @@ init_secrets() {
     esac
     put_secret "$name" "$value"
   done
-  local expires; expires=$(var_of CLAUDE_TOKEN_EXPIRES)
+  local expires; expires=$(var_of AGENT_TOKEN_EXPIRES)
+  if [ "${NEW_AGENT_TOKEN:-false}" = true ] || [ -z "$expires" ]; then
+    local proposal="$expires"
+    if [ "${NEW_AGENT_TOKEN:-false}" = true ]; then proposal=$(next_year); fi
+    ask expires "Expiry date of AGENT_TOKEN, as shown by GitHub (YYYY-MM-DD, empty if it never expires)" "$proposal"
+  fi
+  if [ -z "$expires" ]; then warn "AGENT_TOKEN_EXPIRES not set: no warning before the personal token expires"
+  elif epoch_of "$expires" > /dev/null; then set_var AGENT_TOKEN_EXPIRES "$expires"
+  else bad "AGENT_TOKEN_EXPIRES: '$expires' is not a date (YYYY-MM-DD)"; fi
+  expires=$(var_of CLAUDE_TOKEN_EXPIRES)
   if [ "${NEW_CLAUDE_TOKEN:-false}" = true ]; then
     set_var CLAUDE_TOKEN_EXPIRES "$(next_year)"
   elif [ -n "$expires" ]; then
@@ -368,7 +417,12 @@ init_files() {
 
 init_ruleset() {
   step "Branch protection"
-  if [ -n "$(gh api "repos/$REPO/rulesets" --jq '.[] | select(.target == "branch") | .id' 2> /dev/null)" ]; then
+  local existing
+  if ! existing=$(api "repos/$REPO/rulesets" --jq '.[] | select(.target == "branch") | .id'); then
+    warn "main is not protected: rulesets are not available here (private repositories need a paid plan)"
+    return
+  fi
+  if [ -n "$existing" ]; then
     ok "a branch ruleset already exists: left as it is"
     note "It should require the status check 'ci / ci' on main."
     return
@@ -414,12 +468,26 @@ cmd_init() {
   note "2. Install CodeRabbit on $REPO: https://github.com/apps/coderabbitai"
   note "3. Prepare the Telegram bot: peppec bot"
   note "4. Check everything: peppec doctor"
-  if [ "$PROBLEMS" -gt 0 ]; then printf '\n%s%d problem(s) above: fix them and run init again.%s\n' "$R" "$PROBLEMS" "$N"; exit 1; fi
+  if [ "$PROBLEMS" -gt 0 ]; then
+    printf '\n%s%d problem(s) to fix, then run init again (it keeps what is already set):%s\n%s' "$R" "$PROBLEMS" "$N" "$PROBLEM_LIST"
+    exit 1
+  fi
 }
 
 # ---------- doctor ----------
+# A file that is not on the default branch: say so, and whether it is waiting in the local clone
+missing_file() {
+  if [ "$IN_CLONE" = true ] && [ -f "$CLONE_ROOT/$1" ]; then
+    bad "$1 is in your clone but not on main yet: commit and push it"
+  else
+    bad "$1 missing on the default branch"
+  fi
+}
+
 cmd_doctor() {
   preflight
+  IN_CLONE=false; CLONE_ROOT=""
+  if [ -z "$REPO" ] && CLONE_ROOT=$(git rev-parse --show-toplevel 2> /dev/null); then IN_CLONE=true; fi
   resolve_repo
   printf '%sPEPPEC doctor%s for %s%s%s\n' "$B" "$N" "$B" "$REPO" "$N"
   load_vars
@@ -441,15 +509,21 @@ cmd_doctor() {
   if [ -n "$tz" ] && [ ! -e "/usr/share/zoneinfo/$tz" ] && [ ! -e "/var/db/timezone/zoneinfo/$tz" ]; then
     warn "TZ_NAME '$tz' is not a time zone known to this computer"
   fi
-  local expires days; expires=$(var_of CLAUDE_TOKEN_EXPIRES)
-  if [ -n "$expires" ]; then
+  local expires days label
+  for name in CLAUDE_TOKEN_EXPIRES AGENT_TOKEN_EXPIRES; do
+    label="Claude token"; [ "$name" = AGENT_TOKEN_EXPIRES ] && label="personal token (AGENT_TOKEN)"
+    expires=$(var_of "$name")
+    if [ -z "$expires" ]; then
+      [ "$name" = AGENT_TOKEN_EXPIRES ] && warn "AGENT_TOKEN_EXPIRES not set: no warning before the personal token expires"
+      continue
+    fi
     if days=$(epoch_of "$expires"); then
       days=$(( (days - $(date +%s)) / 86400 ))
-      if [ "$days" -lt 0 ]; then bad "the Claude token expired on $expires"
-      elif [ "$days" -le 30 ]; then warn "the Claude token expires in $days days ($expires)"
-      else ok "Claude token valid for $days more days"; fi
-    else bad "CLAUDE_TOKEN_EXPIRES is not a date: $expires"; fi
-  fi
+      if [ "$days" -lt 0 ]; then bad "the $label expired on $expires"
+      elif [ "$days" -le 30 ]; then warn "the $label expires in $days days ($expires)"
+      else ok "$label valid for $days more days"; fi
+    else bad "$name is not a date: $expires"; fi
+  done
 
   step "Secrets"
   have=$(gh secret list -R "$REPO" --json name --jq '.[].name')
@@ -488,7 +562,7 @@ cmd_doctor() {
   states=$(gh workflow list -R "$REPO" --all --json path,state --jq '.[] | "\(.path)|\(.state)"')
   for f in agent ci summary; do
     content=$(host_file ".github/workflows/$f.yml" || true)
-    if [ -z "$content" ]; then bad ".github/workflows/$f.yml missing on the default branch"; continue; fi
+    if [ -z "$content" ]; then missing_file ".github/workflows/$f.yml"; continue; fi
     ref=$(sed -n "s|.*uses: .*/\\.github/workflows/$f\\.yml@\\(.*\\)\$|\\1|p" <<< "$content" | head -n 1)
     eref=$(sed -n 's/^[[:space:]]*engine_ref:[[:space:]]*//p' <<< "$content" | head -n 1)
     if [ -z "$ref" ]; then bad "$f.yml does not call the engine's workflow"
@@ -502,16 +576,17 @@ cmd_doctor() {
   done
   content=$(host_file .github/peppec.yml || true)
   preset=$(sed -n 's/^preset:[[:space:]]*//p' <<< "$content" | head -n 1)
-  if [ -z "$preset" ]; then bad ".github/peppec.yml missing, or without a preset"
+  if [ -z "$content" ]; then missing_file .github/peppec.yml
+  elif [ -z "$preset" ]; then bad ".github/peppec.yml has no preset"
   elif gh api "repos/$ENGINE/contents/presets/$preset/preset.yml?ref=${ref:-$REF}" > /dev/null 2>&1; then ok "preset $preset"
   else bad "preset '$preset' does not exist in the engine at ${ref:-$REF}"; fi
   content=$(host_file .coderabbit.yaml || true)
-  if [ -z "$content" ]; then bad ".coderabbit.yaml missing"
+  if [ -z "$content" ]; then missing_file .coderabbit.yaml
   elif ! grep -A1 'auto_approvals:' <<< "$content" | grep -q 'enabled: true'; then
     bad ".coderabbit.yaml: auto_approvals must be enabled, the approval is the 'review passed' signal"
   else ok ".coderabbit.yaml approves automatically"; fi
-  if gh api "repos/$REPO/issues/comments?per_page=100&sort=created&direction=desc" \
-       --jq '.[].user.login' 2> /dev/null | grep -qx 'coderabbitai\[bot\]'; then
+  if api "repos/$REPO/issues/comments?per_page=100&sort=created&direction=desc" \
+       --jq '.[].user.login' | grep -qx 'coderabbitai\[bot\]'; then
     ok "CodeRabbit is active: it commented recently"
   else
     warn "no recent comment from CodeRabbit: check that it is installed on $REPO"
@@ -519,9 +594,10 @@ cmd_doctor() {
 
   step "Branch protection"
   local checks
-  checks=$(gh api "repos/$REPO/rules/branches/main" \
-    --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | join(", ")' 2> /dev/null || true)
-  if [ -z "$checks" ]; then warn "main requires no status check: add 'ci / ci' to an active ruleset"
+  if ! checks=$(api "repos/$REPO/rules/branches/main" \
+      --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | join(", ")'); then
+    warn "main is not protected: rulesets are not available here (private repositories need a paid plan)"
+  elif [ -z "$checks" ]; then warn "main requires no status check: add 'ci / ci' to an active ruleset"
   elif grep -q 'ci / ci' <<< "$checks"; then ok "main requires: $checks"
   else bad "main requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
 
@@ -576,7 +652,7 @@ cmd_bot() {
   note "1. Copy it to the bot's machine:   scp -r $OUT_DIR <user>@<address>:~/"
   note "2. Start the bot there:            cd ~/$OUT_DIR && docker compose up -d"
   note "3. Send /status to the bot on Telegram."
-  note "4. Delete the folder from this computer: it holds the key and the token."
+  note "${B}4. Delete the folder from this computer: it holds the key and the token.${N}"
   note "     rm -rf $OUT_DIR"
 }
 
@@ -587,7 +663,8 @@ cmd_update() {
   case "$self" in /dev/*|/proc/*) die "this copy is not a file on disk: nothing to update";; esac
   [ -f "$self" ] && [ -w "$self" ] || die "cannot write $self"
   tmp=$(mktemp "$(dirname "$self")/.peppec.XXXXXX") || die "cannot write in $(dirname "$self")"
-  if ! engine_file cli/peppec > "$tmp" 2> /dev/null || ! bash -n "$tmp" 2> /dev/null; then
+  if ! gh api -H "Accept: application/vnd.github.raw" "repos/$ENGINE/contents/cli/peppec?ref=$REF" > "$tmp" 2> /dev/null \
+     || ! bash -n "$tmp" 2> /dev/null; then
     rm -f "$tmp"; die "could not download a valid cli/peppec from $ENGINE@$REF"
   fi
   if cmp -s "$tmp" "$self"; then

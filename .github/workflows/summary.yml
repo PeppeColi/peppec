@@ -42,5 +42,6 @@ jobs:
           TZ_NAME: ${{ vars.TZ_NAME }}
           SUMMARY_HOUR: ${{ vars.SUMMARY_HOUR }}
           CLAUDE_TOKEN_EXPIRES: ${{ vars.CLAUDE_TOKEN_EXPIRES }}
+          AGENT_TOKEN_EXPIRES: ${{ vars.AGENT_TOKEN_EXPIRES }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

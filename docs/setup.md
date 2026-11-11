@@ -114,7 +114,10 @@ Never write these values in a file of the repository, in an issue or in a note.
 2. On the app page note the **App ID**, then under **Private keys** click **Generate a private key**: a `.pem` file downloads.
 3. Install it: **Install App → your account → Only select repositories → `<REPO>`**.
 4. Claude token: run `claude setup-token` and copy the token. It lasts one year: note the date.
-5. Personal token: **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate**, "Only select repositories" → `<REPO>`, with the permissions in the table.
+5. Personal token: **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate**, "Only select repositories" → `<REPO>`, with the permissions in the table. `peppec init` prints a link that fills in name, description, expiry and permissions.
+   - This is a token of your own account: not the app's key, and not the token `gh` uses on your computer. The workflow uses it to push the agent's commits and open pull requests in your name.
+   - Name it `peppec workflow`, adding the repository name if you create one token per repository, so its purpose is clear in GitHub's list and in the email GitHub sends before it expires.
+   - Expiration: one year is a reasonable choice. When the token expires the queue stops until you replace it. Note the date.
 6. Telegram bot: message `@BotFather`, send `/newbot` and follow the prompts; copy the token.
 7. Chat ID: send any message to your new bot, then:
 
@@ -180,6 +183,7 @@ gh variable set STALL_MINUTES -R "$R" -b 120
 gh variable set QUOTA_RETRY_MINUTES -R "$R" -b 60
 gh variable set SUMMARY_HOUR -R "$R" -b 9
 gh variable set CLAUDE_TOKEN_EXPIRES -R "$R" -b "<one year after claude setup-token, YYYY-MM-DD>"
+gh variable set AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal token, YYYY-MM-DD>"
 ```
 
 | Variable | Meaning |
@@ -189,7 +193,7 @@ gh variable set CLAUDE_TOKEN_EXPIRES -R "$R" -b "<one year after claude setup-to
 | `STALL_MINUTES` | How long a pull request may wait for a CI result; a review may take twice as long |
 | `OPUS_FROM_ROUND` | Review round from which Opus replaces Sonnet on simple issues |
 | `SUMMARY_HOUR` | Hour of the daily summary, in `TZ_NAME` |
-| `CLAUDE_TOKEN_EXPIRES` | The summary warns you during the 30 days before this date |
+| `CLAUDE_TOKEN_EXPIRES`, `AGENT_TOKEN_EXPIRES` | The summary warns you during the 30 days before each date. The second is optional: leave it out for a token that never expires |
 
 ## Phase 5 — Workflows and configuration
 
@@ -304,5 +308,6 @@ The bot follows the same versions: `docker compose pull && docker compose up -d`
 ## Maintenance
 
 - **Claude token**: it lasts one year. Run `claude setup-token` again, then update the `CLAUDE_CODE_OAUTH_TOKEN` secret and the `CLAUDE_TOKEN_EXPIRES` variable.
+- **Personal token**: regenerate it on GitHub before it expires, then update the `AGENT_TOKEN` secret and the `AGENT_TOKEN_EXPIRES` variable. Running `peppec init` again does both: answer yes when it asks whether to replace the token.
 - **Scheduled workflows**: on public repositories GitHub disables them after 60 days without activity. Re-enable `agent` and `summary` from the Actions tab.
 - **App permissions**: if a step fails with "Resource not accessible by integration", add the missing permission on the app's page and accept the change in the installation settings.
