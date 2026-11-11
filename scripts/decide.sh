@@ -23,6 +23,9 @@ in_window() {
 size_of() {
   if has "$1" "size: L"; then echo l; elif has "$1" "size: S"; then echo s; else echo m; fi
 }
+# A review request that CodeRabbit does not answer at all is repeated after this many minutes,
+# up to this many requests per commit
+REVIEW_RETRY_MINUTES=20 REVIEW_REQUESTS=3
 budget() { local used; used=$(marker_get "$1" minutes); echo $(( MAX_ISSUE_MINUTES - ${used:-0} )); }
 
 ctrl=$(labels_of "$CONTROL_ISSUE")
@@ -101,18 +104,23 @@ state=$(jq -r --arg sha "$sha" '[.[] | select(.commit_id == $sha and (.state == 
 # - CodeRabbit submitted no review at all on this commit, and its latest verdict is an approval;
 # - it answered the request made for this commit with one of those two sentences.
 # If the wording of that reply ever changes, this simply stops matching and the queue waits.
+# The comments of the pull request, read only when there is no verdict on this commit
+comments='[]'
+if [ "$state" = none ]; then
+  comments=$(gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" \
+    --jq '.[] | {login: .user.login, body, created_at}' | jq -s .)
+fi
 carried_approval() {
   jq -e --arg sha "$sha" '
     all(.[]; .commit_id != $sha)
     and (([.[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")] | last | .state) == "APPROVED")' \
     <<< "$reviews" > /dev/null || return 1
-  gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" \
-    --jq '.[] | {login: .user.login, body, created_at}' \
-    | jq -es --arg sha "$sha" '
-        (map(select(.body | contains("<!-- peppec:rerequest=" + $sha + " -->"))) | last | .created_at) as $asked
-        | $asked != null
-          and any(.[]; .login == "coderabbitai[bot]" and .created_at >= $asked
-                       and (.body | test("Review finished|Path filters excluded [0-9]+ files? from this review"; "i")))' > /dev/null
+  jq -e --arg sha "$sha" '
+    (map(select(.body | contains("<!-- peppec:rerequest=" + $sha + " -->"))) | last | .created_at) as $asked
+    | $asked != null
+      and any(.[]; .login == "coderabbitai[bot]" and .created_at >= $asked
+                   and (.body | test("Review finished|Path filters excluded [0-9]+ files? from this review"; "i")))' \
+    <<< "$comments" > /dev/null
 }
 if [ "$state" = none ] && carried_approval; then
   echo "CodeRabbit found nothing to review in $sha: the previous approval stands"
@@ -121,11 +129,27 @@ fi
 
 case "$state" in
   none)
-    # Reviews start only on request: ask once per commit, as soon as the checks are green
-    if [ "$(marker_get "$pr" rerequest)" != "$sha" ]; then
+    # Reviews start only on request: ask as soon as the checks are green. CodeRabbit answers
+    # every request with a comment within a minute or two: a request with no answer at all
+    # was lost (CodeRabbit not installed yet, or down), so it is repeated, up to
+    # REVIEW_REQUESTS times per commit.
+    asks=$(jq -r --arg sha "$sha" '
+      map(select(.body | contains("<!-- peppec:rerequest=" + $sha + " -->"))) as $asks
+      | ($asks | last | .created_at) as $asked
+      | "\($asks | length) \($asked // "-") \($asked != null and any(.[]; .login == "coderabbitai[bot]" and .created_at >= $asked))"' \
+      <<< "$comments")
+    read -r asked_count asked_at answered <<< "$asks"
+    if [ "$asked_count" -eq 0 ]; then
+      action=rerequest
+    elif [ "$answered" = false ] && [ "$asked_count" -lt "$REVIEW_REQUESTS" ] \
+         && [ "$(age_minutes "$asked_at")" -ge "$REVIEW_RETRY_MINUTES" ]; then
+      echo "No answer from CodeRabbit to request $asked_count: asking again"
       action=rerequest
     elif [ "$waited" -ge $(( 2 * STALL_MINUTES )) ]; then
       action=stop; reason="no CodeRabbit review after $waited minutes"
+      if [ "$answered" = false ]; then
+        reason="no answer from CodeRabbit after $waited minutes: check that it is installed on this repository"
+      fi
     else
       echo "Waiting for CodeRabbit ($waited min)"
     fi

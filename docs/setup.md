@@ -146,7 +146,7 @@ Keep the `.pem` file until Phase 6, where the bot needs it, then delete it from 
 1. Go to coderabbit.ai, sign in with GitHub and install the app on `<REPO>` only.
 2. Copy [`examples/coderabbit.yaml`](../examples/coderabbit.yaml) to `.coderabbit.yaml` in the root of your repository, commit and push.
 
-CodeRabbit approves a pull request once its comments are resolved, and the workflow uses that approval as the "review passed" signal. Automatic reviews are switched off: the workflow asks for one review per commit, as soon as the checks are green. On public repositories with few stars CodeRabbit does not start on its own anyway, and this avoids spending the review allowance on commits that do not pass CI.
+CodeRabbit approves a pull request once its comments are resolved, and the workflow uses that approval as the "review passed" signal. Automatic reviews are switched off: the workflow asks for one review per commit, as soon as the checks are green. If CodeRabbit does not answer the request at all, for example because it was installed after the first pull request, the workflow asks again after 20 minutes. On public repositories with few stars CodeRabbit does not start on its own anyway, and this avoids spending the review allowance on commits that do not pass CI.
 
 ## Phase 4 — Control panel and variables
 
