@@ -154,7 +154,7 @@ The bot can also serve a web page, meant for a phone: the state of every reposit
 - Touching a line opens its page, where the buttons are: Unblock and Give a hint on a blocked issue, the answer to a question, the merge mode, the schedule and the pause of a repository.
 - Every action taken from the dashboard is also reported in the Telegram chat.
 
-The page asks for the password once and keeps it in the browser. The state is read from GitHub, at most every 30 seconds; nothing is stored on the bot's machine.
+The page asks for the password once and keeps it in the browser. The state is read from GitHub at most every 20 seconds and the page asks for it every 30; the Refresh button reads it again at once. Nothing is stored on the bot's machine.
 
 The dashboard speaks plain HTTP and can act on your repositories: keep it inside your own network, and reach it from outside through a VPN such as Tailscale or WireGuard. Never forward its port from the internet. Without `DASHBOARD_PORT` in `.env`, it answers only on the bot's machine itself.
 
