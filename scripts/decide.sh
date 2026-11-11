@@ -34,7 +34,8 @@ active=$(gh issue list -R "$REPO" --state open --label "in progress" --json numb
 
 if [ -z "$active" ]; then
   ok=false
-  if in_window || [ "$FORCE" = true ]; then ok=true; fi
+  # "always on" on the control panel: new issues start at any hour
+  if in_window || has "$ctrl" "always on" || [ "$FORCE" = true ]; then ok=true; fi
   if [ "$mode" = manual ] && [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ] \
      && [[ "$EVENT_HEAD_REF" == agent/* ]]; then ok=true; fi
   [ "$ok" = true ] || { echo "Outside the work window"; exit 0; }
