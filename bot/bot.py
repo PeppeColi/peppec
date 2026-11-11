@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 import time
@@ -18,6 +19,19 @@ BLOCKS = ["needs human", "question open", "awaiting quota"]
 # Notifications start with the repository they come from: "[owner/name] text"
 PREFIX = re.compile(r"^\[([\w.-]+/[\w.-]+)\] ")
 QUESTION = re.compile(r"^(?:\[\S+\] )?Question on #(\d+):")
+# The message a "Hint" button asks to reply to
+HINT = re.compile(r"^Hint for ([\w.-]+/[\w.-]+)#(\d+):")
+# The menu Telegram shows when you type "/"
+COMMANDS = [
+    ("status", "State of the queues, with buttons to change it"),
+    ("pause", "Stop the queue"),
+    ("unblock", "Clear pause and blocks, then restart"),
+    ("hint", "Give the agent a hint on an issue"),
+    ("mode", "Merge mode: manual or automatic"),
+    ("schedule", "Work hours: nightly or always"),
+    ("version", "Version of the bot"),
+    ("help", "How to use the commands"),
+]
 GH = requests.Session()
 GH.headers.update({"Accept": "application/vnd.github+json"})
 
@@ -31,6 +45,8 @@ class Repo:
         self.name = name
         self.control = control
         self.api = f"https://api.github.com/repos/{name}"
+        # Names the repository in the data of a button, which Telegram limits to 64 bytes
+        self.key = hashlib.sha1(name.lower().encode()).hexdigest()[:8]
         self._token = ""
         self._expires = 0.0
 
@@ -103,12 +119,22 @@ class Repo:
                     self.rm(pr, label)
             self.add(pr, "review 1")
 
-    def status(self):
+    def button(self, text, action, value=""):
+        return {"text": text, "callback_data": f"{action}|{value}|{self.key}"}
+
+    def panel(self):
+        """The state of the repository and the buttons that change it."""
         c = self.labels(self.control)
+        auto, always, paused = "auto mode" in c, "always on" in c, "paused" in c
         out = [self.name,
-               f"Mode: {'automatic' if 'auto mode' in c else 'manual'}",
-               f"Schedule: {'always' if 'always on' in c else 'nightly'}",
-               f"Paused: {'yes' if 'paused' in c else 'no'}"]
+               f"Mode: {'automatic' if auto else 'manual'}",
+               f"Schedule: {'always' if always else 'nightly'}",
+               f"Paused: {'yes' if paused else 'no'}"]
+        rows = [[self.button("Resume", "resume") if paused else self.button("Pause", "pause")],
+                [self.button(f"Mode \u2192 {'manual' if auto else 'automatic'}", "mode",
+                             "manual" if auto else "automatic"),
+                 self.button(f"Schedule \u2192 {'nightly' if always else 'always'}", "schedule",
+                             "nightly" if always else "always")]]
         n = self.active()
         if n:
             out.append(f"In progress: #{n}, labels: {', '.join(self.labels(n))}")
@@ -118,7 +144,41 @@ class Repo:
         else:
             out.append("No issue in progress")
         out.append(f"In queue: {len(self.issues('ready'))}")
-        return "\n".join(out)
+        if n:
+            rows.append([self.button(f"Unblock #{n}", "unblock", n), self.button(f"Hint #{n}", "hint", n)])
+        rows.append([self.button("Refresh", "refresh")])
+        return "\n".join(out), {"inline_keyboard": rows}
+
+    def set_mode(self, value):
+        if value == "automatic":
+            self.add(self.control, "auto mode")
+        else:
+            self.rm(self.control, "auto mode")
+        self.dispatch()
+        return f"Mode of {self.name} set to {value}."
+
+    def set_schedule(self, value):
+        if value == "always":
+            self.add(self.control, "always on")
+        else:
+            self.rm(self.control, "always on")
+        self.dispatch()
+        return f"Schedule of {self.name} set to {value}."
+
+    def restart(self, n=None):
+        """Clears the pause and the blocks of issue n, if any, then restarts."""
+        self.rm(self.control, "paused")
+        if n:
+            self.unblock(n)
+        self.dispatch()
+        return f"Unblocked {self.name}{f'#{n}' if n else ''}, restarting."
+
+    def hint(self, n, body):
+        self.comment(n, f"Hint for the agent: {body.strip()}")
+        self.unblock(n)
+        self.rm(self.control, "paused")
+        self.dispatch()
+        return f"Hint added to {self.name}#{n}, restarting."
 
 
 def load_repos():
@@ -145,8 +205,25 @@ def load_repos():
 REPOS = load_repos()
 
 
-def send(text):
-    requests.post(f"{TG}/sendMessage", data={"chat_id": CHAT, "text": text[:4000]}, timeout=30)
+def tg(method, **payload):
+    r = requests.post(f"{TG}/{method}", json=payload, timeout=30)
+    if not r.ok:
+        print(f"telegram {method}: {r.status_code} {r.text[:300]}", flush=True)
+
+
+def send(text, markup=None):
+    tg("sendMessage", chat_id=CHAT, text=text[:4000], **({"reply_markup": markup} if markup else {}))
+
+
+def send_panels(repos):
+    for r in repos:
+        send(*r.panel())
+
+
+def ask_hint(repo, n):
+    """Asks for the text of a hint: the answer is a reply to this message, see HINT."""
+    send(f"Hint for {repo.name}#{n}: reply to this message with the text.",
+         {"force_reply": True, "input_field_placeholder": "Hint for the agent"})
 
 
 def names():
@@ -193,11 +270,12 @@ def split_repo(arg, context):
     return (REPOS[0] if len(REPOS) == 1 else None), arg
 
 
-def need(repo, usage):
-    if not repo:
-        raise UserError(f"Which repository? Usage: {usage}\nRepositories: {names()}.\n"
-                        "Or send the command as a reply to a notification.")
-    return repo
+USAGE = {
+    "/unblock": "/unblock [repo] [n]",
+    "/hint": "/hint [repo] <n> <text>",
+    "/mode": "/mode [repo] manual | automatic",
+    "/schedule": "/schedule [repo] nightly | always",
+}
 
 
 def handle(msg):
@@ -205,6 +283,12 @@ def handle(msg):
     reply = msg.get("reply_to_message")
     context = repo_of(reply)
     if reply and not text.startswith("/"):
+        m = HINT.match(reply.get("text") or "")
+        if m:
+            repo = find(m.group(1))
+            if not repo:
+                raise UserError(f"I do not follow {m.group(1)}. Repositories: {names()}.")
+            return send(repo.hint(int(m.group(2)), text))
         m = QUESTION.match(reply.get("text") or "")
         if not m:
             return send("Replies are accepted only to \"Question on #N\" messages.")
@@ -225,53 +309,37 @@ def handle(msg):
         # A mistyped name must not turn into "all of them"
         raise UserError(f"I do not follow '{arg}'. Repositories: {names()}.")
     if cmd == "/status":
-        send("\n\n".join(r.status() for r in ([repo] if repo else REPOS)))
+        send_panels([repo] if repo else REPOS)
     elif cmd == "/pause":
         targets = [repo] if repo else REPOS
         for r in targets:
             r.add(r.control, "paused")
         send(f"Queue paused: {', '.join(r.name for r in targets)}.")
+    elif cmd in ("/unblock", "/hint", "/mode", "/schedule") and (not repo or (not arg and cmd != "/unblock")):
+        # Something is missing: the buttons offer the same choices, with nothing to type
+        send(f"{'Which repository? ' if not repo else ''}Use the buttons, or the full command: {USAGE[cmd]}")
+        send_panels([repo] if repo else REPOS)
     elif cmd == "/unblock":
-        need(repo, "/unblock <repo> [n]")
-        repo.rm(repo.control, "paused")
-        n = int(arg) if arg.isdigit() else repo.active()
-        if n:
-            repo.unblock(n)
-        repo.dispatch()
-        send(f"Unblocked {repo.name}{f'#{n}' if n else ''}, restarting.")
+        send(repo.restart(int(arg) if arg.isdigit() else repo.active()))
     elif cmd == "/hint":
         num, _, body = arg.partition(" ")
-        if not num.isdigit() or not body.strip():
-            return send("Usage: /hint [repo] <number> <text>")
-        need(repo, "/hint <repo> <number> <text>")
-        repo.comment(int(num), f"Hint for the agent: {body.strip()}")
-        repo.unblock(int(num))
-        repo.rm(repo.control, "paused")
-        repo.dispatch()
-        send(f"Hint added to {repo.name}#{num}, restarting.")
+        if not num.isdigit():
+            return send(f"Usage: {USAGE[cmd]}")
+        if not body.strip():
+            return ask_hint(repo, int(num))
+        send(repo.hint(int(num), body))
     elif cmd == "/mode":
         if arg not in ("manual", "automatic"):
-            return send("Usage: /mode [repo] manual | automatic")
-        need(repo, "/mode <repo> manual | automatic")
-        if arg == "automatic":
-            repo.add(repo.control, "auto mode")
-        else:
-            repo.rm(repo.control, "auto mode")
-        repo.dispatch()
-        send(f"Mode of {repo.name} set to {arg}.")
+            return send(f"Usage: {USAGE[cmd]}")
+        send(repo.set_mode(arg))
     elif cmd == "/schedule":
         if arg not in ("nightly", "always"):
-            return send("Usage: /schedule [repo] nightly | always")
-        need(repo, "/schedule <repo> nightly | always")
-        if arg == "always":
-            repo.add(repo.control, "always on")
-        else:
-            repo.rm(repo.control, "always on")
-        repo.dispatch()
-        send(f"Schedule of {repo.name} set to {arg}.")
+            return send(f"Usage: {USAGE[cmd]}")
+        send(repo.set_schedule(arg))
     else:
         send("Commands: /status [repo], /pause [repo], /unblock [repo] [n], /hint [repo] <n> <text>, "
              "/mode [repo] manual|automatic, /schedule [repo] nightly|always, /version.\n"
+             "/status shows buttons for all of them: nothing else to type.\n"
              "Without a repository, /status and /pause apply to all of them. The other commands need it "
              "when there is more than one, unless you send them as a reply to a notification.\n"
              "To answer a question, reply to its message.\n"
@@ -279,16 +347,62 @@ def handle(msg):
     return None
 
 
-def safe_handle(msg):
+def press(query):
+    """A button was pressed. Its data is "action|value|key": key names the repository on the
+    panels of /status and is empty on the notifications of the workflows, which start with it."""
+    msg = query.get("message") or {}
+    action, value, key = ((query.get("data") or "").split("|") + ["", ""])[:3]
+    repo = next((r for r in REPOS if r.key == key), None) if key else repo_of(msg)
+    if not repo:
+        raise UserError("I no longer follow the repository of this message.")
+    if action == "pause":
+        repo.add(repo.control, "paused")
+        done = f"Queue paused: {repo.name}."
+    elif action == "resume":
+        repo.rm(repo.control, "paused")
+        repo.dispatch()
+        done = f"Queue resumed: {repo.name}."
+    elif action == "mode" and value in ("manual", "automatic"):
+        done = repo.set_mode(value)
+    elif action == "schedule" and value in ("nightly", "always"):
+        done = repo.set_schedule(value)
+    elif action == "unblock" and value.isdigit():
+        done = repo.restart(int(value))
+    elif action == "hint" and value.isdigit():
+        ask_hint(repo, int(value))
+        done = "Reply with the text of the hint."
+    elif action == "refresh":
+        done = "Updated."
+    else:
+        raise UserError("I do not know this button.")
+    if key:
+        text, markup = repo.panel()
+        tg("editMessageText", chat_id=CHAT, message_id=msg["message_id"], text=text, reply_markup=markup)
+    elif action != "hint":
+        send(done)  # a notification stays as it is: the outcome goes in a new message
+    return done
+
+
+def guarded(action, report):
     try:
-        handle(msg)
+        report(action())
     except UserError as e:
-        send(str(e))
+        report(str(e))
     except requests.HTTPError as e:
         req = e.request
-        send(f"GitHub error {e.response.status_code} {e.response.reason} on {req.method} {req.url}")
+        report(f"GitHub error {e.response.status_code} {e.response.reason} on {req.method} {req.url}")
     except Exception as e:  # report anything else instead of failing silently
-        send(f"Error: {e}")
+        report(f"Error: {e}")
+
+
+def safe_handle(msg):
+    guarded(lambda: handle(msg), lambda text: text and send(text))
+
+
+def safe_press(query):
+    # Always answered, or the button keeps spinning; the text shows up as a toast
+    guarded(lambda: press(query),
+            lambda text: tg("answerCallbackQuery", callback_query_id=query["id"], text=text[:200]))
 
 
 def load_offset():
@@ -305,16 +419,21 @@ def save_offset(offset):
 
 def main():
     print(f"peppec-bot {VERSION}, repositories: {names()}", flush=True)
+    tg("setMyCommands", commands=[{"command": c, "description": d} for c, d in COMMANDS])
     offset = load_offset()
     while True:
         try:
-            r = requests.get(f"{TG}/getUpdates", params={"timeout": 50, "offset": offset}, timeout=60)
+            r = requests.get(f"{TG}/getUpdates", timeout=60, params={
+                "timeout": 50, "offset": offset, "allowed_updates": '["message","callback_query"]'})
             for u in r.json().get("result", []):
                 offset = u["update_id"] + 1
                 save_offset(offset)  # saved before handling: an update is never processed twice
                 msg = u.get("message")
                 if msg and msg["chat"]["id"] == CHAT:
                     safe_handle(msg)
+                query = u.get("callback_query")
+                if query and (query.get("message") or {}).get("chat", {}).get("id") == CHAT:
+                    safe_press(query)
         except requests.RequestException as e:
             print("network error:", e, flush=True)
             time.sleep(10)

@@ -6,8 +6,15 @@ notify() {
   text="${text:0:4000}"
   # Also in the job log, so the reason of a stop can be read without Telegram
   echo "notify: $text"
+  # $2, optional: the buttons under the message, as the reply_markup of the Telegram API
   curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    -d chat_id="$TELEGRAM_CHAT_ID" --data-urlencode text="$text" > /dev/null
+    -d chat_id="$TELEGRAM_CHAT_ID" --data-urlencode text="$text" \
+    ${2:+--data-urlencode "reply_markup=$2"} > /dev/null
+}
+# A notification about a blocked issue, with the buttons the bot acts on: "action|value|",
+# the repository being the one the message starts with (see press in bot/bot.py)
+notify_blocked() {
+  notify "$1" "{\"inline_keyboard\":[[{\"text\":\"Unblock #$ISSUE\",\"callback_data\":\"unblock|$ISSUE|\"},{\"text\":\"Hint #$ISSUE\",\"callback_data\":\"hint|$ISSUE|\"}]]}"
 }
 add_label() { gh api -X POST "repos/$REPO/issues/$1/labels" -f "labels[]=$2" > /dev/null; }
 rm_label() { gh api -X DELETE "repos/$REPO/issues/$1/labels/$(jq -rn --arg l "$2" '$l|@uri')" > /dev/null 2>&1 || true; }
