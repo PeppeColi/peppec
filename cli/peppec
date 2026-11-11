@@ -701,10 +701,12 @@ cmd_doctor() {
   step "Last runs"
   for f in ci agent; do
     state=$(gh run list -R "$REPO" --workflow "$f.yml" --limit 1 --json conclusion,status,createdAt \
-      --jq '.[0] | "\(.conclusion // .status) on \(.createdAt[0:10])"' 2> /dev/null || true)
+      --jq '.[0] | "\(if (.conclusion // "") == "" then .status else .conclusion end) on \(.createdAt[0:10])"' 2> /dev/null || true)
+    # A run that has not finished has an empty conclusion: its status is shown, without a warning
     case "$state" in
       success*) ok "$f: $state";;
       ""|null*) note "$f: never run";;
+      queued*|in_progress*|waiting*|pending*|requested*) note "$f: $state";;
       *) warn "$f: $state";;
     esac
   done
