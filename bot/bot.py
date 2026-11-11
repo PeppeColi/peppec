@@ -1,10 +1,14 @@
 import hashlib
+import hmac
+import json
 import os
 import re
+import threading
 import time
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import jwt
 import requests
@@ -32,6 +36,12 @@ COMMANDS = [
     ("version", "Version of the bot"),
     ("help", "How to use the commands"),
 ]
+# The dashboard: a web page served by the bot, off unless DASHBOARD_PASSWORD is set
+PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
+DASHBOARD_PORT = 8737
+PAGE = Path(__file__).with_name("dashboard.html")
+# One thread at a time talks to GitHub: the Telegram loop or a request of the dashboard
+LOCK = threading.RLock()
 GH = requests.Session()
 GH.headers.update({"Accept": "application/vnd.github+json"})
 
@@ -149,6 +159,59 @@ class Repo:
         rows.append([self.button("Refresh", "refresh")])
         return "\n".join(out), {"inline_keyboard": rows}
 
+    def state(self):
+        """What the dashboard shows of the repository."""
+        c = self.labels(self.control)
+        out = {"name": self.name, "key": self.key, "url": f"https://github.com/{self.name}",
+               "mode": "automatic" if "auto mode" in c else "manual",
+               "schedule": "always" if "always on" in c else "nightly",
+               "paused": "paused" in c, "active": None}
+        active = self.issues("in progress")
+        if active:
+            issue = active[0]
+            n, labels = issue["number"], [x["name"] for x in issue["labels"]]
+            minutes, said = 0, ""
+            for comment in self.gh("GET", f"/issues/{n}/comments", params={"per_page": 100}):
+                m = re.match(r"<!-- peppec:minutes=(\d+)", comment["body"])
+                if m:
+                    minutes = int(m.group(1))
+                elif not comment["body"].startswith("<!-- peppec:"):
+                    said = comment["body"]
+            pr = self.agent_pr(n)
+            out["active"] = {
+                "number": n, "title": issue["title"], "url": f"{out['url']}/issues/{n}",
+                "size": size_of(labels), "minutes": minutes,
+                "block": next((b for b in BLOCKS if b in labels), None),
+                # The question is the last comment: after.sh posts it right before the label
+                "question": said if "question open" in labels else "",
+                "pr": {"number": pr, "labels": self.labels(pr), "url": f"{out['url']}/pull/{pr}"} if pr else None}
+        out["queue"] = [{"number": i["number"], "title": i["title"], "size": size_of([x["name"] for x in i["labels"]])}
+                        for i in self.issues("ready") if not any(x["name"] == "in progress" for x in i["labels"])]
+        return out
+
+    def apply(self, action, value=""):
+        """The actions that need no text, shared by the buttons and the dashboard."""
+        if action == "pause":
+            self.add(self.control, "paused")
+            return f"Queue paused: {self.name}."
+        if action == "resume":
+            self.rm(self.control, "paused")
+            self.dispatch()
+            return f"Queue resumed: {self.name}."
+        if action == "mode" and value in ("manual", "automatic"):
+            return self.set_mode(value)
+        if action == "schedule" and value in ("nightly", "always"):
+            return self.set_schedule(value)
+        if action == "unblock" and value.isdigit():
+            return self.restart(int(value))
+        raise UserError("I do not know this action.")
+
+    def answer(self, n, text):
+        self.comment(n, text)
+        self.rm(n, "question open")
+        self.dispatch()
+        return f"Answer posted on {self.name}#{n}, restarting."
+
     def set_mode(self, value):
         if value == "automatic":
             self.add(self.control, "auto mode")
@@ -179,6 +242,10 @@ class Repo:
         self.rm(self.control, "paused")
         self.dispatch()
         return f"Hint added to {self.name}#{n}, restarting."
+
+
+def size_of(labels):
+    return next((x[6:] for x in labels if x.startswith("size: ")), "M")
 
 
 def load_repos():
@@ -295,11 +362,7 @@ def handle(msg):
         if not context:
             return send("This message does not say which repository it comes from: "
                         "upgrade the engine of that repository to 1.6 or later.")
-        n = int(m.group(1))
-        context.comment(n, text)
-        context.rm(n, "question open")
-        context.dispatch()
-        return send(f"Answer posted on {context.name}#{n}, restarting.")
+        return send(context.answer(int(m.group(1)), text))
     cmd, _, arg = text.partition(" ")
     cmd = cmd.split("@")[0]
     if cmd == "/version":
@@ -355,26 +418,13 @@ def press(query):
     repo = next((r for r in REPOS if r.key == key), None) if key else repo_of(msg)
     if not repo:
         raise UserError("I no longer follow the repository of this message.")
-    if action == "pause":
-        repo.add(repo.control, "paused")
-        done = f"Queue paused: {repo.name}."
-    elif action == "resume":
-        repo.rm(repo.control, "paused")
-        repo.dispatch()
-        done = f"Queue resumed: {repo.name}."
-    elif action == "mode" and value in ("manual", "automatic"):
-        done = repo.set_mode(value)
-    elif action == "schedule" and value in ("nightly", "always"):
-        done = repo.set_schedule(value)
-    elif action == "unblock" and value.isdigit():
-        done = repo.restart(int(value))
-    elif action == "hint" and value.isdigit():
+    if action == "hint" and value.isdigit():
         ask_hint(repo, int(value))
         done = "Reply with the text of the hint."
     elif action == "refresh":
         done = "Updated."
     else:
-        raise UserError("I do not know this button.")
+        done = repo.apply(action, value)
     if key:
         text, markup = repo.panel()
         tg("editMessageText", chat_id=CHAT, message_id=msg["message_id"], text=text, reply_markup=markup)
@@ -383,16 +433,21 @@ def press(query):
     return done
 
 
-def guarded(action, report):
-    try:
-        report(action())
-    except UserError as e:
-        report(str(e))
-    except requests.HTTPError as e:
+def explain(e):
+    if isinstance(e, UserError):
+        return str(e)
+    if isinstance(e, requests.HTTPError):
         req = e.request
-        report(f"GitHub error {e.response.status_code} {e.response.reason} on {req.method} {req.url}")
-    except Exception as e:  # report anything else instead of failing silently
-        report(f"Error: {e}")
+        return f"GitHub error {e.response.status_code} {e.response.reason} on {req.method} {req.url}"
+    return f"Error: {e}"
+
+
+def guarded(action, report):
+    with LOCK:
+        try:
+            report(action())
+        except Exception as e:  # report anything instead of failing silently
+            report(explain(e))
 
 
 def safe_handle(msg):
@@ -403,6 +458,102 @@ def safe_press(query):
     # Always answered, or the button keeps spinning; the text shows up as a toast
     guarded(lambda: press(query),
             lambda text: tg("answerCallbackQuery", callback_query_id=query["id"], text=text[:200]))
+
+
+CACHE = {"at": 0.0, "body": b""}
+
+
+def dashboard_state():
+    """The state of every repository as JSON, read from GitHub at most every 30 seconds."""
+    with LOCK:
+        if time.time() - CACHE["at"] > 30:
+            data = {"version": VERSION, "at": int(time.time()), "repos": [r.state() for r in REPOS]}
+            CACHE.update(at=time.time(), body=json.dumps(data).encode())
+        return CACHE["body"]
+
+
+def dashboard_action(req):
+    repo = next((r for r in REPOS if r.key == req.get("repo")), None)
+    if not repo:
+        raise UserError("I do not follow this repository.")
+    action, value = str(req.get("action", "")), str(req.get("value", ""))
+    text = str(req.get("text", "")).strip()[:4000]
+    with LOCK:
+        if action in ("hint", "answer"):
+            if not value.isdigit() or not text:
+                raise UserError("The text is missing.")
+            done = repo.hint(int(value), text) if action == "hint" else repo.answer(int(value), text)
+        else:
+            done = repo.apply(action, value)
+        CACHE["at"] = 0.0
+        send(f"Dashboard: {done}")  # what the dashboard does leaves a trace in the chat
+    return done
+
+
+class Dashboard(BaseHTTPRequestHandler):
+    def reply(self, status, body, kind="application/json"):
+        self.send_response(status)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; "
+                         "script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def error(self, status, text):
+        self.reply(status, json.dumps({"error": text}).encode())
+
+    def allowed(self):
+        """Everything but the page itself, which holds no data, needs the password."""
+        given = unquote(self.headers.get("Authorization", "").removeprefix("Bearer "))
+        if hmac.compare_digest(given.encode(), PASSWORD.encode()):
+            return True
+        time.sleep(1)  # slows down guessing
+        self.error(401, "Wrong password.")
+        return False
+
+    def do_GET(self):
+        if self.path in ("/", "/index.html"):
+            return self.reply(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+        if self.path != "/api/state":
+            return self.error(404, "Not found.")
+        if self.allowed():
+            try:
+                self.reply(200, dashboard_state())
+            except Exception as e:
+                self.error(502, explain(e))
+
+    def do_POST(self):
+        if self.path != "/api/action":
+            return self.error(404, "Not found.")
+        if not self.allowed():
+            return
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+            if not 0 < size <= 20000:
+                raise UserError("The request is empty or too long.")
+            req = json.loads(self.rfile.read(size))
+            if not isinstance(req, dict):
+                raise UserError("The request is not an object.")
+            self.reply(200, json.dumps({"message": dashboard_action(req)}).encode())
+        except UserError as e:
+            self.error(400, str(e))
+        except Exception as e:
+            self.error(502, explain(e))
+
+    def log_message(self, *args):
+        pass
+
+
+def start_dashboard():
+    if not PASSWORD:
+        return
+    server = ThreadingHTTPServer(("0.0.0.0", DASHBOARD_PORT), Dashboard)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"dashboard on port {DASHBOARD_PORT}", flush=True)
 
 
 def load_offset():
@@ -419,6 +570,7 @@ def save_offset(offset):
 
 def main():
     print(f"peppec-bot {VERSION}, repositories: {names()}", flush=True)
+    start_dashboard()
     tg("setMyCommands", commands=[{"command": c, "description": d} for c, d in COMMANDS])
     offset = load_offset()
     while True:

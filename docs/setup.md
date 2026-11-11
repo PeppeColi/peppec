@@ -275,7 +275,7 @@ docker compose logs -f
    `REPOS` lists the repositories the bot controls, as `owner/name#N` where `N` is the number of the control panel issue. To make the same bot follow more repositories, separate them with commas: they must be installed with the same app, Telegram bot and chat. After changing `.env`, run `docker compose up -d` again.
 
 4. Send `/status` to the bot: it answers with mode, pause and queue.
-5. Optional: in `@BotFather` use `/setcommands` to show the commands in Telegram's menu.
+5. Optional: the dashboard, a web page with the state of the queues and the same actions as the bot. In `.env` set `DASHBOARD_PASSWORD` to a long password and `DASHBOARD_PORT=8737`, run `docker compose up -d` again and open `http://<address of the machine>:8737` from a device in the same network. Do not expose that port to the internet: see [Dashboard](architecture.md#dashboard).
 
 The final layout:
 
