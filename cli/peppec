@@ -225,14 +225,107 @@ init_control_panel() {
   ok "issue #$CONTROL (created and pinned)"
 }
 
+# Waits for GitHub's redirect on 127.0.0.1 and prints "code state"
+APP_LISTENER='
+import http.server, sys, time, urllib.parse
+got = []
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        if "code" in q:
+            got.append(q["code"][0] + " " + q.get("state", [""])[0])
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"<p>PEPPEC: done. Close this tab and go back to the terminal.</p>")
+    def log_message(self, *args):
+        pass
+server = http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler)
+server.timeout = 5
+deadline = time.time() + 900
+while not got and time.time() < deadline:
+    server.handle_request()
+print(got[0] if got else "")
+'
+
+# Registers the app from a manifest: the browser shows GitHub's confirmation page, GitHub
+# sends back a code, and the code is exchanged for the App ID and the private key.
+# Sets APP_ID, APP_SLUG and KEY_FILE; returns 1 if the app was not created.
+create_app() {
+  local owner action state port manifest tmp reply="" code="" app listener=""
+  owner="${REPO%%/*}"
+  if [ "$(gh api "repos/$REPO" --jq .owner.type)" = Organization ]; then
+    action="https://github.com/organizations/$owner/settings/apps/new"
+  else
+    action="https://github.com/settings/apps/new"
+  fi
+  state=$(openssl rand -hex 16)
+  port=$((20000 + RANDOM % 20000))
+  # The same settings as docs/setup.md, Phase 2: no webhook, only this account can install it
+  manifest=$(jq -cn --arg name "peppec-$owner" --arg url "https://github.com/$REPO" --arg redirect "http://127.0.0.1:$port/" \
+    '{name: $name[0:34], url: $url, redirect_url: $redirect, public: false,
+      description: "Applies labels, merges pull requests and runs the Telegram bot commands of PEPPEC.",
+      hook_attributes: {url: $url, active: false},
+      default_permissions: {actions: "write", contents: "write", issues: "write", pull_requests: "write", checks: "read"}}')
+  tmp=$(mktemp -d) || die "cannot create a temporary folder"
+  jq -rn --arg action "$action?state=$state" --arg manifest "$manifest" \
+    '"<!doctype html><meta charset=\"utf-8\"><title>PEPPEC</title><body onload=\"document.forms[0].submit()\">"
+     + "<form method=\"post\" action=\"\($action | @html)\"><input type=\"hidden\" name=\"manifest\" value=\"\($manifest | @html)\">"
+     + "<button>Continue to GitHub</button></form>"' > "$tmp/app.html"
+  if command -v python3 > /dev/null 2>&1; then
+    python3 -c "$APP_LISTENER" "$port" > "$tmp/reply" 2> /dev/null &
+    listener=$!
+  fi
+  note "GitHub shows the app's name, which you can change, and a button to create it."
+  note "Permissions: Actions, Contents, Issues, Pull requests read and write; Checks read-only."
+  if ! open_url "file://$tmp/app.html"; then note "Open this file in your browser: $tmp/app.html"; fi
+  if [ -n "$listener" ]; then
+    note "Waiting for you to create the app in the browser (Ctrl-C to give up)..."
+    wait "$listener" || true
+    reply=$(cat "$tmp/reply")
+  fi
+  if [ -z "$reply" ]; then
+    # No python3, or the port was taken: the address of the page GitHub lands on carries the code
+    note "After the app is created the browser lands on a page that does not load."
+    ask reply "Paste the address of that page" ""
+    code=$(sed -n 's/.*[?&]code=\([^&]*\).*/\1/p' <<< "$reply")
+    reply="$code $(sed -n 's/.*[?&]state=\([^&]*\).*/\1/p' <<< "$reply")"
+  fi
+  rm -rf "$tmp"
+  code="${reply%% *}"
+  if [ -z "$code" ] || [ "${reply#* }" != "$state" ]; then bad "the app was not created: no valid answer from GitHub"; return 1; fi
+  if ! app=$(curl -fsS -X POST -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/app-manifests/$code/conversions" 2> /dev/null); then
+    bad "GitHub did not accept the code of the new app: delete the app on GitHub and try again"; return 1
+  fi
+  APP_ID=$(jq -r .id <<< "$app"); APP_SLUG=$(jq -r .slug <<< "$app")
+  KEY_FILE="$HOME/$APP_SLUG.private-key.pem"
+  [ -e "$KEY_FILE" ] && KEY_FILE="$HOME/$APP_SLUG.$APP_ID.private-key.pem"
+  ( umask 077; jq -r .pem <<< "$app" > "$KEY_FILE" )
+  ok "app '$APP_SLUG' created, App ID $APP_ID"
+  ok "private key saved in $KEY_FILE (readable only by you)"
+  note "'peppec bot' needs that file: keep it until the bot runs, then delete it."
+  note "Now install the app: choose 'Only select repositories' and pick ${REPO##*/}."
+  open_url "https://github.com/apps/$APP_SLUG/installations/new" \
+    || note "Open https://github.com/apps/$APP_SLUG/installations/new"
+  read -r -p "  Press Enter when the app is installed: " reply
+}
+
 init_app() {
   step "GitHub App"
   local current; current=$(var_of APP_ID)
-  note "The app that applies labels and merges. Create it as described in docs/setup.md, Phase 2."
-  ask APP_ID "App ID" "${PEPPEC_APP_ID:-$current}"
-  is_number "$APP_ID" || { bad "no App ID: set it later with 'gh variable set APP_ID'"; APP_ID=""; return; }
-  APP_SLUG=""
+  note "The app that applies labels and merges, and that the Telegram bot acts as."
+  APP_ID=""; APP_SLUG=""
   KEY_FILE="${KEY_FILE:-${PEPPEC_APP_KEY_FILE:-}}"
+  if [ -z "$current" ] && [ -z "${PEPPEC_APP_ID:-}" ] && [ "$YES" = false ]; then
+    note "One app can serve several repositories: answer no if you already have it."
+    if confirm "Create the app now, in the browser?" y; then create_app || true; fi
+  fi
+  if [ -z "$APP_ID" ]; then
+    note "To create it by hand follow docs/setup.md, Phase 2."
+    ask APP_ID "App ID" "${PEPPEC_APP_ID:-$current}"
+  fi
+  is_number "$APP_ID" || { bad "no App ID: set it later with 'gh variable set APP_ID'"; APP_ID=""; return; }
   local has_key=false
   grep -qx APP_PRIVATE_KEY <<< "$SECRET_NAMES" && has_key=true
   if [ -z "$KEY_FILE" ] && [ "$YES" = false ]; then
