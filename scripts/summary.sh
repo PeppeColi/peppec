@@ -9,14 +9,20 @@ blocked=$(gh issue list -R "$REPO" --state open --label "needs human" --json num
 questions=$(gh issue list -R "$REPO" --state open --label "question open" --json number,title | list)
 queue=$(gh issue list -R "$REPO" --state open --label ready --limit 200 --json number --jq length)
 expiry=""
-if [ -n "${CLAUDE_TOKEN_EXPIRES:-}" ]; then
-  days=$(( ($(date -d "$CLAUDE_TOKEN_EXPIRES" +%s) - $(date +%s)) / 86400 ))
+# expires_soon DATE "what expires" "what to do": adds a warning during the last 30 days
+expires_soon() {
+  if [ -z "$1" ]; then return 0; fi
+  local days=$(( ($(date -d "$1" +%s) - $(date +%s)) / 86400 ))
   if [ "$days" -le 30 ]; then
-    expiry="
+    expiry="$expiry
 
-Warning: the Claude token expires in $days days. Run 'claude setup-token' and update CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_TOKEN_EXPIRES."
+Warning: $2 expires in $days days. $3"
   fi
-fi
+}
+expires_soon "${CLAUDE_TOKEN_EXPIRES:-}" "the Claude token" \
+  "Run 'claude setup-token' and update CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_TOKEN_EXPIRES."
+expires_soon "${AGENT_TOKEN_EXPIRES:-}" "your personal token (AGENT_TOKEN)" \
+  "Regenerate it on GitHub and update AGENT_TOKEN and AGENT_TOKEN_EXPIRES: when it expires the queue stops."
 notify "Overnight summary
 
 Merged PRs:
