@@ -10,6 +10,28 @@ Follow the phases in order: each one assumes the previous ones are done. Replace
 | `<APP_ID>` | The GitHub App's numeric ID (Phase 2) |
 | `<N_CONTROL>` | The number of the "Control panel" issue (Phase 4) |
 
+## Quick path: the command line
+
+`peppec init` automates Phases 1, 4 and 5 and the storing of the secrets of Phase 2. It is safe to run again: it keeps what is already set and only asks for what is missing.
+
+```bash
+# inside a clone of your repository
+curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v1/cli/peppec -o peppec && chmod +x peppec
+./peppec init
+```
+
+What stays manual, because it needs your login or a secret only you can generate:
+
+1. Before `init`: create the GitHub App, generate its private key and install it on the repository (Phase 2, steps 1–3); create the Telegram bot (step 6).
+2. During `init`: paste the Claude token, your personal token and the bot token when asked. The values are read without echo and sent straight to GitHub.
+3. After `init`: commit and push the files it wrote, install CodeRabbit (Phase 3), then run `./peppec bot` and copy the folder it prepares to the bot's machine (Phase 6).
+
+`./peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, branch protection, the expiry of the Claude token. With `--key <app.pem>` it also checks that the app is installed on the repository.
+
+For unattended use, `./peppec init --yes` never asks: it keeps what is set, takes the defaults and reads the secrets from the environment.
+
+The rest of this guide describes every step in detail, and is the reference for doing them by hand.
+
 Prerequisites:
 
 - [ ] `git`, `gh` (GitHub CLI, signed in with `gh auth login`) and `jq` on your computer

@@ -28,7 +28,18 @@ The full picture is in [docs/architecture.md](docs/architecture.md).
 
 ## Install
 
-Follow [docs/setup.md](docs/setup.md). In short, your repository gets three small workflow files that call this one, a one-line configuration and a set of labels, variables and secrets:
+The command line does most of the work. Inside a clone of your repository:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v1/cli/peppec -o peppec && chmod +x peppec
+./peppec init      # labels, settings, variables, secrets, workflow files, branch protection
+./peppec doctor    # checks the installation
+./peppec bot       # prepares the folder for the machine that runs the Telegram bot
+```
+
+It asks for what only you can provide: the GitHub App, the tokens, your preferences. [docs/setup.md](docs/setup.md) explains each step and how to do everything by hand.
+
+Your repository ends up with three small workflow files that call this one, a one-line configuration and a set of labels, variables and secrets:
 
 ```yaml
 # .github/peppec.yml
@@ -62,6 +73,7 @@ A preset is a directory with a setup action, default check commands and a small 
 | `presets/` | One directory per language setup |
 | `bot/` | The Telegram bot, published as `ghcr.io/peppecoli/peppec-bot` |
 | `examples/` | The files to copy into your repository |
+| `cli/peppec` | The command line that installs and checks PEPPEC on a repository |
 | `docs/` | Architecture and setup guide |
 
 ## Security in one paragraph

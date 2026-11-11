@@ -1,0 +1,623 @@
+#!/usr/bin/env bash
+# PEPPEC command line: installs and checks PEPPEC on a host repository.
+# Needs gh (signed in), jq, git, curl and openssl. Works with the bash 3.2 of macOS.
+#
+#   peppec init     run inside a clone of the host repository; safe to run again
+#   peppec doctor   check an installation (-R owner/repo, or the current clone)
+#   peppec bot      prepare the folder to copy to the machine that runs the Telegram bot
+set -euo pipefail
+
+ENGINE="${PEPPEC_ENGINE:-PeppeColi/peppec}"
+REF="${PEPPEC_REF:-v1}"
+YES=false
+REPO=""
+KEY_FILE=""
+PRESET=""
+OUT_DIR="peppec-bot"
+SECRETS="CLAUDE_CODE_OAUTH_TOKEN AGENT_TOKEN APP_PRIVATE_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID"
+WORK_DIRS=".agent/ _ctl/ _preset/ _extra/ _base/"
+
+LABELS='ready|Ready to be picked up by the agents
+complexity: simple|Handled by Sonnet
+complexity: complex|Handled by Opus
+in progress|An agent is working on this issue
+question open|The agent is waiting for an answer
+awaiting quota|Paused until the Claude quota resets
+needs human|Limits exceeded, manual action required
+ready to merge|Review passed, waiting for manual merge
+review 1|Review round 1
+review 2|Review round 2
+review 3|Review round 3
+ci 1|Check fix attempt 1
+ci 2|Check fix attempt 2
+ci 3|Check fix attempt 3
+ci 4|Check fix attempt 4
+ci 5|Check fix attempt 5
+paused|Queue paused (control panel)
+auto mode|Automatic merge enabled (control panel)'
+
+# name|default|question; an empty default means the value is computed or asked without one
+NUMBERS='WORK_START_HOUR|22|Hour at which agents may start new issues (0-23)
+WORK_END_HOUR|9|Hour at which agents stop starting new issues (0-23)
+MAX_REVIEW_ROUNDS|3|Review rounds before the queue stops
+OPUS_FROM_ROUND|3|Review round from which Opus replaces Sonnet on simple issues
+MAX_CI_ATTEMPTS|5|Attempts to fix the checks, per review round
+MAX_ISSUE_MINUTES|120|Agent working time per issue, in minutes
+STALL_MINUTES|120|Minutes a pull request may wait for a CI result
+QUOTA_RETRY_MINUTES|60|Minutes between retries when the Claude quota is exhausted
+SUMMARY_HOUR|9|Hour of the daily summary (0-23)'
+VARIABLES="CONTROL_ISSUE OWNER_LOGIN APP_ID APP_LOGIN AGENT_GIT_NAME AGENT_GIT_EMAIL TZ_NAME WORK_START_HOUR WORK_END_HOUR MAX_REVIEW_ROUNDS OPUS_FROM_ROUND MAX_CI_ATTEMPTS MAX_ISSUE_MINUTES STALL_MINUTES QUOTA_RETRY_MINUTES SUMMARY_HOUR CLAUDE_TOKEN_EXPIRES"
+
+# ---------- output ----------
+if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=""; G=""; Y=""; R=""; N=""; fi
+PROBLEMS=0
+WARNINGS=0
+step() { printf '\n%s%s%s\n' "$B" "$1" "$N"; }
+ok() { printf '  %s✓%s %s\n' "$G" "$N" "$1"; }
+warn() { printf '  %s!%s %s\n' "$Y" "$N" "$1"; WARNINGS=$((WARNINGS + 1)); }
+bad() { printf '  %s✗%s %s\n' "$R" "$N" "$1"; PROBLEMS=$((PROBLEMS + 1)); }
+note() { printf '    %s\n' "$1"; }
+die() { printf '%serror:%s %s\n' "$R" "$N" "$1" >&2; exit 1; }
+
+# ---------- input ----------
+# ask VAR "question" "default": in --yes mode the default is taken without asking
+ask() {
+  local answer=""
+  if [ "$YES" = false ]; then
+    if [ -n "$3" ]; then read -r -p "  $2 [$3]: " answer; else read -r -p "  $2: " answer; fi
+  fi
+  printf -v "$1" '%s' "${answer:-$3}"
+}
+ask_hidden() {
+  local answer=""
+  if [ "$YES" = false ]; then read -r -s -p "  $2: " answer; echo; fi
+  printf -v "$1" '%s' "$answer"
+}
+confirm() { # confirm "question" default(y|n)
+  local answer=""
+  [ "$YES" = true ] && { [ "$2" = y ]; return; }
+  if [ "$2" = y ]; then read -r -p "  $1 [Y/n]: " answer; else read -r -p "  $1 [y/N]: " answer; fi
+  answer="${answer:-$2}"
+  case "$answer" in y|Y|yes|Yes) return 0;; *) return 1;; esac
+}
+
+# ---------- helpers ----------
+need() { command -v "$1" > /dev/null 2>&1 || die "$1 is required but not installed"; }
+preflight() {
+  need gh; need jq; need git; need curl; need openssl
+  gh auth status > /dev/null 2>&1 || die "gh is not signed in: run 'gh auth login'"
+}
+resolve_repo() {
+  if [ -z "$REPO" ]; then
+    REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner 2> /dev/null) \
+      || die "not inside a clone of a GitHub repository: pass -R owner/repo"
+  fi
+  gh api "repos/$REPO" --jq .full_name > /dev/null 2>&1 || die "cannot access $REPO"
+}
+engine_file() { gh api -H "Accept: application/vnd.github.raw" "repos/$ENGINE/contents/$1?ref=$REF"; }
+host_file() { gh api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/$1" 2> /dev/null; }
+var_of() { jq -r --arg n "$1" '.[] | select(.name == $n) | .value' <<< "$VARS_JSON"; }
+load_vars() { VARS_JSON=$(gh variable list -R "$REPO" --json name,value); }
+set_var() { # set_var NAME VALUE: writes only when the value changes
+  if [ "$(var_of "$1")" = "$2" ]; then ok "$1 = $2"; else
+    gh variable set "$1" -R "$REPO" -b "$2" > /dev/null; ok "$1 = $2 (set)"
+  fi
+}
+is_number() { case "$1" in ''|*[!0-9]*) return 1;; *) return 0;; esac; }
+epoch_of() { date -d "$1" +%s 2> /dev/null || date -j -f "%Y-%m-%d" "$1" +%s 2> /dev/null; }
+next_year() { date -d "+1 year" +%Y-%m-%d 2> /dev/null || date -v+1y +%Y-%m-%d; }
+system_tz() {
+  local link; link=$(readlink /etc/localtime 2> /dev/null || true)
+  if [ -n "$link" ]; then echo "${link##*zoneinfo/}"; elif [ -f /etc/timezone ]; then cat /etc/timezone; else echo UTC; fi
+}
+# Minutes east of UTC of a time zone on a given day
+tz_offset() {
+  local z
+  z=$(TZ="$1" date -d "$2 12:00" +%z 2> /dev/null || TZ="$1" date -j -f "%Y-%m-%d %H" "$2 12" +%z)
+  local sign=1; [ "${z:0:1}" = "-" ] && sign=-1
+  echo $(( sign * (10#${z:1:2} * 60 + 10#${z:3:2}) ))
+}
+# UTC hours at which the local hour equals $2, in winter and in summer
+summary_cron() {
+  local hours="" off h
+  for day in 2026-01-15 2026-07-15; do
+    off=$(tz_offset "$1" "$day")
+    h=$(( ( ($2 * 60 - off + 59 + 1440) / 60 ) % 24 ))
+    hours="$hours $h"
+  done
+  # shellcheck disable=SC2086
+  echo "0 $(printf '%s\n' $hours | sort -n | uniq | paste -sd, -) * * *"
+}
+
+# ---------- GitHub App ----------
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+app_jwt() { # app_jwt APP_ID KEY_FILE
+  local now head payload sig
+  now=$(date +%s)
+  head=$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)
+  payload=$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' $((now - 60)) $((now + 300)) "$1" | b64url)
+  sig=$(printf '%s.%s' "$head" "$payload" | openssl dgst -sha256 -sign "$2" -binary | b64url)
+  printf '%s.%s.%s' "$head" "$payload" "$sig"
+}
+app_api() { # app_api APP_ID KEY_FILE path
+  curl -fsS -H "Authorization: Bearer $(app_jwt "$1" "$2")" -H "Accept: application/vnd.github+json" \
+    "https://api.github.com$3" 2> /dev/null
+}
+# Checks the key against the app and the app's installation on the repository; sets APP_SLUG
+check_app() { # check_app APP_ID KEY_FILE
+  APP_SLUG=$(app_api "$1" "$2" /app | jq -r '.slug // empty' || true)
+  if [ -z "$APP_SLUG" ]; then bad "the key does not belong to app $1, or the app does not exist"; return 1; fi
+  ok "key valid for the app '$APP_SLUG'"
+  if app_api "$1" "$2" "/repos/$REPO/installation" > /dev/null; then
+    ok "app installed on $REPO"
+  else
+    bad "app not installed on $REPO"
+    note "Install it: https://github.com/apps/$APP_SLUG/installations/new"
+  fi
+}
+
+# ---------- Telegram ----------
+# The token goes to curl through a config on stdin, so it never shows in the process list
+telegram() { curl -fsS -K - <<< "url = \"https://api.telegram.org/bot$1/$2\"" 2> /dev/null; }
+
+# ---------- init ----------
+write_file() { # write_file PATH CONTENT
+  if [ -f "$1" ]; then
+    if [ "$(cat "$1")" = "$2" ]; then ok "$1 (unchanged)"; return; fi
+    if ! confirm "$1 exists and differs: overwrite?" n; then warn "$1 kept as it is"; return; fi
+  fi
+  mkdir -p "$(dirname "$1")"
+  printf '%s\n' "$2" > "$1"
+  ok "$1 (written)"
+}
+put_secret() { printf '%s' "$2" | gh secret set "$1" -R "$REPO" > /dev/null; ok "$1 (set)"; }
+
+init_labels() {
+  step "Labels"
+  local n=0
+  while IFS='|' read -r name desc; do
+    gh label create "$name" -R "$REPO" --description "$desc" --force > /dev/null
+    n=$((n + 1))
+  done <<< "$LABELS"
+  ok "$n labels present"
+}
+
+init_settings() {
+  step "Repository settings"
+  gh api -X PATCH "repos/$REPO" -F delete_branch_on_merge=true > /dev/null && ok "merged branches are deleted automatically"
+  if [ "$(gh api "repos/$REPO" --jq .private)" = false ]; then
+    if gh api -X PUT "repos/$REPO/actions/permissions/fork-pr-contributor-approval" \
+         -f approval_policy=all_external_contributors > /dev/null 2>&1; then
+      ok "workflows from forks need approval for all external contributors"
+    else
+      warn "could not set the approval of workflows from forks"
+      note "Settings → Actions → General → Require approval for all external contributors"
+    fi
+  fi
+}
+
+init_control_panel() {
+  step "Control panel"
+  CONTROL=$(gh issue list -R "$REPO" --state open --search 'in:title "Control panel"' --json number,title \
+    --jq '[.[] | select(.title == "Control panel")] | sort_by(.number) | .[0].number // empty')
+  if [ -n "$CONTROL" ]; then ok "issue #$CONTROL"; return; fi
+  local url
+  url=$(gh issue create -R "$REPO" --title "Control panel" \
+    --body "Labels: paused = queue stopped; auto mode = automatic merge. Do not close.")
+  CONTROL="${url##*/}"
+  gh issue pin "$CONTROL" -R "$REPO" > /dev/null 2>&1 || true
+  ok "issue #$CONTROL (created and pinned)"
+}
+
+init_app() {
+  step "GitHub App"
+  local current; current=$(var_of APP_ID)
+  note "The app that applies labels and merges. Create it as described in docs/setup.md, Phase 2."
+  ask APP_ID "App ID" "${PEPPEC_APP_ID:-$current}"
+  is_number "$APP_ID" || { bad "no App ID: set it later with 'gh variable set APP_ID'"; APP_ID=""; return; }
+  APP_SLUG=""
+  KEY_FILE="${KEY_FILE:-${PEPPEC_APP_KEY_FILE:-}}"
+  local has_key=false
+  grep -qx APP_PRIVATE_KEY <<< "$SECRET_NAMES" && has_key=true
+  if [ -z "$KEY_FILE" ] && [ "$YES" = false ]; then
+    if [ "$has_key" = true ]; then
+      ask KEY_FILE "Path of the app's private key (.pem), empty to keep the stored one" ""
+    else
+      ask KEY_FILE "Path of the app's private key (.pem)" ""
+    fi
+  fi
+  KEY_FILE="${KEY_FILE/#\~/$HOME}"
+  if [ -n "$KEY_FILE" ]; then
+    [ -f "$KEY_FILE" ] || { bad "no such file: $KEY_FILE"; KEY_FILE=""; }
+  fi
+  if [ -n "$KEY_FILE" ]; then
+    if check_app "$APP_ID" "$KEY_FILE"; then
+      gh secret set APP_PRIVATE_KEY -R "$REPO" < "$KEY_FILE" > /dev/null
+      ok "APP_PRIVATE_KEY (set)"
+    fi
+  elif [ "$has_key" = true ]; then
+    ok "APP_PRIVATE_KEY (kept)"
+  else
+    bad "APP_PRIVATE_KEY missing: run init again with --key <file>"
+  fi
+  if [ -z "$APP_SLUG" ]; then
+    current=$(var_of APP_LOGIN)
+    ask APP_SLUG "App short name, as in its URL" "${current%\[bot\]}"
+  fi
+}
+
+init_variables() {
+  step "Variables"
+  local me name email value
+  me=$(gh api user)
+  set_var CONTROL_ISSUE "$CONTROL"
+  set_var OWNER_LOGIN "$(jq -r .login <<< "$me")"
+  [ -n "$APP_ID" ] && set_var APP_ID "$APP_ID"
+  if [ -n "$APP_SLUG" ]; then set_var APP_LOGIN "${APP_SLUG}[bot]"; else bad "APP_LOGIN not set: the app's short name is unknown"; fi
+  name=$(var_of AGENT_GIT_NAME); email=$(var_of AGENT_GIT_EMAIL)
+  ask value "Name on the agent's commits" "${name:-$(jq -r '.name // .login' <<< "$me")}"
+  set_var AGENT_GIT_NAME "$value"
+  ask value "Email on the agent's commits" "${email:-$(jq -r '"\(.id)+\(.login)@users.noreply.github.com"' <<< "$me")}"
+  set_var AGENT_GIT_EMAIL "$value"
+  value=$(var_of TZ_NAME)
+  ask TZ_NAME "Time zone" "${value:-$(system_tz)}"
+  TZ="$TZ_NAME" date > /dev/null 2>&1 || die "unknown time zone: $TZ_NAME"
+  set_var TZ_NAME "$TZ_NAME"
+  # The list is read on descriptor 3, so the questions can still read the terminal
+  while IFS='|' read -r name default question <&3; do
+    value=$(var_of "$name")
+    ask value "$question" "${value:-$default}"
+    is_number "$value" || die "$name must be a number"
+    set_var "$name" "$value"
+    if [ "$name" = SUMMARY_HOUR ]; then SUMMARY_HOUR="$value"; fi
+  done 3<<< "$NUMBERS"
+}
+
+init_secrets() {
+  step "Secrets"
+  note "Values are read without echo and sent straight to GitHub: nothing is written to disk."
+  local name value existing
+  for name in CLAUDE_CODE_OAUTH_TOKEN AGENT_TOKEN TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+    existing=false; grep -qx "$name" <<< "$SECRET_NAMES" && existing=true
+    value="${!name:-}"
+    if [ -z "$value" ] && [ "$YES" = false ]; then
+      if [ "$existing" = true ] && ! confirm "$name is already set: replace it?" n; then ok "$name (kept)"; continue; fi
+      case "$name" in
+        CLAUDE_CODE_OAUTH_TOKEN) note "Run 'claude setup-token' in another terminal and paste the token.";;
+        AGENT_TOKEN) note "Fine-grained token for $REPO: Contents, Issues, Pull requests read and write; Actions read."
+                     note "https://github.com/settings/personal-access-tokens/new";;
+        TELEGRAM_BOT_TOKEN) note "From @BotFather: /newbot, or /mybots → API Token.";;
+        TELEGRAM_CHAT_ID)
+          if [ -n "${BOT_TOKEN:-}" ]; then
+            note "Send any message to your bot now, then press Enter (empty to type the ID yourself)."
+            read -r -p "  " _ || true
+            value=$(telegram "$BOT_TOKEN" getUpdates | jq -r '[.result[] | .message.chat.id // empty] | last // empty' || true)
+            if [ -n "$value" ]; then ok "chat ID detected"; else note "No message found (a running bot consumes them): type the ID."; fi
+          fi;;
+      esac
+      if [ -z "$value" ]; then
+        if [ "$name" = TELEGRAM_CHAT_ID ]; then ask value "TELEGRAM_CHAT_ID" ""; else ask_hidden value "$name"; fi
+      fi
+    fi
+    if [ -z "$value" ]; then
+      if [ "$existing" = true ]; then ok "$name (kept)"; else bad "$name missing"; fi
+      continue
+    fi
+    case "$name" in
+      CLAUDE_CODE_OAUTH_TOKEN)
+        case "$value" in sk-ant-oat*) ;; *) warn "the value does not look like a token from 'claude setup-token'";; esac
+        NEW_CLAUDE_TOKEN=true;;
+      AGENT_TOKEN)
+        if [ "$(GH_TOKEN="$value" gh api "repos/$REPO" --jq .permissions.push 2> /dev/null)" = true ]; then
+          ok "the token can write to $REPO"
+        else bad "the token cannot write to $REPO: not stored"; continue; fi;;
+      TELEGRAM_BOT_TOKEN)
+        if telegram "$value" getMe | jq -e .ok > /dev/null 2>&1; then ok "Telegram accepts the bot token"; BOT_TOKEN="$value"
+        else bad "Telegram rejects the bot token: not stored"; continue; fi;;
+      TELEGRAM_CHAT_ID)
+        case "$value" in -[0-9]*|[0-9]*) ;; *) bad "the chat ID must be a number: not stored"; continue;; esac;;
+    esac
+    put_secret "$name" "$value"
+  done
+  local expires; expires=$(var_of CLAUDE_TOKEN_EXPIRES)
+  if [ "${NEW_CLAUDE_TOKEN:-false}" = true ]; then
+    set_var CLAUDE_TOKEN_EXPIRES "$(next_year)"
+  elif [ -n "$expires" ]; then
+    ok "CLAUDE_TOKEN_EXPIRES = $expires"
+  else
+    ask expires "Expiry date of the Claude token (YYYY-MM-DD, one year after it was generated)" "$(next_year)"
+    set_var CLAUDE_TOKEN_EXPIRES "$expires"
+  fi
+}
+
+init_files() {
+  step "Files"
+  local presets detected="" content f line cron
+  presets=$(gh api "repos/$ENGINE/contents/presets?ref=$REF" --jq '.[].name')
+  if [ -z "$PRESET" ] && [ -f .github/peppec.yml ]; then
+    PRESET=$(sed -n 's/^preset:[[:space:]]*//p' .github/peppec.yml | head -n 1)
+  fi
+  if [ -z "$PRESET" ]; then
+    [ -f Cargo.toml ] && detected=rust-v1
+    [ -f composer.json ] && detected=php-v1
+    note "Available presets: $(echo $presets)"
+    ask PRESET "Preset" "$detected"
+  fi
+  grep -qx "$PRESET" <<< "$presets" || die "unknown preset '$PRESET'"
+  ok "preset $PRESET"
+
+  cron=$(summary_cron "$TZ_NAME" "$SUMMARY_HOUR")
+  for f in agent ci summary; do
+    content=$(engine_file "examples/$f.yml" | sed -e '/^# Copy to /d' \
+      -e "s|\\.yml@v1\$|.yml@$REF|" -e "s|engine_ref: v1|engine_ref: $REF|" \
+      -e "s|cron: '0 7,8 \\* \\* \\*'|cron: '$cron'|")
+    write_file ".github/workflows/$f.yml" "$content"
+  done
+  if [ -f .github/peppec.yml ]; then ok ".github/peppec.yml (kept)"; else
+    write_file .github/peppec.yml "$(engine_file examples/peppec.yml | sed -e '/^# Copy to /d' -e "s|^preset: .*|preset: $PRESET|")"
+  fi
+  write_file .coderabbit.yaml "$(engine_file examples/coderabbit.yaml | sed -e '/^# Copy to /d')"
+  touch .gitignore
+  local added=""
+  for line in $WORK_DIRS; do
+    grep -qxF "$line" .gitignore || { printf '%s\n' "$line" >> .gitignore; added="$added $line"; }
+  done
+  if [ -n "$added" ]; then ok ".gitignore (added:$added)"; else ok ".gitignore (unchanged)"; fi
+}
+
+init_ruleset() {
+  step "Branch protection"
+  if [ -n "$(gh api "repos/$REPO/rulesets" --jq '.[] | select(.target == "branch") | .id' 2> /dev/null)" ]; then
+    ok "a branch ruleset already exists: left as it is"
+    note "It should require the status check 'ci / ci' on main."
+    return
+  fi
+  if jq -n '{name: "main", target: "branch", enforcement: "active",
+        conditions: {ref_name: {include: ["refs/heads/main"], exclude: []}},
+        bypass_actors: [{actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always"}],
+        rules: [{type: "deletion"}, {type: "non_fast_forward"},
+          {type: "pull_request", parameters: {required_approving_review_count: 0,
+            dismiss_stale_reviews_on_push: false, require_code_owner_review: false,
+            require_last_push_approval: false, required_review_thread_resolution: false}},
+          {type: "required_status_checks", parameters: {strict_required_status_checks_policy: false,
+            required_status_checks: [{context: "ci / ci"}]}}]}' \
+      | gh api -X POST "repos/$REPO/rulesets" --input - > /dev/null 2>&1; then
+    ok "ruleset 'main' created: pull request and the check 'ci / ci' required, admins can bypass"
+  else
+    warn "could not create the ruleset (rulesets on private repositories need a paid plan)"
+  fi
+}
+
+cmd_init() {
+  preflight
+  git rev-parse --show-toplevel > /dev/null 2>&1 || die "run init inside a clone of the host repository"
+  cd "$(git rev-parse --show-toplevel)"
+  [ -n "$REPO" ] && die "init works on the current clone: do not pass -R"
+  resolve_repo
+  [ "$(gh api "repos/$REPO" --jq .default_branch)" = main ] || die "the default branch of $REPO must be 'main'"
+  printf '%sPEPPEC%s on %s%s%s, engine %s@%s\n' "$B" "$N" "$B" "$REPO" "$N" "$ENGINE" "$REF"
+  load_vars
+  SECRET_NAMES=$(gh secret list -R "$REPO" --json name --jq '.[].name')
+  init_labels
+  init_settings
+  init_control_panel
+  init_app
+  init_variables
+  init_secrets
+  init_files
+  init_ruleset
+
+  step "Next steps"
+  note "1. Review the files, then commit and push them to main:"
+  note "     git add .github .coderabbit.yaml .gitignore && git commit -m 'chore: install PEPPEC' && git push"
+  note "2. Install CodeRabbit on $REPO: https://github.com/apps/coderabbitai"
+  note "3. Prepare the Telegram bot: peppec bot"
+  note "4. Check everything: peppec doctor"
+  if [ "$PROBLEMS" -gt 0 ]; then printf '\n%s%d problem(s) above: fix them and run init again.%s\n' "$R" "$PROBLEMS" "$N"; exit 1; fi
+}
+
+# ---------- doctor ----------
+cmd_doctor() {
+  preflight
+  resolve_repo
+  printf '%sPEPPEC doctor%s for %s%s%s\n' "$B" "$N" "$B" "$REPO" "$N"
+  load_vars
+
+  step "Labels"
+  local have missing="" name
+  have=$(gh label list -R "$REPO" --limit 200 --json name --jq '.[].name')
+  while IFS='|' read -r name _; do grep -qxF "$name" <<< "$have" || missing="$missing '$name'"; done <<< "$LABELS"
+  if [ -z "$missing" ]; then ok "all labels present"; else bad "missing labels:$missing"; fi
+
+  step "Variables"
+  missing=""
+  for name in $VARIABLES; do [ -n "$(var_of "$name")" ] || missing="$missing $name"; done
+  if [ -z "$missing" ]; then ok "all variables set"; else bad "missing variables:$missing"; fi
+  while IFS='|' read -r name _ _; do
+    local v; v=$(var_of "$name"); [ -z "$v" ] || is_number "$v" || bad "$name is not a number: $v"
+  done <<< "$NUMBERS"
+  local tz; tz=$(var_of TZ_NAME)
+  if [ -n "$tz" ] && [ ! -e "/usr/share/zoneinfo/$tz" ] && [ ! -e "/var/db/timezone/zoneinfo/$tz" ]; then
+    warn "TZ_NAME '$tz' is not a time zone known to this computer"
+  fi
+  local expires days; expires=$(var_of CLAUDE_TOKEN_EXPIRES)
+  if [ -n "$expires" ]; then
+    if days=$(epoch_of "$expires"); then
+      days=$(( (days - $(date +%s)) / 86400 ))
+      if [ "$days" -lt 0 ]; then bad "the Claude token expired on $expires"
+      elif [ "$days" -le 30 ]; then warn "the Claude token expires in $days days ($expires)"
+      else ok "Claude token valid for $days more days"; fi
+    else bad "CLAUDE_TOKEN_EXPIRES is not a date: $expires"; fi
+  fi
+
+  step "Secrets"
+  have=$(gh secret list -R "$REPO" --json name --jq '.[].name')
+  missing=""
+  for name in $SECRETS; do grep -qx "$name" <<< "$have" || missing="$missing $name"; done
+  if [ -z "$missing" ]; then ok "all secrets set (their values cannot be read back)"; else bad "missing secrets:$missing"; fi
+
+  step "GitHub App"
+  local app_id; app_id=$(var_of APP_ID)
+  KEY_FILE="${KEY_FILE/#\~/$HOME}"
+  if [ -n "$KEY_FILE" ] && [ -n "$app_id" ]; then
+    [ -f "$KEY_FILE" ] || die "no such file: $KEY_FILE"
+    if check_app "$app_id" "$KEY_FILE"; then
+      [ "${APP_SLUG}[bot]" = "$(var_of APP_LOGIN)" ] || bad "APP_LOGIN is '$(var_of APP_LOGIN)' but the app is '${APP_SLUG}[bot]'"
+    fi
+  else
+    warn "installation not checked: pass --key <the app's .pem file> to check it"
+  fi
+
+  step "Control panel"
+  local control state; control=$(var_of CONTROL_ISSUE)
+  if [ -n "$control" ]; then
+    state=$(gh issue view "$control" -R "$REPO" --json state,title,labels \
+      --jq '"\(.state)|\(.title)|\([.labels[].name] | join(", "))"' 2> /dev/null || true)
+    if [ -z "$state" ]; then bad "issue #$control does not exist"
+    elif [ "${state%%|*}" != OPEN ]; then bad "issue #$control is closed: reopen it"
+    else
+      ok "issue #$control open"
+      case "$state" in *"auto mode"*) note "merge mode: automatic";; *) note "merge mode: manual";; esac
+      case "$state" in *paused*) warn "the queue is paused";; esac
+    fi
+  fi
+
+  step "Workflows and configuration"
+  local states f content ref eref preset
+  states=$(gh workflow list -R "$REPO" --all --json path,state --jq '.[] | "\(.path)|\(.state)"')
+  for f in agent ci summary; do
+    content=$(host_file ".github/workflows/$f.yml" || true)
+    if [ -z "$content" ]; then bad ".github/workflows/$f.yml missing on the default branch"; continue; fi
+    ref=$(sed -n "s|.*uses: .*/\\.github/workflows/$f\\.yml@\\(.*\\)\$|\\1|p" <<< "$content" | head -n 1)
+    eref=$(sed -n 's/^[[:space:]]*engine_ref:[[:space:]]*//p' <<< "$content" | head -n 1)
+    if [ -z "$ref" ]; then bad "$f.yml does not call the engine's workflow"
+    elif [ "$ref" != "$eref" ]; then bad "$f.yml: the ref after '@' is '$ref' but engine_ref is '$eref'"
+    else ok "$f.yml calls the engine at $ref"; fi
+    state=$(sed -n "s#^\\.github/workflows/$f\\.yml|##p" <<< "$states")
+    case "$state" in
+      active|"") ;;
+      *) bad "the '$f' workflow is disabled ($state): gh workflow enable $f.yml -R $REPO";;
+    esac
+  done
+  content=$(host_file .github/peppec.yml || true)
+  preset=$(sed -n 's/^preset:[[:space:]]*//p' <<< "$content" | head -n 1)
+  if [ -z "$preset" ]; then bad ".github/peppec.yml missing, or without a preset"
+  elif gh api "repos/$ENGINE/contents/presets/$preset/preset.yml?ref=${ref:-$REF}" > /dev/null 2>&1; then ok "preset $preset"
+  else bad "preset '$preset' does not exist in the engine at ${ref:-$REF}"; fi
+  content=$(host_file .coderabbit.yaml || true)
+  if [ -z "$content" ]; then bad ".coderabbit.yaml missing"
+  elif ! grep -A1 'auto_approvals:' <<< "$content" | grep -q 'enabled: true'; then
+    bad ".coderabbit.yaml: auto_approvals must be enabled, the approval is the 'review passed' signal"
+  else ok ".coderabbit.yaml approves automatically"; fi
+  if gh api "repos/$REPO/issues/comments?per_page=100&sort=created&direction=desc" \
+       --jq '.[].user.login' 2> /dev/null | grep -qx 'coderabbitai\[bot\]'; then
+    ok "CodeRabbit is active: it commented recently"
+  else
+    warn "no recent comment from CodeRabbit: check that it is installed on $REPO"
+  fi
+
+  step "Branch protection"
+  local checks
+  checks=$(gh api "repos/$REPO/rules/branches/main" \
+    --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | join(", ")' 2> /dev/null || true)
+  if [ -z "$checks" ]; then warn "main requires no status check: add 'ci / ci' to an active ruleset"
+  elif grep -q 'ci / ci' <<< "$checks"; then ok "main requires: $checks"
+  else bad "main requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
+
+  step "Last runs"
+  for f in ci agent; do
+    state=$(gh run list -R "$REPO" --workflow "$f.yml" --limit 1 --json conclusion,status,createdAt \
+      --jq '.[0] | "\(.conclusion // .status) on \(.createdAt[0:10])"' 2> /dev/null || true)
+    case "$state" in
+      success*) ok "$f: $state";;
+      ""|null*) note "$f: never run";;
+      *) warn "$f: $state";;
+    esac
+  done
+
+  echo
+  if [ "$PROBLEMS" -gt 0 ]; then printf '%s%d problem(s)%s, %d warning(s)\n' "$R" "$PROBLEMS" "$N" "$WARNINGS"; exit 1; fi
+  printf '%sNo problems%s, %d warning(s)\n' "$G" "$N" "$WARNINGS"
+}
+
+# ---------- bot ----------
+cmd_bot() {
+  preflight
+  resolve_repo
+  load_vars
+  local app_id control token chat
+  app_id=$(var_of APP_ID); control=$(var_of CONTROL_ISSUE)
+  [ -n "$app_id" ] && [ -n "$control" ] || die "APP_ID or CONTROL_ISSUE not set on $REPO: run 'peppec init' first"
+  [ -e "$OUT_DIR" ] && die "$OUT_DIR already exists: remove it or pass --out <dir>"
+  printf '%sPEPPEC bot%s for %s%s%s → %s/\n' "$B" "$N" "$B" "$REPO" "$N" "$OUT_DIR"
+  step "Values"
+  note "The same bot token and chat ID stored as secrets: GitHub cannot give them back."
+  token="${TELEGRAM_BOT_TOKEN:-}"; [ -n "$token" ] || ask_hidden token "TELEGRAM_BOT_TOKEN"
+  chat="${TELEGRAM_CHAT_ID:-}"; [ -n "$chat" ] || ask chat "TELEGRAM_CHAT_ID" ""
+  [ -n "$token" ] && [ -n "$chat" ] || die "bot token and chat ID are required"
+  telegram "$token" getMe | jq -e .ok > /dev/null 2>&1 || die "Telegram rejects the bot token"
+  KEY_FILE="${KEY_FILE:-${PEPPEC_APP_KEY_FILE:-}}"
+  [ -n "$KEY_FILE" ] || ask KEY_FILE "Path of the app's private key (.pem)" ""
+  KEY_FILE="${KEY_FILE/#\~/$HOME}"
+  [ -f "$KEY_FILE" ] || die "no such file: $KEY_FILE"
+  check_app "$app_id" "$KEY_FILE" || die "the key is not valid for app $app_id"
+
+  step "Folder"
+  ( umask 077
+    mkdir -p "$OUT_DIR/data"
+    cp "$KEY_FILE" "$OUT_DIR/data/app.pem"
+    printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\nAPP_ID=%s\nREPO=%s\nCONTROL_ISSUE=%s\n' \
+      "$token" "$chat" "$app_id" "$REPO" "$control" > "$OUT_DIR/.env" )
+  engine_file bot/docker-compose.yml | sed '/^# Copy to /d' > "$OUT_DIR/docker-compose.yml"
+  ok "$OUT_DIR/ ready: docker-compose.yml, .env, data/app.pem (readable only by you)"
+
+  step "Next steps"
+  note "1. Copy it to the bot's machine:   scp -r $OUT_DIR <user>@<address>:~/"
+  note "2. Start the bot there:            cd ~/$OUT_DIR && docker compose up -d"
+  note "3. Send /status to the bot on Telegram."
+  note "4. Delete the folder from this computer: it holds the key and the token."
+  note "     rm -rf $OUT_DIR"
+}
+
+usage() {
+  cat << EOF
+PEPPEC command line (engine $ENGINE@$REF)
+
+Usage:
+  peppec init [--preset <name>] [--key <app.pem>] [--yes]
+      Install PEPPEC on the repository of the current clone: labels, settings, control
+      panel, variables, secrets, workflow files, branch protection. Safe to run again.
+  peppec doctor [-R owner/repo] [--key <app.pem>]
+      Check an installation and list what is missing or wrong.
+  peppec bot [-R owner/repo] [--key <app.pem>] [--out <dir>]
+      Prepare the folder to copy to the machine that runs the Telegram bot.
+
+Options:
+  --ref <ref>   Engine version to install (default: v1)
+  --yes         Never ask: keep what is set, take the defaults, read secrets from the
+                environment (CLAUDE_CODE_OAUTH_TOKEN, AGENT_TOKEN, TELEGRAM_BOT_TOKEN,
+                TELEGRAM_CHAT_ID, PEPPEC_APP_ID, PEPPEC_APP_KEY_FILE)
+EOF
+}
+
+COMMAND="${1:-}"
+[ $# -gt 0 ] && shift
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -R|--repo) REPO="${2:-}"; shift 2;;
+    --key) KEY_FILE="${2:-}"; shift 2;;
+    --preset) PRESET="${2:-}"; shift 2;;
+    --ref) REF="${2:-}"; shift 2;;
+    --out) OUT_DIR="${2:-}"; shift 2;;
+    -y|--yes) YES=true; shift;;
+    -h|--help) usage; exit 0;;
+    *) die "unknown option: $1";;
+  esac
+done
+case "$COMMAND" in
+  init) cmd_init;;
+  doctor) cmd_doctor;;
+  bot) cmd_bot;;
+  ""|help|-h|--help) usage;;
+  *) die "unknown command: $COMMAND (try 'peppec help')";;
+esac

@@ -18,6 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/lint-presets.sh
+      # Syntax of the scripts and of the command line, which must also run on the bash 3.2 of macOS
+      - run: |
+          for f in scripts/*.sh cli/peppec; do bash -n "$f"; done
+          shellcheck -S error -s bash scripts/*.sh cli/peppec
+          bash cli/peppec help > /dev/null
       - id: list
         run: echo "presets=$(ls presets | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
 
