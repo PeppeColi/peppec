@@ -268,6 +268,8 @@ docker compose up -d
 docker compose logs -f
 ```
 
+   `REPOS` lists the repositories the bot controls, as `owner/name#N` where `N` is the number of the control panel issue. To make the same bot follow more repositories, separate them with commas: they must be installed with the same app, Telegram bot and chat. After changing `.env`, run `docker compose up -d` again.
+
 4. Send `/status` to the bot: it answers with mode, pause and queue.
 5. Optional: in `@BotFather` use `/setcommands` to show the commands in Telegram's menu.
 
@@ -304,6 +306,8 @@ If something gets stuck, look first at the log of the `decide` job: it always sa
 The engine version is the ref after `@` in the three workflows, repeated in `engine_ref`. To upgrade, change both in each file. `v1` follows every compatible release; use a full version or a commit SHA if you prefer to upgrade deliberately.
 
 The bot follows the same versions: `docker compose pull && docker compose up -d`, then `/version`.
+
+From 1.6 the notifications start with the repository name, and a bot older than 1.6 does not accept replies to them: upgrade the bot together with the engine. A bot configured with `REPO` and `CONTROL_ISSUE` keeps working; `REPOS` replaces both.
 
 ## Maintenance
 

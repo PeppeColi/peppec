@@ -109,13 +109,21 @@ The bot answers only your chat and acts on GitHub as the app.
 
 | Command | Effect |
 | --- | --- |
-| `/status` | Mode, pause, current issue with labels, issues in queue |
-| `/pause` | Stops the whole queue |
-| `/unblock [n]` | Clears pause and blocks, resets the issue's time budget and counters, restarts |
-| `/hint <n> <text>` | Comments the hint on the issue, unblocks it and restarts |
-| `/mode manual` or `/mode automatic` | Switches the merge mode |
+| `/status [repo]` | Mode, pause, current issue with labels, issues in queue |
+| `/pause [repo]` | Stops the whole queue |
+| `/unblock [repo] [n]` | Clears pause and blocks, resets the issue's time budget and counters, restarts |
+| `/hint [repo] <n> <text>` | Comments the hint on the issue, unblocks it and restarts |
+| `/mode [repo] manual` or `/mode [repo] automatic` | Switches the merge mode |
 | `/version` | The bot's version |
 | Reply to a "Question on #N" message | Posts the reply on the issue and restarts the work |
+
+One bot can follow several repositories, as long as they share the app, the Telegram bot and the chat. Every notification starts with the repository it comes from, as in `[owner/name] Question on #12:`, and a reply goes to that repository.
+
+With one repository, `repo` is never needed. With several:
+
+- `repo` is the name of the repository, or `owner/name` if two of them have the same name;
+- `/status` and `/pause` without a repository apply to all of them;
+- the other commands need the repository, unless you send them as a reply to a notification: `/unblock` in reply to a "Queue stopped" message acts on the repository of that message.
 
 ## Labels
 
