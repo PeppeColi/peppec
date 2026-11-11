@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>PEPPEC</title>
+<style>
+:root {
+  --ground: #F4F5F7; --surface: #FFFFFF; --line: #DFE3E8; --edge: #B9C0CA;
+  --text: #14181F; --muted: #56606E; --accent: #1F5FD1; --on-accent: #FFFFFF;
+  --warn-bg: #FFF4E5; --warn-line: #F0D2A8; --warn-text: #6B3006; --dot: #D9730D;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #101318; --surface: #1A1F27; --line: #2C333D; --edge: #4A5360;
+    --text: #EEF1F5; --muted: #A3ADBA; --accent: #7FAAF5; --on-accent: #0B1220;
+    --warn-bg: #33240F; --warn-line: #5C421C; --warn-text: #F5CE96; --dot: #F0953A;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 480px; margin: 0 auto; padding: 16px 16px 32px; display: flex; flex-direction: column; gap: 20px; }
+h1 { margin: 0; font-size: 22px; line-height: 1.25; }
+a { color: var(--accent); }
+.top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.brand { font-size: 22px; font-weight: 700; letter-spacing: 0.02em; }
+.muted { color: var(--muted); font-size: 14px; }
+.small { color: var(--muted); font-size: 13px; }
+.center { text-align: center; }
+.label { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+.label.warn { color: var(--warn-text); }
+.group { display: flex; flex-direction: column; gap: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.pad { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 16px; min-height: 72px;
+  color: var(--text); text-decoration: none; }
+.row + .row, .line + .line { border-top: 1px solid var(--line); }
+.row .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.row .name { font-weight: 600; overflow-wrap: anywhere; }
+.row::after { content: ""; width: 9px; height: 9px; flex-shrink: 0; margin-right: 4px;
+  border-right: 2px solid var(--muted); border-top: 2px solid var(--muted); transform: rotate(45deg); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--dot); flex-shrink: 0; }
+.line { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px; font-size: 15px; }
+.line span:first-child { overflow-wrap: anywhere; }
+.pill { align-self: flex-start; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 5px 12px;
+  border: 1px solid var(--line); color: var(--muted); }
+.pill.warn, .notice { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-text); }
+.notice { border-radius: 14px; padding: 14px 16px; font-size: 14px; }
+.back { align-self: flex-start; min-height: 44px; display: flex; align-items: center; padding-right: 16px;
+  font-weight: 500; text-decoration: none; }
+.quote { white-space: pre-wrap; overflow-wrap: anywhere; }
+button, .button { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px;
+  border-radius: 14px; border: 1.5px solid var(--accent); background: var(--accent); color: var(--on-accent);
+  font: inherit; font-size: 17px; font-weight: 600; text-decoration: none; cursor: pointer; }
+button.plain, .button.plain { background: var(--surface); color: var(--accent); }
+button.off { background: var(--surface); color: var(--text); border-color: var(--edge); font-weight: 500; }
+button:disabled { opacity: 0.5; cursor: default; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pair button { min-height: 52px; font-size: 16px; border-radius: 12px; }
+.gap { margin-top: 12px; }
+.link { align-self: center; min-height: 44px; display: flex; align-items: center; font-size: 15px; }
+label { font-size: 14px; font-weight: 600; }
+textarea, input { width: 100%; padding: 14px; border: 1.5px solid var(--edge); border-radius: 14px;
+  background: var(--surface); color: var(--text); font: inherit; }
+textarea { resize: vertical; min-height: 130px; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+"use strict";
+// Every text that comes from GitHub is set as text, never as HTML.
+const app = document.getElementById("app");
+let state = null, flash = "", problem = "", busy = false, hinting = false;
+
+function el(tag, props, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === "on") node.addEventListener("click", v);
+    else if (v !== null && v !== undefined && v !== false) node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid) node.append(kid);
+  return node;
+}
+const out = (text, url, cls) => el("a", {href: url, target: "_blank", rel: "noopener", class: cls}, text);
+
+function password() { try { return localStorage.getItem("peppec-password") || ""; } catch (e) { return ""; } }
+function remember(value) {
+  try { value ? localStorage.setItem("peppec-password", value) : localStorage.removeItem("peppec-password"); } catch (e) {}
+}
+
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: body ? "POST" : "GET",
+    headers: {"Authorization": "Bearer " + encodeURIComponent(password()), "Content-Type": "application/json"},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401) { remember(""); state = null; throw new Error(password.tried ? "Wrong password." : ""); }
+  if (!r.ok) throw new Error(data.error || "The bot answered " + r.status + ".");
+  return data;
+}
+
+async function load() {
+  if (!password()) return render();
+  try { state = await api("/api/state"); problem = ""; }
+  catch (e) { problem = e.message || ""; }
+  render();
+}
+
+async function act(repo, action, value, text) {
+  if (busy) return;
+  busy = true; flash = ""; problem = ""; render();
+  try {
+    flash = (await api("/api/action", {repo: repo.key, action, value: String(value || ""), text: text || ""})).message;
+    hinting = false;
+    for (const t of document.querySelectorAll("textarea")) t.value = "";
+    state = await api("/api/state");
+  } catch (e) { problem = e.message || "The request failed."; }
+  busy = false; render();
+}
+
+const short = (repo) => repo.name.split("/")[1];
+const labelOf = (list, word) => (list.find((x) => x.startsWith(word + " ")) || "").slice(word.length + 1);
+
+function stage(issue) {
+  if (issue.block === "needs human") return {text: "Blocked: needs you", warn: true};
+  if (issue.block === "question open") return {text: "Question from the agent", warn: true};
+  if (issue.block === "awaiting quota") return {text: "Waiting for the Claude quota"};
+  if (!issue.pr) return {text: "The agent is working"};
+  const labels = issue.pr.labels;
+  if (labels.includes("ready to merge")) return {text: "Ready to merge"};
+  const ci = labelOf(labels, "ci"), review = labelOf(labels, "review");
+  if (ci) return {text: "Fixing the checks, attempt " + ci};
+  if (review) return {text: "In review, round " + review};
+  return {text: "Pull request open"};
+}
+// Ready to merge waits for you only in manual mode
+const waits = (repo) => repo.active && (stage(repo.active).warn ||
+  (repo.mode === "manual" && stage(repo.active).text === "Ready to merge"));
+const issueLink = (repo) => "#/issue/" + repo.key + "/" + repo.active.number;
+
+function row(href, name, detail, extra, dot) {
+  return el("a", {class: "row", href}, dot && el("span", {class: "dot", "aria-hidden": "true"}),
+    el("span", {class: "body"}, el("span", {class: "name"}, name),
+      el("span", {class: "muted"}, detail), extra && el("span", {}, extra)));
+}
+
+function messages() {
+  return [flash && el("div", {class: "notice", role: "status"}, flash),
+          problem && el("div", {class: "notice", role: "alert"}, problem)];
+}
+
+function login() {
+  const input = el("input", {id: "pw", type: "password", autocomplete: "current-password"});
+  const open = () => { if (input.value) { remember(input.value); password.tried = true; load(); } };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
+  return [el("div", {class: "brand"}, "PEPPEC"), messages(),
+    el("div", {class: "group"}, el("label", {for: "pw"}, "Dashboard password"), input,
+      el("div", {class: "small"}, "The one set as DASHBOARD_PASSWORD on the bot's machine.")),
+    el("button", {type: "button", on: open}, "Open")];
+}
+
+function home() {
+  const waiting = state.repos.filter(waits);
+  const ago = Math.max(0, Math.round(Date.now() / 1000 - state.at));
+  return [
+    el("div", {class: "top"}, el("div", {class: "brand"}, "PEPPEC"),
+      el("div", {class: "small"}, "bot " + state.version + " · updated " + (ago < 60 ? ago + " s" : Math.round(ago / 60) + " min") + " ago")),
+    messages(),
+    el("div", {class: "group"},
+      el("div", {class: "label" + (waiting.length ? " warn" : "")}, "Waiting for you · " + waiting.length),
+      waiting.length
+        ? el("div", {class: "card"}, waiting.map((r) =>
+            row(issueLink(r), short(r) + " #" + r.active.number, stage(r.active).text, "", true)))
+        : el("div", {class: "card pad muted"}, "Nothing needs you right now.")),
+    el("div", {class: "group"}, el("div", {class: "label"}, "Repositories"),
+      state.repos.map((r) => el("div", {class: "card"}, row("#/repo/" + r.key, short(r),
+        cap(r.mode) + " · " + (r.schedule === "always" ? "Always on" : "Nightly") + " · " + (r.paused ? "Paused" : "Running"),
+        (r.active ? "#" + r.active.number + " in progress" : "No issue in progress") + " · " + r.queue.length + " in queue")))),
+  ];
+}
+const cap = (word) => word[0].toUpperCase() + word.slice(1);
+
+function issuePage(repo, number) {
+  const back = el("a", {class: "back", href: "#/"}, "‹ Home");
+  const issue = repo && repo.active && String(repo.active.number) === number ? repo.active : null;
+  if (!issue) return [back, messages(), el("div", {class: "card pad"}, "This issue is no longer in progress.")];
+  const st = stage(issue), parts = [];
+  parts.push(back,
+    el("div", {class: "group"}, el("div", {class: "muted"}, short(repo) + " · issue #" + issue.number),
+      el("h1", {}, issue.title), el("div", {class: "pill" + (st.warn ? " warn" : "")}, st.text)),
+    messages(),
+    el("div", {class: "card pad"}, el("div", {class: "label"}, "Details"),
+      el("div", {}, "Size " + issue.size + " · " + issue.minutes + " min of work so far"),
+      issue.pr && el("div", {class: "muted"}, "Pull request #" + issue.pr.number + ": " + (issue.pr.labels.join(", ") || "no labels"))));
+  if (issue.block === "question open") {
+    const box = el("textarea", {id: "text", placeholder: "Write your answer"});
+    parts.push(
+      el("div", {class: "card pad"}, el("div", {class: "label"}, "The agent asks"), el("div", {class: "quote"}, issue.question)),
+      el("div", {class: "group"}, el("label", {for: "text"}, "Your answer"), box),
+      el("div", {class: "group"},
+        el("button", {type: "button", disabled: busy, on: () => box.value.trim() && act(repo, "answer", issue.number, box.value)}, "Send answer"),
+        el("div", {class: "small center"}, "Posts your answer on the issue and restarts the work.")));
+  } else if (issue.block && hinting) {
+    const box = el("textarea", {id: "text", placeholder: "Write a hint for the agent"});
+    parts.push(
+      el("div", {class: "group"}, el("label", {for: "text"}, "Hint for the agent"), box),
+      el("div", {class: "group"},
+        el("button", {type: "button", disabled: busy, on: () => box.value.trim() && act(repo, "hint", issue.number, box.value)}, "Send hint"),
+        el("div", {class: "small center"}, "Posts the hint on the issue, clears the block and restarts.")),
+      el("button", {type: "button", class: "plain gap", disabled: busy, on: () => { hinting = false; render(true); }}, "Cancel"));
+  } else if (issue.block) {
+    parts.push(
+      el("div", {class: "group"},
+        el("button", {type: "button", disabled: busy, on: () => act(repo, "unblock", issue.number)}, "Unblock"),
+        el("div", {class: "small center"}, "Clears the block, resets the time budget and restarts.")),
+      el("div", {class: "group gap"},
+        el("button", {type: "button", class: "plain", disabled: busy, on: () => { hinting = true; flash = ""; render(true); }}, "Give a hint"),
+        el("div", {class: "small center"}, "Write a hint for the agent, then it restarts.")));
+  } else if (st.text === "Ready to merge") {
+    parts.push(out("Open the pull request on GitHub", issue.pr.url, "button"));
+  }
+  parts.push(out("Open the issue on GitHub", issue.url, "link"));
+  return parts;
+}
+
+function choice(repo, action, current, options) {
+  return el("div", {class: "pair"}, options.map(([value, text]) =>
+    el("button", {type: "button", class: value === current ? "" : "off", "aria-pressed": String(value === current),
+      disabled: busy, on: () => value !== current && act(repo, action, value)}, text)));
+}
+
+function repoPage(repo) {
+  const back = el("a", {class: "back", href: "#/"}, "‹ Home");
+  if (!repo) return [back, el("div", {class: "card pad"}, "The bot does not follow this repository.")];
+  return [back,
+    el("div", {class: "group"}, el("h1", {}, short(repo)), el("div", {class: "muted"}, repo.name)),
+    messages(),
+    el("div", {class: "card pad"},
+      el("div", {class: "group"}, el("div", {class: "label"}, "Merge mode"),
+        choice(repo, "mode", repo.mode, [["manual", "Manual"], ["automatic", "Automatic"]]),
+        el("div", {class: "small"}, repo.mode === "automatic"
+          ? "Pull requests are merged as soon as the review passes." : "Pull requests wait for you to merge them.")),
+      el("div", {class: "group gap"}, el("div", {class: "label"}, "Schedule"),
+        choice(repo, "schedule", repo.schedule, [["nightly", "Nightly"], ["always", "Always"]]),
+        el("div", {class: "small"}, repo.schedule === "always"
+          ? "New issues start at any hour." : "New issues start only inside the work window.")),
+      el("div", {class: "group gap"}, el("div", {class: "label"}, "Queue"),
+        el("button", {type: "button", class: "plain", disabled: busy,
+          on: () => act(repo, repo.paused ? "resume" : "pause")}, repo.paused ? "Resume the queue" : "Pause the queue"),
+        el("div", {class: "small"}, repo.paused
+          ? "Paused: nothing moves until you resume." : "Running. Pausing stops every issue until you resume."))),
+    el("div", {class: "group"}, el("div", {class: "label"}, "In progress"),
+      repo.active
+        ? el("div", {class: "card"}, row(issueLink(repo), "#" + repo.active.number + " " + repo.active.title,
+            stage(repo.active).text + " · size " + repo.active.size, "", waits(repo)))
+        : el("div", {class: "card pad muted"}, "No issue in progress.")),
+    el("div", {class: "group"}, el("div", {class: "label"}, "In queue · " + repo.queue.length),
+      repo.queue.length
+        ? el("div", {class: "card"}, repo.queue.map((i) =>
+            el("div", {class: "line"}, el("span", {}, "#" + i.number + " " + i.title), el("span", {class: "muted"}, i.size))))
+        : el("div", {class: "card pad muted"}, "The queue is empty.")),
+    out("Open the repository on GitHub", repo.url, "link")];
+}
+
+// A refresh never throws away a text being written, unless asked to (force)
+function render(force) {
+  const box = document.querySelector("textarea");
+  if (!force && !busy && box && box.value && document.activeElement === box) return;
+  const typed = box ? box.value : "";
+  let view;
+  if (!state) view = login();
+  else {
+    const [, kind, key, number] = location.hash.split("/");
+    const repo = state.repos.find((r) => r.key === key);
+    view = kind === "issue" ? issuePage(repo, number) : kind === "repo" ? repoPage(repo) : home();
+  }
+  app.replaceChildren(...view.flat(3).filter(Boolean));
+  const again = document.querySelector("textarea");
+  if (again && typed) again.value = typed;
+}
+
+window.addEventListener("hashchange", () => { flash = ""; problem = ""; hinting = false; window.scrollTo(0, 0); render(true); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && state) load(); });
+setInterval(() => { if (!document.hidden && state && !busy) load(); }, 60000);
+load();
+</script>
+</body>
+</html>

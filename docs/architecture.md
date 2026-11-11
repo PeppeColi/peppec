@@ -146,6 +146,18 @@ With one repository, `repo` is never needed. With several:
 
 The Resume button only lifts the pause; `/unblock` and the Unblock button also clear the blocks of the issue and reset its time budget. The buttons on the notifications need a bot of version 1.9 or later.
 
+## Dashboard
+
+The bot can also serve a web page, meant for a phone: the state of every repository at a glance, and the same actions as the bot. It is off unless `DASHBOARD_PASSWORD` is set in the bot's `.env`.
+
+- The home page only shows: what is waiting for you (blocked issues, open questions, pull requests ready to merge in manual mode) and one line per repository. Nothing on it acts.
+- Touching a line opens its page, where the buttons are: Unblock and Give a hint on a blocked issue, the answer to a question, the merge mode, the schedule and the pause of a repository.
+- Every action taken from the dashboard is also reported in the Telegram chat.
+
+The page asks for the password once and keeps it in the browser. The state is read from GitHub, at most every 30 seconds; nothing is stored on the bot's machine.
+
+The dashboard speaks plain HTTP and can act on your repositories: keep it inside your own network, and reach it from outside through a VPN such as Tailscale or WireGuard. Never forward its port from the internet. Without `DASHBOARD_PORT` in `.env`, it answers only on the bot's machine itself.
+
 ## Labels
 
 | Label | Where | Set by | Meaning |
