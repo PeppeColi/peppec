@@ -78,7 +78,7 @@ The model depends on the complexity label of the issue.
 
 ## Checks, review and limits
 
-A pull request reaches CodeRabbit only after CI passes. The review passes when CodeRabbit approves the latest commit. When a new commit contains nothing CodeRabbit reviews, such as a lockfile or a deleted file, it gives no new verdict and only declares the review finished: the previous approval then stands.
+A pull request reaches CodeRabbit only after CI passes. The review passes when CodeRabbit approves the latest commit. When a new commit contains nothing CodeRabbit reviews, such as a lockfile or a deleted file, it gives no new verdict and only replies that the review is finished or that every file was excluded by its path filters: the previous approval then stands.
 
 | Limit | Variable | Past the limit |
 | --- | --- | --- |
