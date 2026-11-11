@@ -23,7 +23,11 @@ PDIR="$ROOT/presets/$preset"
 # Repository values replace the preset defaults; protected paths are added together,
 # on top of the ones the engine always protects, and so are the paths never committed
 cfg=$(jq -n --argjson p "$(yq -o=json '.' "$PDIR/preset.yml")" --argjson c "$conf" '
+  def mapping(f): if f == null then {} elif (f | type) == "object" then f else null end;
   ($p + ($c | del(.preset)))
+  | .models = (if mapping($p.models) != null and mapping($c.models) != null
+               then {s: "haiku", m: "sonnet", l: "opus"} + mapping($p.models) + mapping($c.models)
+               else "invalid" end)
   | .protected_paths = ([".github"] + ($p.protected_paths // []) + ($c.protected_paths // []) | unique)
   | .never_commit = (($p.never_commit // []) + ($c.never_commit // []) | unique)
   | .notes //= [] | .allowed_tools //= [] | .disallowed_tools //= []
@@ -39,6 +43,9 @@ problems=$(jq -r '
     ((["allowed_tools", "disallowed_tools"][]) as $k
       | select(strings(.[$k]) and (plain(.[$k]) | not)) | "\($k) entries cannot contain quotes, commas or line breaks"),
     (select((.options | type) != "object") | "options must be a mapping"),
+    (select((.models | type) != "object" or (.models | keys - ["l", "m", "s"] | length) > 0
+       or (.models | all(.[]; type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]*$")) | not))
+     | "models must map the sizes s, m and l to model names made of letters, digits, dots and dashes"),
     (select((.extra_setup | type) != "string"
        or (.extra_setup != "" and (.extra_setup | test("^\\.github/[A-Za-z0-9._/-]+$") | not))
        or (.extra_setup | test("\\.\\.")))
@@ -47,6 +54,10 @@ problems=$(jq -r '
 [ -z "$problems" ] || die "Invalid configuration: ${problems//$'\n'/; }"
 
 check=$(jq -r '.check' <<< "$cfg")
+# The size comes from the issue's label, through decide.sh; M when nothing asks for a model
+size="${SIZE:-m}"
+[[ "$size" =~ ^[sml]$ ]] || die "Invalid size: '$size'"
+model=$(jq -r --arg s "$size" '.models[$s]' <<< "$cfg")
 protected=$(jq -r '.protected_paths[]' <<< "$cfg")
 tool_args=$(jq -r --arg base "$BASE_TOOLS" '
   "--allowedTools \"" + ([$base] + .allowed_tools | join(",")) + "\""
@@ -82,10 +93,12 @@ out check "$check"
 out protected_paths "$protected"
 out never_commit "$(jq -r '.never_commit[]' <<< "$cfg")"
 out tool_args "$tool_args"
+out model "$model"
 out options "$(jq -c '.options' <<< "$cfg")"
 out extra_setup "$extra_setup"
 out prompt "$prompt"
 echo "Preset: $preset"
 echo "Protected paths: ${protected//$'\n'/, }"
 echo "Tools: $tool_args"
+echo "Model: $model (size $size; $(jq -r '.models | "S \(.s), M \(.m), L \(.l)"' <<< "$cfg"))"
 echo "Extra setup: ${extra_setup:-none}"

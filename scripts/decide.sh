@@ -2,9 +2,9 @@
 # shellcheck disable=SC2034  # outputs are read indirectly by emit()
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
-action=none issue="" pr="" sha="" model="" round="" ci_tries="" reason="" minutes=""
+action=none issue="" pr="" sha="" size="" round="" ci_tries="" reason="" minutes=""
 emit() {
-  for k in action issue pr sha model round ci_tries reason minutes; do
+  for k in action issue pr sha size round ci_tries reason minutes; do
     echo "$k=${!k}" >> "$GITHUB_OUTPUT"
   done
 }
@@ -18,6 +18,10 @@ in_window() {
   else
     [ "$h" -ge "$WORK_START_HOUR" ] || [ "$h" -lt "$WORK_END_HOUR" ]
   fi
+}
+# The size label of an issue picks the model (models in .github/peppec.yml); M without a label
+size_of() {
+  if has "$1" "size: L"; then echo l; elif has "$1" "size: S"; then echo s; else echo m; fi
 }
 budget() { local used; used=$(marker_get "$1" minutes); echo $(( MAX_ISSUE_MINUTES - ${used:-0} )); }
 
@@ -37,7 +41,7 @@ if [ -z "$active" ]; then
   issue=$(gh issue list -R "$REPO" --state open --label ready --limit 200 --json number,createdAt,labels \
     --jq '[.[] | select([.labels[].name] | index("needs human") | not)] | sort_by(.createdAt) | .[0].number // empty')
   [ -n "$issue" ] || { echo "No ready issues"; exit 0; }
-  model=sonnet; has "$(labels_of "$issue")" "complexity: complex" && model=opus
+  size=$(size_of "$(labels_of "$issue")")
   action=start; round=1; minutes=$(( $(budget "$issue") + 10 )); exit 0
 fi
 
@@ -56,19 +60,20 @@ if has "$il" "awaiting quota"; then
   rm_label "$issue" "awaiting quota"
 fi
 
-base=sonnet; has "$il" "complexity: complex" && base=opus
+base=$(size_of "$il")
 pr=$(gh pr list -R "$REPO" --head "agent/issue-$issue" --state open --json number --jq '.[0].number // empty')
 left=$(budget "$issue")
 if [ "$left" -le 0 ]; then action=stop; reason="time budget of $MAX_ISSUE_MINUTES minutes used up"; exit 0; fi
 minutes=$(( left + 10 ))
-if [ -z "$pr" ]; then action=start; model=$base; round=1; exit 0; fi
+if [ -z "$pr" ]; then action=start; size=$base; round=1; exit 0; fi
 
 sha=$(gh pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)
 waited=$(age_minutes "$(gh api "repos/$REPO/commits/$sha" --jq .commit.committer.date)")
 pl=$(labels_of "$pr")
 round=$( { grep -oP '^review \K[0-9]+' <<< "$pl" || true; } | sort -n | tail -1); round=${round:-1}
 tries=$( { grep -oP '^ci \K[0-9]+' <<< "$pl" || true; } | sort -n | tail -1); tries=${tries:-0}
-model=$base; [ "$round" -ge "$OPUS_FROM_ROUND" ] && model=opus
+# From this round on the largest model takes over, whatever the size of the issue
+size=$base; [ "$round" -ge "$LARGE_FROM_ROUND" ] && size=l
 
 # CI_CHECK is the name of the check run to wait for ("ci / ci" with the reusable CI workflow)
 ci=$(gh api -X GET "repos/$REPO/commits/$sha/check-runs" -f check_name="$CI_CHECK" \
@@ -132,6 +137,6 @@ case "$state" in
     if [ "$round" -ge "$MAX_REVIEW_ROUNDS" ]; then
       action=stop; reason="review not passed after $round rounds"; exit 0
     fi
-    round=$((round + 1)); model=$base; [ "$round" -ge "$OPUS_FROM_ROUND" ] && model=opus
+    round=$((round + 1)); size=$base; [ "$round" -ge "$LARGE_FROM_ROUND" ] && size=l
     action=fix_review; exit 0;;
 esac

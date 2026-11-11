@@ -71,10 +71,22 @@ The configuration is always read from `main`. Pull requests from `agent/*` branc
 
 ## Model selection
 
-The model depends on the complexity label of the issue.
+The model depends on the size label of the issue. The models are set in `.github/peppec.yml`:
 
-- **complexity: simple** → Sonnet; if the review still fails, Opus takes over from the round set in `OPUS_FROM_ROUND`.
-- **complexity: complex** → Opus from the start.
+```yaml
+models:
+  s: haiku
+  m: sonnet
+  l: opus
+```
+
+These are the defaults. A value is a model alias or a full model ID; you can set one size and leave the others.
+
+- **size: S** → the `s` model. Keep it for mechanical changes: a lighter model that needs more review rounds saves nothing.
+- **size: M**, or no size label → the `m` model.
+- **size: L** → the `l` model from the start.
+
+If the review still fails, the `l` model takes over from the round set in `LARGE_FROM_ROUND`, whatever the size.
 
 ## Checks, review and limits
 
@@ -130,7 +142,7 @@ With one repository, `repo` is never needed. With several:
 | Label | Where | Set by | Meaning |
 | --- | --- | --- | --- |
 | `ready` | Issue | You | The issue can be picked up |
-| `complexity: simple` / `complex` | Issue | You | Chooses the model |
+| `size: S` / `M` / `L` | Issue | You | Chooses the model |
 | `in progress` | Issue | Workflow | Issue being worked on |
 | `question open` | Issue | Workflow | Waiting for your answer |
 | `awaiting quota` | Issue | Workflow | Resumes when the quota is back |

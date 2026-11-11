@@ -12,6 +12,13 @@ preset: rust-v1
 # protected_paths:
 #   - Makefile
 #
+# The model for each issue size (labels "size: S", "size: M", "size: L"; M without a label).
+# These are the defaults; a value is a model alias or a full model ID.
+# models:
+#   s: haiku
+#   m: sonnet
+#   l: opus
+#
 # Options of the preset, listed in its README:
 # options:
 #   php-version: "8.3"

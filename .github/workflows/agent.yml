@@ -53,7 +53,7 @@ jobs:
       issue: ${{ steps.d.outputs.issue }}
       pr: ${{ steps.d.outputs.pr }}
       sha: ${{ steps.d.outputs.sha }}
-      model: ${{ steps.d.outputs.model }}
+      size: ${{ steps.d.outputs.size }}
       round: ${{ steps.d.outputs.round }}
       ci_tries: ${{ steps.d.outputs.ci_tries }}
       reason: ${{ steps.d.outputs.reason }}
@@ -78,7 +78,7 @@ jobs:
           WORK_START_HOUR: ${{ vars.WORK_START_HOUR }}
           WORK_END_HOUR: ${{ vars.WORK_END_HOUR }}
           MAX_REVIEW_ROUNDS: ${{ vars.MAX_REVIEW_ROUNDS }}
-          OPUS_FROM_ROUND: ${{ vars.OPUS_FROM_ROUND }}
+          LARGE_FROM_ROUND: ${{ vars.LARGE_FROM_ROUND }}
           MAX_CI_ATTEMPTS: ${{ vars.MAX_CI_ATTEMPTS }}
           MAX_ISSUE_MINUTES: ${{ vars.MAX_ISSUE_MINUTES }}
           STALL_MINUTES: ${{ vars.STALL_MINUTES }}
@@ -150,6 +150,8 @@ jobs:
       # agent's branch. It also copies the chosen preset to ./_preset
       - id: cfg
         run: bash "$CTL/config.sh"
+        env:
+          SIZE: ${{ needs.decide.outputs.size }}
       - id: task
         run: bash "$CTL/task.sh"
         env:
@@ -175,7 +177,7 @@ jobs:
           allowed_bots: "${{ steps.task.outputs.app_slug }},coderabbitai"
           prompt: ${{ steps.cfg.outputs.prompt }}
           claude_args: >-
-            --model ${{ needs.decide.outputs.model }}
+            --model ${{ steps.cfg.outputs.model }}
             --max-turns 150
             ${{ steps.cfg.outputs.tool_args }}
       # The commands Claude ran could have altered the scripts: take a fresh copy of the engine

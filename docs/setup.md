@@ -71,8 +71,9 @@ while IFS='|' read -r name desc; do
   gh label create "$name" -R "$R" --description "$desc" --force
 done <<'EOF'
 ready|Ready to be picked up by the agents
-complexity: simple|Handled by Sonnet
-complexity: complex|Handled by Opus
+size: S|Small issue, for the lightest model (Haiku by default)
+size: M|Medium issue, the default (Sonnet by default)
+size: L|Large issue, for the strongest model (Opus by default)
 in progress|An agent is working on this issue
 question open|The agent is waiting for an answer
 awaiting quota|Paused until the Claude quota resets
@@ -178,7 +179,7 @@ gh variable set TZ_NAME -R "$R" -b "<your time zone, for example Europe/Rome>"
 gh variable set WORK_START_HOUR -R "$R" -b 22
 gh variable set WORK_END_HOUR -R "$R" -b 9
 gh variable set MAX_REVIEW_ROUNDS -R "$R" -b 3
-gh variable set OPUS_FROM_ROUND -R "$R" -b 3
+gh variable set LARGE_FROM_ROUND -R "$R" -b 3
 gh variable set MAX_CI_ATTEMPTS -R "$R" -b 5
 gh variable set MAX_ISSUE_MINUTES -R "$R" -b 120
 gh variable set STALL_MINUTES -R "$R" -b 120
@@ -193,7 +194,7 @@ gh variable set AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal tok
 | `WORK_START_HOUR`, `WORK_END_HOUR` | Hours between which new issues are started, in `TZ_NAME`. The window may cross midnight |
 | `MAX_ISSUE_MINUTES` | The agent's total working time per issue. Waits for quota, CI and CodeRabbit do not count |
 | `STALL_MINUTES` | How long a pull request may wait for a CI result; a review may take twice as long |
-| `OPUS_FROM_ROUND` | Review round from which Opus replaces Sonnet on simple issues |
+| `LARGE_FROM_ROUND` | Review round from which the model of size L takes over |
 | `SUMMARY_HOUR` | Hour of the daily summary, in `TZ_NAME` |
 | `CLAUDE_TOKEN_EXPIRES`, `AGENT_TOKEN_EXPIRES` | The summary warns you during the 30 days before each date. The second is optional: leave it out for a token that never expires |
 
@@ -291,7 +292,7 @@ The final layout:
 Test during the day, with dummy issues and the work window overridden.
 
 - [ ] On `main`: CI green, ruleset active, bot answering `/status`
-- [ ] Create an easy issue labelled `ready` and `complexity: simple`
+- [ ] Create an easy issue labelled `ready` and `size: M`
 - [ ] Start it ignoring the window: `gh workflow run agent.yml -R <USER>/<REPO> -f force=true`
 - [ ] An `agent/issue-N` branch and a pull request labelled `review 1` appear; CI runs; a "@coderabbitai review" comment appears when CI is green
 - [ ] In manual mode you get "ready to merge": merge and check that the next issue starts right away
