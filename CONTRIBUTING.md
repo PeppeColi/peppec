@@ -26,6 +26,7 @@ presets/<name>-v<N>/
 | `allowed_tools` | Tools the agent may use besides reading and editing files |
 | `disallowed_tools` | Exceptions to the above: at least running and publishing the project |
 | `protected_paths` | Files that define how the code is checked. The agent's changes to them are refused |
+| `never_commit` | Paths the workflow never commits, even if the project's `.gitignore` misses them: installed dependencies, build output, caches |
 
 `action.yml` must declare an `options` input: it receives, as a JSON string, the `options` mapping of the host's configuration. Read it through an environment variable, never by writing `${{ inputs.options }}` inside a script. Document the options in the README.
 

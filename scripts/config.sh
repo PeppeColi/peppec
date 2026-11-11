@@ -21,10 +21,11 @@ PDIR="$ROOT/presets/$preset"
 [ -f "$PDIR/action.yml" ] && [ -f "$PDIR/preset.yml" ] || die "Unknown preset: $preset"
 
 # Repository values replace the preset defaults; protected paths are added together,
-# on top of the ones the engine always protects
+# on top of the ones the engine always protects, and so are the paths never committed
 cfg=$(jq -n --argjson p "$(yq -o=json '.' "$PDIR/preset.yml")" --argjson c "$conf" '
   ($p + ($c | del(.preset)))
   | .protected_paths = ([".github"] + ($p.protected_paths // []) + ($c.protected_paths // []) | unique)
+  | .never_commit = (($p.never_commit // []) + ($c.never_commit // []) | unique)
   | .notes //= [] | .allowed_tools //= [] | .disallowed_tools //= []
   | .options //= {} | .extra_setup //= ""')
 
@@ -33,7 +34,7 @@ problems=$(jq -r '
   def plain(f): all(f[]; test("[\",\n]") | not);
   [ (select((.description | type) != "string" or (.description | test("^[^\n]+$") | not)) | "description must be one line of text"),
     (select((.check | type) != "string" or (.check | test("\\S") | not)) | "check must be a non-empty string"),
-    ((["notes", "allowed_tools", "disallowed_tools", "protected_paths"][]) as $k
+    ((["notes", "allowed_tools", "disallowed_tools", "protected_paths", "never_commit"][]) as $k
       | select(strings(.[$k]) | not) | "\($k) must be a list of strings"),
     ((["allowed_tools", "disallowed_tools"][]) as $k
       | select(strings(.[$k]) and (plain(.[$k]) | not)) | "\($k) entries cannot contain quotes, commas or line breaks"),
@@ -79,6 +80,7 @@ out() {
 out preset "$preset"
 out check "$check"
 out protected_paths "$protected"
+out never_commit "$(jq -r '.never_commit[]' <<< "$cfg")"
 out tool_args "$tool_args"
 out options "$(jq -c '.options' <<< "$cfg")"
 out extra_setup "$extra_setup"

@@ -9,6 +9,7 @@ Preset for PHP projects that manage their dependencies with Composer.
 | Agent tools | `composer`, `php`, and the usual tools under `vendor/bin` (PHPUnit, Pest, PHPStan, Psalm, Pint, PHP-CS-Fixer, PHP_CodeSniffer) |
 | Not allowed | `php -S`, `php artisan serve`, `composer global` |
 | Protected paths | `.php-version` and the configuration files of the tools above |
+| Never committed | `vendor`, `.phpunit.cache`, `.phpunit.result.cache` |
 
 ## Use it
 

@@ -21,6 +21,10 @@ disallowed_tools:
   - Bash(cargo run:*)
   - Bash(cargo publish:*)
 
+# Paths that are never committed, whatever the project's .gitignore says
+never_commit:
+  - target
+
 # Files the agent must not change: they define how the code is checked
 protected_paths:
   - clippy.toml

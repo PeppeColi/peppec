@@ -208,6 +208,7 @@ jobs:
           TITLE: ${{ steps.task.outputs.title }}
           CLAUDE_START: ${{ steps.clock.outputs.start }}
           PROTECTED_PATHS: ${{ steps.cfg.outputs.protected_paths }}
+          NEVER_COMMIT: ${{ steps.cfg.outputs.never_commit }}
 
   timeout:
     needs: [decide, agent]
