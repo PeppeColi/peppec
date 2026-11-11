@@ -12,6 +12,7 @@ ENGINE="${PEPPEC_ENGINE:-PeppeColi/peppec}"
 REF="${PEPPEC_REF:-v1}"
 YES=false
 REPO=""
+REPO_LIST=""
 KEY_FILE=""
 PRESET=""
 OUT_DIR="peppec-bot"
@@ -620,15 +621,25 @@ cmd_doctor() {
 # ---------- bot ----------
 cmd_bot() {
   preflight
-  resolve_repo
-  load_vars
-  local app_id control token chat
-  app_id=$(var_of APP_ID); control=$(var_of CONTROL_ISSUE)
-  [ -n "$app_id" ] && [ -n "$control" ] || die "APP_ID or CONTROL_ISSUE not set on $REPO: run 'peppec init' first"
+  local app_id="" id control token chat repos="" r
+  if [ -z "$REPO_LIST" ]; then resolve_repo; REPO_LIST="$REPO"; fi
+  # One bot follows several repositories, as long as they share the app
+  for r in $REPO_LIST; do
+    REPO="$r"
+    resolve_repo
+    load_vars
+    id=$(var_of APP_ID); control=$(var_of CONTROL_ISSUE)
+    [ -n "$id" ] && [ -n "$control" ] || die "APP_ID or CONTROL_ISSUE not set on $REPO: run 'peppec init' first"
+    [ -z "$app_id" ] || [ "$id" = "$app_id" ] \
+      || die "$REPO uses another GitHub App ($id instead of $app_id): a bot follows repositories that share the app"
+    app_id="$id"
+    repos="${repos:+$repos,}$REPO#$control"
+  done
   [ -e "$OUT_DIR" ] && die "$OUT_DIR already exists: remove it or pass --out <dir>"
-  printf '%sPEPPEC bot%s for %s%s%s → %s/\n' "$B" "$N" "$B" "$REPO" "$N" "$OUT_DIR"
+  printf '%sPEPPEC bot%s for %s%s%s → %s/\n' "$B" "$N" "$B" "${repos//,/, }" "$N" "$OUT_DIR"
   step "Values"
   note "The same bot token and chat ID stored as secrets: GitHub cannot give them back."
+  note "Every repository listed must use this same bot and chat."
   token="${TELEGRAM_BOT_TOKEN:-}"; [ -n "$token" ] || ask_hidden token "TELEGRAM_BOT_TOKEN"
   chat="${TELEGRAM_CHAT_ID:-}"; [ -n "$chat" ] || ask chat "TELEGRAM_CHAT_ID" ""
   [ -n "$token" ] && [ -n "$chat" ] || die "bot token and chat ID are required"
@@ -637,14 +648,17 @@ cmd_bot() {
   [ -n "$KEY_FILE" ] || ask KEY_FILE "Path of the app's private key (.pem)" ""
   KEY_FILE="${KEY_FILE/#\~/$HOME}"
   [ -f "$KEY_FILE" ] || die "no such file: $KEY_FILE"
-  check_app "$app_id" "$KEY_FILE" || die "the key is not valid for app $app_id"
+  for r in $REPO_LIST; do
+    REPO="$r"
+    check_app "$app_id" "$KEY_FILE" || die "the key is not valid for app $app_id"
+  done
 
   step "Folder"
   ( umask 077
     mkdir -p "$OUT_DIR/data"
     cp "$KEY_FILE" "$OUT_DIR/data/app.pem"
-    printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\nAPP_ID=%s\nREPO=%s\nCONTROL_ISSUE=%s\n' \
-      "$token" "$chat" "$app_id" "$REPO" "$control" > "$OUT_DIR/.env" )
+    printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\nAPP_ID=%s\nREPOS=%s\n' \
+      "$token" "$chat" "$app_id" "$repos" > "$OUT_DIR/.env" )
   engine_file bot/docker-compose.yml | sed '/^# Copy to /d' > "$OUT_DIR/docker-compose.yml"
   ok "$OUT_DIR/ ready: docker-compose.yml, .env, data/app.pem (readable only by you)"
 
@@ -654,6 +668,8 @@ cmd_bot() {
   note "3. Send /status to the bot on Telegram."
   note "${B}4. Delete the folder from this computer: it holds the key and the token.${N}"
   note "     rm -rf $OUT_DIR"
+  note "To follow one more repository later, add it to REPOS in the .env on the bot's machine"
+  note "(owner/name#N, N being its control panel issue) and run 'docker compose up -d' again."
 }
 
 # ---------- update ----------
@@ -687,8 +703,9 @@ Usage:
       panel, variables, secrets, workflow files, branch protection. Safe to run again.
   peppec doctor [-R owner/repo] [--key <app.pem>]
       Check an installation and list what is missing or wrong.
-  peppec bot [-R owner/repo] [--key <app.pem>] [--out <dir>]
-      Prepare the folder to copy to the machine that runs the Telegram bot.
+  peppec bot [-R owner/repo]... [--key <app.pem>] [--out <dir>]
+      Prepare the folder to copy to the machine that runs the Telegram bot. Repeat -R to
+      make one bot follow several repositories that share the app, the bot and the chat.
   peppec update
       Replace this script with the current one of the engine.
 
@@ -704,7 +721,7 @@ COMMAND="${1:-}"
 [ $# -gt 0 ] && shift
 while [ $# -gt 0 ]; do
   case "$1" in
-    -R|--repo) REPO="${2:-}"; shift 2;;
+    -R|--repo) REPO="${2:-}"; REPO_LIST="${REPO_LIST:+$REPO_LIST }$REPO"; shift 2;;
     --key) KEY_FILE="${2:-}"; shift 2;;
     --preset) PRESET="${2:-}"; shift 2;;
     --ref) REF="${2:-}"; shift 2;;

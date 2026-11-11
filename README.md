@@ -44,6 +44,8 @@ peppec doctor    # checks the installation
 peppec bot       # prepares the folder for the machine that runs the Telegram bot
 ```
 
+One bot can follow several repositories: `peppec bot -R owner/first -R owner/second`.
+
 If `~/.local/bin` is not in your `PATH`, call it with its full path. `peppec update` replaces the script with the current version.
 
 It asks for what only you can provide: the GitHub App, the tokens, your preferences. [docs/setup.md](docs/setup.md) explains each step and how to do everything by hand.
