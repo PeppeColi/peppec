@@ -141,7 +141,7 @@ On a public repository anyone can open issues and comment. These rules stop a st
 - **Who gives instructions.** Agents work only on issues labelled `ready`, and only you and the app can apply labels. The task contains only the comments written by your account and by the app.
 - **Who can command the bot.** Only your Telegram chat.
 - **Secrets per step.** Each secret reaches only the step that needs it. The step where Claude runs sees only the Claude token; the app token is created after Claude has finished.
-- **The agent never commits.** The workflow commits and pushes, after checking what changed. Changes to protected paths (`.github`, plus the ones of the preset and of the configuration) are refused and the issue is labelled `needs human`.
+- **The agent never commits.** The workflow commits and pushes, after checking what changed. Dependencies, build output and caches listed by the preset are left out even when the project's `.gitignore` misses them. Changes to protected paths (`.github`, plus the ones of the preset and of the configuration) are refused and the issue is labelled `needs human`.
 - **Engine and configuration out of reach.** The scripts and the presets come from the engine repository at a fixed ref; the configuration comes from `main`. The agent's token has no permission on workflows. After Claude has run, the workflow takes a fresh copy of the scripts before using the GitHub tokens.
 - **Forks.** Pull requests from forks never receive secrets, and the orchestrator ignores them.
 

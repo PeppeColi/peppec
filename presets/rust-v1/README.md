@@ -8,6 +8,7 @@ Preset for Rust projects built with Cargo.
 | Checks | `cargo fmt --check`, `cargo build`, `cargo clippy -D warnings`, `cargo test`, on all targets |
 | Agent tools | `cargo`, except `cargo run` and `cargo publish` |
 | Protected paths | `clippy.toml`, `rustfmt.toml`, `rust-toolchain(.toml)` and their dotted variants |
+| Never committed | `target` |
 
 ## Use it
 

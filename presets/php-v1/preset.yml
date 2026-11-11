@@ -31,6 +31,12 @@ disallowed_tools:
   - Bash(php artisan serve:*)
   - Bash(composer global:*)
 
+# Paths that are never committed, whatever the project's .gitignore says
+never_commit:
+  - vendor
+  - .phpunit.cache
+  - .phpunit.result.cache
+
 # Files the agent must not change: they define how the code is checked
 protected_paths:
   - .php-version

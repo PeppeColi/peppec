@@ -3,7 +3,7 @@ preset: rust-v1
 
 # Optional overrides of the preset defaults (see presets/<name>/preset.yml in the engine).
 # description, check, notes, allowed_tools and disallowed_tools replace the preset's value;
-# protected_paths is added to the preset's list.
+# protected_paths and never_commit are added to the preset's lists.
 #
 # description: Rust command line tool
 # check: |

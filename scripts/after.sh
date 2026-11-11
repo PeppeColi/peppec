@@ -34,10 +34,15 @@ Reply to this message to unblock it."
 fi
 
 pushed=false
-# Stage everything, then drop the working folders of the workflow from the index. Naming them
-# as excluded pathspecs makes "git add" fail when the host's .gitignore lists them
+# Stage everything, then take back out of the index the working folders of the workflow and
+# the paths that are never committed (git pathspecs, one per line: dependencies, caches).
+# Naming them as excluded pathspecs of "git add" fails when the host's .gitignore lists them
+skip=(.agent _ctl _preset _extra)
+while IFS= read -r p; do
+  if [ -n "$p" ]; then skip+=("$p"); fi
+done <<< "${NEVER_COMMIT:-}"
 git add -A
-git rm -r -q -f --cached --ignore-unmatch -- .agent _ctl _preset _extra
+git reset -q -- "${skip[@]}"
 
 # Protected paths (git pathspecs, one per line): changes to them are never committed
 prot=()
