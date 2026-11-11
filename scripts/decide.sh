@@ -85,7 +85,33 @@ case "$ci" in
     action=fix_ci; ci_tries=$((tries + 1)); exit 0;;
 esac
 
-state=$(gh api "repos/$REPO/pulls/$pr/reviews?per_page=100" --jq "[.[] | select(.user.login == \"coderabbitai[bot]\" and .commit_id == \"$sha\" and (.state == \"APPROVED\" or .state == \"CHANGES_REQUESTED\"))] | last | .state // \"none\"")
+reviews=$(gh api "repos/$REPO/pulls/$pr/reviews?per_page=100" --jq '[.[] | select(.user.login == "coderabbitai[bot]")]')
+state=$(jq -r --arg sha "$sha" '[.[] | select(.commit_id == $sha and (.state == "APPROVED" or .state == "CHANGES_REQUESTED"))] | last | .state // "none"' <<< "$reviews")
+
+# CodeRabbit gives no new verdict on a commit with nothing it reviews (a lockfile, a deleted
+# file): it only edits its reply to our request into "Review finished". In that case the
+# previous approval stands, provided that all of these hold:
+# - CodeRabbit submitted no review at all on this commit, and its latest verdict is an approval;
+# - it answered the request made for this commit declaring the review finished.
+# If the wording of that reply ever changes, this simply stops matching and the queue waits.
+carried_approval() {
+  jq -e --arg sha "$sha" '
+    all(.[]; .commit_id != $sha)
+    and (([.[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")] | last | .state) == "APPROVED")' \
+    <<< "$reviews" > /dev/null || return 1
+  gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" \
+    --jq '.[] | {login: .user.login, body, created_at}' \
+    | jq -es --arg sha "$sha" '
+        (map(select(.body | contains("<!-- peppec:rerequest=" + $sha + " -->"))) | last | .created_at) as $asked
+        | $asked != null
+          and any(.[]; .login == "coderabbitai[bot]" and .created_at >= $asked
+                       and (.body | test("Review finished"; "i")))' > /dev/null
+}
+if [ "$state" = none ] && carried_approval; then
+  echo "CodeRabbit found nothing to review in $sha: the previous approval stands"
+  state=APPROVED
+fi
+
 case "$state" in
   none)
     # Reviews start only on request: ask once per commit, as soon as the checks are green
