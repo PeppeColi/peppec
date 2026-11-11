@@ -50,13 +50,22 @@ a { color: var(--accent); }
 .notice { border-radius: 14px; padding: 14px 16px; font-size: 14px; }
 .back { align-self: flex-start; min-height: 44px; display: flex; align-items: center; padding-right: 16px;
   font-weight: 500; text-decoration: none; }
-.quote { white-space: pre-wrap; overflow-wrap: anywhere; }
+.md { display: flex; flex-direction: column; gap: 10px; overflow-wrap: anywhere; }
+.md p { margin: 0; white-space: pre-line; }
+.md ul, .md ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+.md code, .md pre { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--ground); }
+.md code { padding: 1px 5px; border-radius: 6px; }
+.md pre { margin: 0; padding: 12px; border-radius: 10px; overflow-x: auto; }
 button, .button { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px;
   border-radius: 14px; border: 1.5px solid var(--accent); background: var(--accent); color: var(--on-accent);
   font: inherit; font-size: 17px; font-weight: 600; text-decoration: none; cursor: pointer; }
 button.plain, .button.plain { background: var(--surface); color: var(--accent); }
 button.off { background: var(--surface); color: var(--text); border-color: var(--edge); font-weight: 500; }
 button:disabled { opacity: 0.5; cursor: default; }
+button.mini { width: auto; min-height: 44px; padding: 0 14px; border-radius: 12px; border-color: var(--line);
+  background: var(--surface); color: var(--accent); font-size: 14px; flex-shrink: 0; }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.bar .right { display: flex; align-items: center; gap: 10px; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pair button { min-height: 52px; font-size: 16px; border-radius: 12px; }
 .gap { margin-top: 12px; }
@@ -74,7 +83,7 @@ textarea { resize: vertical; min-height: 130px; }
 "use strict";
 // Every text that comes from GitHub is set as text, never as HTML.
 const app = document.getElementById("app");
-let state = null, flash = "", problem = "", busy = false, hinting = false;
+let state = null, flash = "", problem = "", busy = false, hinting = false, loading = false;
 
 function el(tag, props, ...kids) {
   const node = document.createElement(tag);
@@ -104,11 +113,13 @@ async function api(path, body) {
   return data;
 }
 
-async function load() {
+// fresh asks the bot to read GitHub again instead of answering from its cache
+async function load(fresh) {
   if (!password()) return render();
-  try { state = await api("/api/state"); problem = ""; }
-  catch (e) { problem = e.message || ""; }
-  render();
+  if (!state || fresh) { loading = true; render(); }
+  try { state = await api("/api/state" + (fresh ? "?fresh=1" : "")); problem = ""; }
+  catch (e) { problem = e.message || "The bot did not answer."; }
+  loading = false; render();
 }
 
 async function act(repo, action, value, text) {
@@ -121,6 +132,7 @@ async function act(repo, action, value, text) {
     state = await api("/api/state");
   } catch (e) { problem = e.message || "The request failed."; }
   busy = false; render();
+  window.scrollTo(0, 0);  // the outcome is at the top of the page
 }
 
 const short = (repo) => repo.name.split("/")[1];
@@ -154,6 +166,58 @@ function messages() {
           problem && el("div", {class: "notice", role: "alert"}, problem)];
 }
 
+// The age of the state, kept current between two readings
+const age = el("span", {class: "small"});
+function tick() {
+  if (!state) return;
+  const ago = Math.max(0, Math.round(Date.now() / 1000 - state.at));
+  age.textContent = "updated " + (ago < 60 ? ago + " s" : Math.round(ago / 60) + " min") + " ago";
+}
+function bar(left) {
+  tick();
+  return el("div", {class: "bar"}, left, el("div", {class: "right"}, age,
+    el("button", {type: "button", class: "mini", disabled: loading || busy, on: () => load(true)},
+      loading ? "Refreshing…" : "Refresh")));
+}
+const backHome = () => el("a", {class: "back", href: "#/"}, "‹ Home");
+
+// The Markdown of a question, read into nodes: bold, italic, code, links, lists, code blocks.
+function inline(text) {
+  const parts = [], re = /`([^`]+)`|\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    parts.push(text.slice(last, m.index),
+      m[1] !== undefined ? el("code", {}, m[1]) : m[2] !== undefined ? el("strong", {}, m[2])
+        : m[3] !== undefined ? el("em", {}, m[3]) : out(m[4], m[5]));
+    last = re.lastIndex;
+  }
+  parts.push(text.slice(last));
+  return parts;
+}
+function markdown(text) {
+  const blocks = [];
+  let para = [], list = null, code = null;
+  const close = () => { if (para.length) blocks.push(el("p", {}, inline(para.join("\n")))); para = []; };
+  for (const line of text.replace(/\r/g, "").split("\n")) {
+    let m;
+    if (code) {
+      if (/^\s*```/.test(line)) { blocks.push(el("pre", {}, code.join("\n"))); code = null; }
+      else code.push(line);
+    } else if (/^\s*```/.test(line)) { close(); list = null; code = [];
+    } else if (!line.trim()) { close(); list = null;
+    } else if ((m = line.match(/^#{1,6}\s+(.*)$/))) { close(); list = null; blocks.push(el("p", {}, el("strong", {}, inline(m[1]))));
+    } else if ((m = line.match(/^\s*(?:([-*+])|\d+[.)])\s+(.*)$/))) {
+      close();
+      const tag = m[1] ? "ul" : "ol";
+      if (!list || list.localName !== tag) blocks.push(list = el(tag));
+      list.append(el("li", {}, inline(m[2])));
+    } else { list = null; para.push(line.trim()); }
+  }
+  if (code) blocks.push(el("pre", {}, code.join("\n")));
+  close();
+  return el("div", {class: "md"}, blocks);
+}
+
 function login() {
   const input = el("input", {id: "pw", type: "password", autocomplete: "current-password"});
   const open = () => { if (input.value) { remember(input.value); password.tried = true; load(); } };
@@ -164,12 +228,17 @@ function login() {
     el("button", {type: "button", on: open}, "Open")];
 }
 
+// Shown before the first state arrives: the page is never blank
+function opening() {
+  return [el("div", {class: "brand"}, "PEPPEC"),
+    loading ? el("div", {class: "card pad muted", role: "status"}, "Loading the state from GitHub…")
+      : [messages(), el("button", {type: "button", on: () => load()}, "Try again")]];
+}
+
 function home() {
   const waiting = state.repos.filter(waits);
-  const ago = Math.max(0, Math.round(Date.now() / 1000 - state.at));
   return [
-    el("div", {class: "top"}, el("div", {class: "brand"}, "PEPPEC"),
-      el("div", {class: "small"}, "bot " + state.version + " · updated " + (ago < 60 ? ago + " s" : Math.round(ago / 60) + " min") + " ago")),
+    bar(el("div", {class: "brand"}, "PEPPEC")),
     messages(),
     el("div", {class: "group"},
       el("div", {class: "label" + (waiting.length ? " warn" : "")}, "Waiting for you · " + waiting.length),
@@ -181,12 +250,13 @@ function home() {
       state.repos.map((r) => el("div", {class: "card"}, row("#/repo/" + r.key, short(r),
         cap(r.mode) + " · " + (r.schedule === "always" ? "Always on" : "Nightly") + " · " + (r.paused ? "Paused" : "Running"),
         (r.active ? "#" + r.active.number + " in progress" : "No issue in progress") + " · " + r.queue.length + " in queue")))),
+    el("div", {class: "small center"}, "bot " + state.version),
   ];
 }
 const cap = (word) => word[0].toUpperCase() + word.slice(1);
 
 function issuePage(repo, number) {
-  const back = el("a", {class: "back", href: "#/"}, "‹ Home");
+  const back = bar(backHome());
   const issue = repo && repo.active && String(repo.active.number) === number ? repo.active : null;
   if (!issue) return [back, messages(), el("div", {class: "card pad"}, "This issue is no longer in progress.")];
   const st = stage(issue), parts = [];
@@ -200,23 +270,23 @@ function issuePage(repo, number) {
   if (issue.block === "question open") {
     const box = el("textarea", {id: "text", placeholder: "Write your answer"});
     parts.push(
-      el("div", {class: "card pad"}, el("div", {class: "label"}, "The agent asks"), el("div", {class: "quote"}, issue.question)),
+      el("div", {class: "card pad"}, el("div", {class: "label"}, "The agent asks"), markdown(issue.question)),
       el("div", {class: "group"}, el("label", {for: "text"}, "Your answer"), box),
       el("div", {class: "group"},
-        el("button", {type: "button", disabled: busy, on: () => box.value.trim() && act(repo, "answer", issue.number, box.value)}, "Send answer"),
+        el("button", {type: "button", disabled: busy, on: () => box.value.trim() && act(repo, "answer", issue.number, box.value)}, busy ? "Sending…" : "Send answer"),
         el("div", {class: "small center"}, "Posts your answer on the issue and restarts the work.")));
   } else if (issue.block && hinting) {
     const box = el("textarea", {id: "text", placeholder: "Write a hint for the agent"});
     parts.push(
       el("div", {class: "group"}, el("label", {for: "text"}, "Hint for the agent"), box),
       el("div", {class: "group"},
-        el("button", {type: "button", disabled: busy, on: () => box.value.trim() && act(repo, "hint", issue.number, box.value)}, "Send hint"),
+        el("button", {type: "button", disabled: busy, on: () => box.value.trim() && act(repo, "hint", issue.number, box.value)}, busy ? "Sending…" : "Send hint"),
         el("div", {class: "small center"}, "Posts the hint on the issue, clears the block and restarts.")),
       el("button", {type: "button", class: "plain gap", disabled: busy, on: () => { hinting = false; render(true); }}, "Cancel"));
   } else if (issue.block) {
     parts.push(
       el("div", {class: "group"},
-        el("button", {type: "button", disabled: busy, on: () => act(repo, "unblock", issue.number)}, "Unblock"),
+        el("button", {type: "button", disabled: busy, on: () => act(repo, "unblock", issue.number)}, busy ? "Unblocking…" : "Unblock"),
         el("div", {class: "small center"}, "Clears the block, resets the time budget and restarts.")),
       el("div", {class: "group gap"},
         el("button", {type: "button", class: "plain", disabled: busy, on: () => { hinting = true; flash = ""; render(true); }}, "Give a hint"),
@@ -235,7 +305,7 @@ function choice(repo, action, current, options) {
 }
 
 function repoPage(repo) {
-  const back = el("a", {class: "back", href: "#/"}, "‹ Home");
+  const back = bar(backHome());
   if (!repo) return [back, el("div", {class: "card pad"}, "The bot does not follow this repository.")];
   return [back,
     el("div", {class: "group"}, el("h1", {}, short(repo)), el("div", {class: "muted"}, repo.name)),
@@ -251,7 +321,7 @@ function repoPage(repo) {
           ? "New issues start at any hour." : "New issues start only inside the work window.")),
       el("div", {class: "group gap"}, el("div", {class: "label"}, "Queue"),
         el("button", {type: "button", class: "plain", disabled: busy,
-          on: () => act(repo, repo.paused ? "resume" : "pause")}, repo.paused ? "Resume the queue" : "Pause the queue"),
+          on: () => act(repo, repo.paused ? "resume" : "pause")}, busy ? "Working…" : repo.paused ? "Resume the queue" : "Pause the queue"),
         el("div", {class: "small"}, repo.paused
           ? "Paused: nothing moves until you resume." : "Running. Pausing stops every issue until you resume."))),
     el("div", {class: "group"}, el("div", {class: "label"}, "In progress"),
@@ -273,7 +343,7 @@ function render(force) {
   if (!force && !busy && box && box.value && document.activeElement === box) return;
   const typed = box ? box.value : "";
   let view;
-  if (!state) view = login();
+  if (!state) view = password() && (loading || problem) ? opening() : login();
   else {
     const [, kind, key, number] = location.hash.split("/");
     const repo = state.repos.find((r) => r.key === key);
@@ -286,7 +356,8 @@ function render(force) {
 
 window.addEventListener("hashchange", () => { flash = ""; problem = ""; hinting = false; window.scrollTo(0, 0); render(true); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden && state) load(); });
-setInterval(() => { if (!document.hidden && state && !busy) load(); }, 60000);
+setInterval(() => { if (!document.hidden && state && !busy) load(); }, 30000);
+setInterval(tick, 5000);
 load();
 </script>
 </body>

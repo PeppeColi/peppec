@@ -460,16 +460,21 @@ def safe_press(query):
             lambda text: tg("answerCallbackQuery", callback_query_id=query["id"], text=text[:200]))
 
 
-CACHE = {"at": 0.0, "body": b""}
+CACHE = {}  # key of a repository -> (time of the reading, its state)
 
 
-def dashboard_state():
-    """The state of every repository as JSON, read from GitHub at most every 30 seconds."""
+def dashboard_state(fresh=False):
+    """The state of every repository as JSON. Each one is read from GitHub at most every
+    20 seconds, or every 5 when the page asks for a fresh reading."""
     with LOCK:
-        if time.time() - CACHE["at"] > 30:
-            data = {"version": VERSION, "at": int(time.time()), "repos": [r.state() for r in REPOS]}
-            CACHE.update(at=time.time(), body=json.dumps(data).encode())
-        return CACHE["body"]
+        now = time.time()
+        for r in REPOS:
+            if now - CACHE.get(r.key, (0.0, None))[0] > (5 if fresh else 20):
+                CACHE[r.key] = (time.time(), r.state())
+        # "at" is the oldest reading: the page never claims to be fresher than it is
+        data = {"version": VERSION, "at": int(min(CACHE[r.key][0] for r in REPOS)),
+                "repos": [CACHE[r.key][1] for r in REPOS]}
+        return json.dumps(data).encode()
 
 
 def dashboard_action(req):
@@ -485,7 +490,7 @@ def dashboard_action(req):
             done = repo.hint(int(value), text) if action == "hint" else repo.answer(int(value), text)
         else:
             done = repo.apply(action, value)
-        CACHE["at"] = 0.0
+        CACHE.pop(repo.key, None)  # only this repository is read again
         send(f"Dashboard: {done}")  # what the dashboard does leaves a trace in the chat
     return done
 
@@ -518,11 +523,11 @@ class Dashboard(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             return self.reply(200, PAGE.read_bytes(), "text/html; charset=utf-8")
-        if self.path != "/api/state":
+        if self.path not in ("/api/state", "/api/state?fresh=1"):
             return self.error(404, "Not found.")
         if self.allowed():
             try:
-                self.reply(200, dashboard_state())
+                self.reply(200, dashboard_state(self.path.endswith("fresh=1")))
             except Exception as e:
                 self.error(502, explain(e))
 
