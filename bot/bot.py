@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 import re
+import subprocess
 import threading
 import time
 from datetime import datetime
@@ -44,6 +45,13 @@ PAGE = Path(__file__).with_name("dashboard.html")
 LOCK = threading.RLock()
 GH = requests.Session()
 GH.headers.update({"Accept": "application/vnd.github+json"})
+# Claude usage on the dashboard: on when Claude Code is logged in inside the bot's container,
+# with its configuration in this directory (mounted from the host, see docker-compose.yml)
+CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR", "/claude"))
+CREDENTIALS = CLAUDE_DIR / ".credentials.json"
+USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+USAGE_LOCK = threading.Lock()
+LOGIN_HINT = "run 'docker compose run --rm peppec-bot claude' on the bot's machine and log in"
 
 
 class UserError(Exception):
@@ -495,6 +503,50 @@ def dashboard_action(req):
     return done
 
 
+def claude_token():
+    """The access token of the Claude Code login, and when it expires (seconds)."""
+    oauth = json.loads(CREDENTIALS.read_text()).get("claudeAiOauth") or {}
+    return oauth.get("accessToken", ""), oauth.get("expiresAt", 0) / 1000
+
+
+def refresh_claude_login():
+    """Claude Code renews an expired access token when it runs: a minimal prompt is enough."""
+    try:
+        subprocess.run(["claude", "-p", "ok", "--model", "haiku"], cwd="/tmp", timeout=90,
+                       capture_output=True, check=False)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print("claude refresh failed:", e, flush=True)
+
+
+def usage_name(limit):
+    kind = limit.get("kind", "")
+    name = {"session": "Session", "weekly_all": "Week"}.get(kind) or kind.replace("_", " ").capitalize()
+    model = ((limit.get("scope") or {}).get("model") or {}).get("display_name")
+    return f"Week · {model}" if model else name
+
+
+def claude_usage():
+    """The limits of the Claude subscription, read from Anthropic when the page asks."""
+    if not CREDENTIALS.exists():
+        return {"enabled": False}
+    with USAGE_LOCK:
+        token, expires = claude_token()
+        if expires - time.time() < 60:
+            refresh_claude_login()
+            token, expires = claude_token()
+        if expires - time.time() < 0:
+            raise UserError(f"The Claude login has expired: {LOGIN_HINT}.")
+        r = requests.get(USAGE_URL, timeout=20, headers={
+            "Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"})
+        if r.status_code in (401, 403):
+            raise UserError(f"Anthropic refused the Claude login ({r.status_code}): {LOGIN_HINT}.")
+        r.raise_for_status()
+        limits = [{"name": usage_name(x), "percent": x.get("percent"),
+                   "warn": x.get("severity", "normal") != "normal", "resets": x.get("resets_at")}
+                  for x in r.json().get("limits") or []]
+        return {"enabled": True, "at": int(time.time()), "limits": limits}
+
+
 class Dashboard(BaseHTTPRequestHandler):
     def reply(self, status, body, kind="application/json"):
         self.send_response(status)
@@ -523,6 +575,17 @@ class Dashboard(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             return self.reply(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+        if self.path == "/api/usage":
+            if self.allowed():
+                try:
+                    self.reply(200, json.dumps(claude_usage()).encode())
+                except UserError as e:
+                    self.error(502, str(e))
+                except requests.RequestException as e:
+                    self.error(502, f"Anthropic did not answer: {e}")
+                except Exception as e:
+                    self.error(502, f"Error: {e}")
+            return
         if self.path not in ("/api/state", "/api/state?fresh=1"):
             return self.error(404, "Not found.")
         if self.allowed():
