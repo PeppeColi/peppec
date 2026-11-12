@@ -60,3 +60,13 @@ notify_feature_done() {
   marker_set "$pn" done "$total"
   notify "All $total sub-issues of #$pn \"$(jq -r .title <<< "$parent")\" are merged into ${BASE_BRANCH:-main}: the feature is ready to be tried. https://github.com/$REPO/issues/$pn"
 }
+
+# The text under the "Out of scope" heading of a Markdown text on standard input, up to the
+# next heading of the same or a higher level. Empty when there is no such heading
+out_of_scope() {
+  tr -d '\r' | awk '
+    /^#+[ \t]/ && on { match($0, /^#+/); if (RLENGTH <= lvl) on = 0 }
+    on { print }
+    !on && tolower($0) ~ /^#+[ \t]+out of scope[ \t]*$/ { match($0, /^#+/); lvl = RLENGTH; on = 1 }
+  ' | sed -e '/./,$!d' | awk '{ l[NR] = $0 } /./ { last = NR } END { for (i = 1; i <= last; i++) print l[i] }'
+}
