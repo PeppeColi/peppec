@@ -4,13 +4,15 @@ source "$(dirname "$0")/lib.sh"
 B="agent/issue-$ISSUE"
 # A branch left from a pull request already merged, with nothing new on it (an issue reopened
 # after a merge whose branch was not removed): the work starts again from the base branch
-tip=$(git ls-remote --heads origin "$B" | cut -f1)
+# The checkout keeps no credentials, and a private repository answers nothing without them
+REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+tip=$(git ls-remote --heads "$REMOTE" "$B" | cut -f1)
 if [ -n "$tip" ] && [ -n "$(gh pr list -R "$REPO" --head "$B" --state merged --json headRefOid \
      --jq "[.[] | select(.headRefOid == \"$tip\")] | .[0].headRefOid // empty")" ]; then
   delete_agent_branch "$B"
 fi
-if git ls-remote --exit-code --heads origin "$B" > /dev/null; then
-  git fetch -q origin "$B" && git checkout -q "$B"
+if [ -n "$(git ls-remote --heads "$REMOTE" "$B")" ]; then
+  git fetch -q "$REMOTE" "+refs/heads/$B:refs/remotes/origin/$B" && git checkout -q "$B"
 else
   git checkout -q -b "$B"
 fi
