@@ -3,6 +3,8 @@ notify() {
   # The repository comes first: one bot and one chat can follow several, and the bot
   # reads it back when you reply to a message
   local text="[$REPO] $1"
+  # Telegram shows plain text: a backtick from Markdown (titles, questions) is only noise
+  text="${text//\`/}"
   text="${text:0:4000}"
   # Also in the job log, so the reason of a stop can be read without Telegram
   echo "notify: $text"

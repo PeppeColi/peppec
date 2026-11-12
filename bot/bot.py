@@ -287,7 +287,8 @@ def tg(method, **payload):
 
 
 def send(text, markup=None):
-    tg("sendMessage", chat_id=CHAT, text=text[:4000], **({"reply_markup": markup} if markup else {}))
+    # Telegram shows plain text: a backtick from Markdown (titles, questions) is only noise
+    tg("sendMessage", chat_id=CHAT, text=text.replace("`", "")[:4000], **({"reply_markup": markup} if markup else {}))
 
 
 def send_panels(repos):
@@ -435,7 +436,8 @@ def press(query):
         done = repo.apply(action, value)
     if key:
         text, markup = repo.panel()
-        tg("editMessageText", chat_id=CHAT, message_id=msg["message_id"], text=text, reply_markup=markup)
+        tg("editMessageText", chat_id=CHAT, message_id=msg["message_id"], text=text.replace("`", ""),
+           reply_markup=markup)
     elif action != "hint":
         send(done)  # a notification stays as it is: the outcome goes in a new message
     return done
