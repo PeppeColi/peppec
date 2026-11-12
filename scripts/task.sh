@@ -2,6 +2,13 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 B="agent/issue-$ISSUE"
+# A branch left from a pull request already merged, with nothing new on it (an issue reopened
+# after a merge whose branch was not removed): the work starts again from the base branch
+tip=$(git ls-remote --heads origin "$B" | cut -f1)
+if [ -n "$tip" ] && [ -n "$(gh pr list -R "$REPO" --head "$B" --state merged --json headRefOid \
+     --jq "[.[] | select(.headRefOid == \"$tip\")] | .[0].headRefOid // empty")" ]; then
+  delete_agent_branch "$B"
+fi
 if git ls-remote --exit-code --heads origin "$B" > /dev/null; then
   git fetch -q origin "$B" && git checkout -q "$B"
 else

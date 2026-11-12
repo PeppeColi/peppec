@@ -31,6 +31,21 @@ close_merged() {
   gh api -X PATCH "repos/$REPO/issues/$1" -f state=closed -f state_reason=completed > /dev/null
   rm_label "$1" "in progress"
 }
+# The engine's own working branches, and nothing else: this is the only place that knows their name
+is_agent_branch() { [[ "$1" =~ ^agent/issue-[0-9]+$ ]]; }
+# Removes a working branch whose pull request is merged. GitHub is told not to delete merged
+# branches (peppec init turns that off): it would also delete the base branch each time it is
+# brought to main. So the engine removes its own, never a branch with another name, and never
+# one that still has an open pull request
+delete_agent_branch() {
+  is_agent_branch "$1" || return 0
+  [ -z "$(gh pr list -R "$REPO" --head "$1" --state open --json number --jq '.[0].number // empty')" ] || return 0
+  if gh api -X DELETE "repos/$REPO/git/refs/heads/$1" > /dev/null 2>&1; then
+    echo "Deleted the merged branch $1"
+  else
+    echo "Branch $1 not deleted: it is already gone"
+  fi
+}
 has() { grep -qxF -- "$2" <<< "$1"; }
 age_minutes() { echo $(( ($(date +%s) - $(date -d "$1" +%s)) / 60 )); }
 # Hidden marker comments on an issue or PR: <!-- peppec:KEY=VALUE -->
