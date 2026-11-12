@@ -46,6 +46,13 @@ delete_agent_branch() {
     echo "Branch $1 not deleted: it is already gone"
   fi
 }
+# True only when GitHub says the base branch is not there. Any other failure (network, rate
+# limit) ends the script: a queue is never stopped on a guess
+base_branch_missing() {
+  local out
+  out=$(gh api "repos/$REPO/branches/$BASE_BRANCH" --jq .name 2>&1) && return 1
+  grep -q "HTTP 404" <<< "$out" || { echo "$out" >&2; exit 1; }
+}
 has() { grep -qxF -- "$2" <<< "$1"; }
 age_minutes() { echo $(( ($(date +%s) - $(date -d "$1" +%s)) / 60 )); }
 # Hidden marker comments on an issue or PR: <!-- peppec:KEY=VALUE -->
