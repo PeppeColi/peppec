@@ -10,7 +10,16 @@ fi
 if [ "$ACTION" = start ]; then
   add_label "$ISSUE" "in progress"; rm_label "$ISSUE" "ready"
 fi
-mkdir -p .agent; rm -f .agent/question.md
+mkdir -p .agent; rm -f .agent/question.md .agent/spec.md
+# The issue this one is a sub-issue of, when you wrote it: the specification of the larger
+# piece of work, given to the agent as background in a file of its own
+if parent=$(gh api "repos/$REPO/issues/$ISSUE/parent" 2> /dev/null) \
+   && [ "$(jq -r .user.login <<< "$parent")" = "$OWNER_LOGIN" ]; then
+  {
+    echo "# Specification: $(jq -r .title <<< "$parent") (#$(jq -r .number <<< "$parent"))"
+    echo; jq -r '.body // ""' <<< "$parent"
+  } > .agent/spec.md
+fi
 I=$(gh issue view "$ISSUE" -R "$REPO" --json title,body)
 echo "title=$(jq -r .title <<< "$I")" >> "$GITHUB_OUTPUT"
 # The app's short name, for the bots allowed to trigger Claude: "name[bot]" -> "name"
