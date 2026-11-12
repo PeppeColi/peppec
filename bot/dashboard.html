@@ -275,6 +275,7 @@ function opening() {
 
 function home() {
   const waiting = state.repos.filter(waits);
+  const trying = state.repos.flatMap((r) => (r.trying || []).map((f) => [r, f]));
   return [
     bar(el("div", {class: "brand"}, "PEPPEC")),
     messages(),
@@ -284,6 +285,11 @@ function home() {
         ? el("div", {class: "card"}, waiting.map((r) =>
             row(issueLink(r), short(r) + " #" + r.active.number, stage(r.active).text, "", true)))
         : el("div", {class: "card pad muted"}, "Nothing needs you right now.")),
+    trying.length > 0 && el("div", {class: "group"},
+      el("div", {class: "label"}, "Ready to try · " + trying.length),
+      el("div", {class: "card"}, trying.map(([r, f]) =>
+        row("#/feature/" + r.key + "/" + f.number, short(r) + " #" + f.number + " " + f.title,
+          "All " + f.total + " sub-issues merged")))),
     el("div", {class: "group"}, el("div", {class: "label"}, "Repositories"),
       state.repos.map((r) => el("div", {class: "card"}, row("#/repo/" + r.key, short(r),
         cap(r.mode) + " · " + (r.schedule === "always" ? "Always on" : "Nightly") + " · " + (r.paused ? "Paused" : "Running"),
@@ -337,6 +343,25 @@ function issuePage(repo, number) {
   return parts;
 }
 
+// A specification whose sub-issues are all merged: what does not work becomes a new sub-issue
+function featurePage(repo, number) {
+  const back = bar(backHome());
+  const feature = repo && (repo.trying || []).find((f) => String(f.number) === number);
+  if (!feature) return [back, messages(), el("div", {class: "card pad"}, "This feature is no longer waiting to be tried.")];
+  const box = el("textarea", {id: "text", placeholder: "What does not work, in one sentence"});
+  return [back,
+    el("div", {class: "group"}, el("div", {class: "muted"}, short(repo) + " · specification #" + feature.number),
+      el("h1", {}, feature.title), el("div", {class: "pill"}, "Ready to try")),
+    messages(),
+    el("div", {class: "card pad"}, "All " + feature.total + " sub-issues are merged into the base branch. " +
+      "Try the feature there; when it works, bringing it to main is your merge."),
+    el("div", {class: "group"}, el("label", {for: "text"}, "Report a problem"), box),
+    el("div", {class: "group"},
+      el("button", {type: "button", disabled: busy, on: () => box.value.trim() && act(repo, "report", feature.number, box.value)}, busy ? "Sending…" : "Report a problem"),
+      el("div", {class: "small center"}, "Creates a sub-issue of #" + feature.number + ", size S, and puts it in the queue.")),
+    out("Open the specification on GitHub", feature.url, "link")];
+}
+
 function choice(repo, action, current, options) {
   return el("div", {class: "pair"}, options.map(([value, text]) =>
     el("button", {type: "button", class: value === current ? "" : "off", "aria-pressed": String(value === current),
@@ -386,7 +411,8 @@ function render(force) {
   else {
     const [, kind, key, number] = location.hash.split("/");
     const repo = state.repos.find((r) => r.key === key);
-    view = kind === "issue" ? issuePage(repo, number) : kind === "repo" ? repoPage(repo) : home();
+    view = kind === "issue" ? issuePage(repo, number) : kind === "feature" ? featurePage(repo, number)
+      : kind === "repo" ? repoPage(repo) : home();
   }
   app.replaceChildren(...view.flat(3).filter(Boolean));
   const again = document.querySelector("textarea");
