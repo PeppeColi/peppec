@@ -295,6 +295,7 @@ docker compose logs -f
 
 4. Send `/status` to the bot: it answers with mode, pause and queue.
 5. Optional: the dashboard, a web page with the state of the queues and the same actions as the bot. In `.env` set `DASHBOARD_PASSWORD` to a long password and `DASHBOARD_PORT=8737`, run `docker compose up -d` again and open `http://<address of the machine>:8737` from a device in the same network. Do not expose that port to the internet: see [Dashboard](architecture.md#dashboard).
+6. Optional: the Claude usage on the dashboard. Log in to Claude Code once inside the bot's container: `docker compose run --rm peppec-bot claude`, follow the link it prints, paste the code back, then leave with `/exit`. The login is kept in `~/peppec-bot/claude/`. Restart the bot with `docker compose up -d`.
 
 The final layout:
 
@@ -302,6 +303,7 @@ The final layout:
 ~/peppec-bot/
 ├── docker-compose.yml
 ├── .env
+├── claude/         (optional: the Claude Code login, step 6)
 └── data/
     ├── app.pem
     └── offset      (created by the bot)

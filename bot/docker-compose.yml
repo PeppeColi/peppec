@@ -6,6 +6,8 @@ services:
     volumes:
       # Holds the app's private key (app.pem) and the last processed Telegram update
       - ./data:/data
+      # Optional: the Claude Code login that shows the Claude usage on the dashboard
+      - ./claude:/claude
     ports:
       # The dashboard, off unless DASHBOARD_PASSWORD is set in .env. Reachable from this machine
       # only, unless .env sets DASHBOARD_PORT to the port to open on the network

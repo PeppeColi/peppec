@@ -162,6 +162,8 @@ The bot can also serve a web page, meant for a phone: the state of every reposit
 - Touching a line opens its page, where the buttons are: Unblock and Give a hint on a blocked issue, the answer to a question, the merge mode, the schedule and the pause of a repository.
 - Every action taken from the dashboard is also reported in the Telegram chat.
 
+- Optionally, the home page also shows the usage of your Claude subscription: the current session, the weekly limit and any limit per model, each with when it resets. It is read from Anthropic when the page opens and when you press "Refresh usage", never on a timer. It needs Claude Code logged in inside the bot's container (see [setup](setup.md)); without that login the section is hidden. The usage comes from the endpoint behind Claude Code's `/usage`, which Anthropic does not document: if it changes, the section shows an error and the rest of the page keeps working. The token from `claude setup-token` cannot read it, so this is a separate login. When its access token has expired, the bot runs `claude -p ok --model haiku` once to renew it, which costs a tiny Haiku request. The limits are those of your whole account, your own sessions included.
+
 The page asks for the password once and keeps it in the browser. The state is read from GitHub at most every 20 seconds and the page asks for it every 30; the Refresh button reads it again at once. Nothing is stored on the bot's machine.
 
 The dashboard speaks plain HTTP and can act on your repositories: keep it inside your own network, and reach it from outside through a VPN such as Tailscale or WireGuard. Never forward its port from the internet. Without `DASHBOARD_PORT` in `.env`, it answers only on the bot's machine itself.
