@@ -96,6 +96,8 @@ If the review still fails, the `l` model takes over from the round set in `LARGE
 
 A pull request reaches CodeRabbit only after CI passes. The review passes when CodeRabbit approves the latest commit. When a new commit contains nothing CodeRabbit reviews, such as a lockfile or a deleted file, it gives no new verdict and only replies that the review is finished or that every file was excluded by its path filters: the previous approval then stands. CodeRabbit answers every review request with a comment: a request that gets no answer at all (CodeRabbit not installed yet, or unavailable) is repeated after 20 minutes, up to three requests per commit.
 
+The agent does not have to agree with every finding. When it leaves one unchanged on purpose, for example because another issue of the feature covers it, it writes its reasons and the workflow posts them as a reply in the thread of that finding. CodeRabbit weighs the reply and approves when convinced. If it has not approved after 20 minutes, the next round starts and the agent reads CodeRabbit's answers. A round in which the agent neither changes the code nor replies stops the queue with `needs human`.
+
 | Limit | Variable | Past the limit |
 | --- | --- | --- |
 | Attempts to make the checks pass, per review round | `MAX_CI_ATTEMPTS` | Queue stops, Telegram notification |
@@ -104,7 +106,7 @@ A pull request reaches CodeRabbit only after CI passes. The review passes when C
 | Wait for a CI result, from the latest commit | `STALL_MINUTES` | Queue stops |
 | Wait for a CodeRabbit review, from the latest commit | twice `STALL_MINUTES` | Queue stops |
 
-Waits for quota, CI and CodeRabbit do not count as working time. Counters move only after a successful push: if a run is interrupted, the same move is repeated without spending a round.
+Waits for quota, CI and CodeRabbit do not count as working time. Counters move only after a successful push or a reply to the review: if a run is interrupted, the same move is repeated without spending a round.
 
 ## Schedule and quota
 
