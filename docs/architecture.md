@@ -125,6 +125,8 @@ When the Claude quota runs out, the issue gets the `awaiting quota` label, you g
 
 Pull requests are merged into the base branch: `main`, or the branch named by the `BASE_BRANCH` variable. GitHub closes an issue by itself only when its pull request reaches the default branch, so with another base branch the workflow closes it: right after an automatic merge, and at its next run after a merge done by hand. An issue you reopen after a merge is worked on again.
 
+The workflow merges only the pull requests of its own `agent/issue-*` branches. With a base branch other than `main`, the merge of the base branch into `main` is never automatic, whatever the mode: it is the owner's statement that the whole feature passed its end-to-end test (see [Planning a feature](planning.md)). Who or what runs that test is not defined yet; until it is, the gate is a person.
+
 ## Telegram bot
 
 The bot answers only your chat and acts on GitHub as the app.
