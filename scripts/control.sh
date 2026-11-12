@@ -13,7 +13,9 @@ case "$ACTION" in
     if [ -n "${PR:-}" ]; then add_label "$PR" "needs human"; fi
     notify_blocked "Queue stopped on #$ISSUE: $REASON. $RUN_URL";;
   merge)
+    head=$(gh pr view "$PR" -R "$REPO" --json headRefName --jq .headRefName)
     gh pr merge "$PR" -R "$REPO" --squash
+    delete_agent_branch "$head"
     close_merged "$ISSUE"
     notify "Merged PR #$PR (issue #$ISSUE)."
     notify_feature_done "$ISSUE";;

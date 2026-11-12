@@ -62,7 +62,7 @@ printf '.agent/\n_ctl/\n_preset/\n_extra/\n_base/\n' >> .gitignore
 
 2. Protect `main`: **Settings → Rules → Rulesets → New branch ruleset**, target `main`, enable "Require a pull request before merging" (0 approvals) and "Block force pushes". Under **Bypass list** add the **Repository admin** role, so you can push the setup files straight to `main`. The required status check is added in Phase 5.
 3. **Settings → Actions → General**: under "Approval for running fork pull request workflows" choose "Require approval for all external contributors".
-4. **Settings → General → Pull Requests**: enable "Automatically delete head branches".
+4. **Settings → General → Pull Requests**: leave "Automatically delete head branches" off. The workflow removes the agent's branches itself after a merge; GitHub's setting would also delete a base branch such as `dev` each time you bring it to `main`.
 5. Create the labels:
 
 ```bash
@@ -251,14 +251,14 @@ git push origin main:dev                        # create the branch, with the sa
 gh variable set BASE_BRANCH -R "$R" -b dev
 ```
 
-Then add `dev` to the target branches of the ruleset of Phase 1, and create a second branch ruleset for `dev` alone, with only "Restrict deletions" and an empty bypass list. `peppec init` asks for the branch, sets the variable and creates the second ruleset.
+Then add `dev` to the target branches of the ruleset of Phase 1, and create a second branch ruleset for `dev` alone, with only "Restrict deletions" and an empty bypass list. `peppec init` asks for the branch, sets the variable and creates the second ruleset. On a private repository of a free plan rulesets are not available: `dev` works all the same, only without that second guard.
 
 What changes:
 
 - **Issues are closed by the workflow.** GitHub closes an issue by itself only when its pull request reaches the default branch. A closed issue therefore means "merged into `dev`", not "on `main`".
 - **The configuration is read from `dev`.** `.github/peppec.yml` and your setup action travel with the code they check, and reach `main` together with it. `peppec doctor` warns when the configuration differs between the two branches.
 - **The workflow files must be the same on both branches.** GitHub runs the scheduled and manual runs from the copy on `main`, and the runs started by a pull request (review submitted, pull request closed) from the copy on `dev`. A change to them, such as an [upgrade](#upgrading), goes to `main` first and is then merged into `dev`. `peppec doctor` reports a difference as a problem.
-- **Bringing `dev` to `main` is yours to do**, with a pull request merged with a merge commit. A squash would leave the two branches with different histories, and the next pull request between them would conflict. A fix made directly on `main` must be merged back into `dev`. Merged branches are deleted automatically, and `dev` is the merged branch of that pull request: the second ruleset is what keeps it. The first one does not, because admins bypass it. Where rulesets are not available, create `dev` again after each merge with `git push origin main:dev`.
+- **Bringing `dev` to `main` is yours to do**, with a pull request merged with a merge commit. A squash would leave the two branches with different histories, and the next pull request between them would conflict. A fix made directly on `main` must be merged back into `dev`. `dev` stays after the merge: GitHub does not delete merged branches here (Phase 1), on any plan. Do not press "Delete branch" on that pull request. The second ruleset makes the button fail; the first one does not, because admins bypass it. Where rulesets are not available and `dev` was deleted by mistake, "Restore branch" on the same pull request brings it back.
 
 ## Phase 6 — Telegram bot
 

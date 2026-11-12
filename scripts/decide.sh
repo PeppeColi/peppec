@@ -28,6 +28,11 @@ size_of() {
 REVIEW_RETRY_MINUTES=20 REVIEW_REQUESTS=3
 budget() { local used; used=$(marker_get "$1" minutes); echo $(( MAX_ISSUE_MINUTES - ${used:-0} )); }
 
+# A pull request of the agent merged by hand: its branch is removed here, even with the queue paused
+if [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ]; then
+  delete_agent_branch "$EVENT_HEAD_REF"
+fi
+
 ctrl=$(labels_of "$CONTROL_ISSUE")
 if has "$ctrl" "paused"; then echo "Queue paused"; exit 0; fi
 mode=manual; has "$ctrl" "auto mode" && mode=automatic
@@ -63,6 +68,8 @@ if [ -n "$active" ]; then
   if [ -n "$done_pr" ]; then
     echo "PR #$done_pr of issue #$active is merged: closing the issue"
     close_merged "$active"
+    # Still there when the run that follows the merge was skipped or stopped early
+    delete_agent_branch "agent/issue-$active"
     # Left out by number: right after the close the lists may still show it as open
     closed=$active
     notify_feature_done "$closed"

@@ -204,7 +204,10 @@ init_labels() {
 
 init_settings() {
   step "Repository settings"
-  gh api -X PATCH "repos/$REPO" -F delete_branch_on_merge=true > /dev/null && ok "merged branches are deleted automatically"
+  # Off: GitHub would also delete the base branch each time it is brought to main, and only a ruleset
+  # (not available on private repositories of a free plan) could stop it. The workflow removes its own branches
+  gh api -X PATCH "repos/$REPO" -F delete_branch_on_merge=false > /dev/null \
+    && ok "GitHub does not delete merged branches: the workflow removes the agent's own"
   if [ "$(gh api "repos/$REPO" --jq .private)" = false ]; then
     if gh api -X PUT "repos/$REPO/actions/permissions/fork-pr-contributor-approval" \
          -f approval_policy=all_external_contributors > /dev/null 2>&1; then
@@ -527,7 +530,8 @@ base_branch_kept() {
   return 1
 }
 
-# GitHub deletes the head branch of a merged pull request, and the base branch is one when it is brought to main.
+# A second guard for the base branch, where rulesets exist: it is the head of the pull request that brings it
+# to main, and the "Delete branch" button of that pull request would remove it.
 # The main ruleset does not stop it: admins bypass it, and the one who merges is usually an admin.
 init_keep_base() {
   [ "$BASE_BRANCH" != main ] || return 0
@@ -536,9 +540,9 @@ init_keep_base() {
         conditions: {ref_name: {include: ["refs/heads/" + $base], exclude: []}},
         bypass_actors: [], rules: [{type: "deletion"}]}' \
       | gh api -X POST "repos/$REPO/rulesets" --input - > /dev/null 2>&1; then
-    ok "ruleset 'keep $BASE_BRANCH' created: nobody can delete $BASE_BRANCH, so it survives its merges into main"
+    ok "ruleset 'keep $BASE_BRANCH' created: nobody can delete $BASE_BRANCH"
   else
-    warn "$BASE_BRANCH will be deleted when you merge it into main: restore it each time with git push origin main:$BASE_BRANCH"
+    warn "$BASE_BRANCH can be deleted by hand (no rulesets here): do not press \"Delete branch\" after merging it into main"
   fi
 }
 
@@ -763,12 +767,15 @@ cmd_doctor() {
     elif grep -q 'ci / ci' <<< "$checks"; then ok "$branch requires: $checks"
     else bad "$branch requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
   done
-  # Bringing the base branch to $default_branch makes it the head of a merged pull request, which GitHub deletes.
-  # A deletion rule stops that only in a ruleset nobody can bypass: the one who merges is usually an admin.
-  if [ "$BASE_BRANCH" != "$default_branch" ] \
-     && [ "$(gh api "repos/$REPO" --jq .delete_branch_on_merge 2> /dev/null)" = true ] \
-     && ! base_branch_kept; then
-    warn "$BASE_BRANCH will be deleted when you merge it into $default_branch: peppec init adds the ruleset that keeps it; without rulesets, restore it after each merge with git push origin $default_branch:$BASE_BRANCH"
+  # Bringing the base branch to $default_branch makes it the head of a merged pull request, which GitHub deletes
+  # when "Automatically delete head branches" is on. A deletion rule stops that only in a ruleset nobody can
+  # bypass: the one who merges is usually an admin.
+  if [ "$(gh api "repos/$REPO" --jq .delete_branch_on_merge 2> /dev/null)" != true ]; then
+    ok "GitHub does not delete merged branches: the workflow removes the agent's own"
+  elif [ "$BASE_BRANCH" != "$default_branch" ] && ! base_branch_kept; then
+    bad "$BASE_BRANCH will be deleted when you merge it into $default_branch: run peppec init, which turns off \"Automatically delete head branches\""
+  else
+    warn "GitHub deletes merged branches (\"Automatically delete head branches\" is on): run peppec init to turn it off"
   fi
 
   step "Last runs"
