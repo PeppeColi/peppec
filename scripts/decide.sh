@@ -32,9 +32,10 @@ ctrl=$(labels_of "$CONTROL_ISSUE")
 if has "$ctrl" "paused"; then echo "Queue paused"; exit 0; fi
 mode=manual; has "$ctrl" "auto mode" && mode=automatic
 
+# $1, optional: an issue to leave out
 active_issue() {
   gh issue list -R "$REPO" --state open --label "in progress" --json number,createdAt \
-    --jq 'sort_by(.createdAt) | .[0].number // empty'
+    --jq "[.[] | select(.number != ${1:-0})] | sort_by(.createdAt) | .[0].number // empty"
 }
 # The agent's pull request of an issue, if it was merged since the issue last entered
 # "in progress" or was reopened: an issue reopened after a merge is worked on again
@@ -55,7 +56,8 @@ if [ -n "$active" ]; then
   if [ -n "$done_pr" ]; then
     echo "PR #$done_pr of issue #$active is merged: closing the issue"
     close_merged "$active"
-    active=$(active_issue)
+    # Left out by number: right after the close the list may still show it as open
+    active=$(active_issue "$active")
   fi
 fi
 
