@@ -197,6 +197,7 @@ gh variable set AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal tok
 | `STALL_MINUTES` | How long a pull request may wait for a CI result; a review may take twice as long |
 | `LARGE_FROM_ROUND` | Review round from which the model of size L takes over |
 | `SUMMARY_HOUR` | Hour of the daily summary, in `TZ_NAME` |
+| `BASE_BRANCH` | Optional: the branch the agent starts from and its pull requests are merged into. `main` when not set. See [A base branch other than `main`](#a-base-branch-other-than-main) |
 | `CLAUDE_TOKEN_EXPIRES`, `AGENT_TOKEN_EXPIRES` | The summary warns you during the 30 days before each date. The second is optional: leave it out for a token that never expires |
 
 ## Phase 5 — Workflows and configuration
@@ -239,7 +240,24 @@ preset: php-v1
 extra_setup: .github/actions/services
 ```
 
-The action must live under `.github/`, so the agent cannot change it. Like the rest of the configuration, it is read from `main`.
+The action must live under `.github/`, so the agent cannot change it. Like the rest of the configuration, it is read from the base branch.
+
+### A base branch other than `main`
+
+By default the agent's pull requests are merged into `main`. To collect them on another branch first, for example `dev`, and bring them to `main` yourself when a group of issues is complete and tested:
+
+```bash
+git push origin main:dev                        # create the branch, with the same files as main
+gh variable set BASE_BRANCH -R "$R" -b dev
+```
+
+Then add `dev` to the target branches of the ruleset of Phase 1. `peppec init` asks for the branch and does the last two steps.
+
+What changes:
+
+- **Issues are closed by the workflow.** GitHub closes an issue by itself only when its pull request reaches the default branch. A closed issue therefore means "merged into `dev`", not "on `main`".
+- **The configuration is read from `dev`.** `.github/peppec.yml` and your setup action travel with the code they check, and reach `main` together with it. The workflow files are still the ones on `main`: GitHub runs scheduled workflows from the default branch. `peppec doctor` warns when the configuration differs between the two branches.
+- **Bringing `dev` to `main` is yours to do**, with a pull request merged with a merge commit. A squash would leave the two branches with different histories, and the next pull request between them would conflict. A fix made directly on `main` must be merged back into `dev`.
 
 ## Phase 6 — Telegram bot
 

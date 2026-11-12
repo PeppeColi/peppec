@@ -41,6 +41,8 @@ env:
   REPO: ${{ github.repository }}
   TZ_NAME: ${{ vars.TZ_NAME }}
   CONTROL_ISSUE: ${{ vars.CONTROL_ISSUE }}
+  # The branch the agent starts from and its pull requests are merged into
+  BASE_BRANCH: ${{ vars.BASE_BRANCH || 'main' }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   CTL: _ctl/scripts
 
@@ -139,15 +141,15 @@ jobs:
       CI_TRIES: ${{ needs.decide.outputs.ci_tries }}
     steps:
       - uses: actions/checkout@v4
-        with: { ref: main, fetch-depth: 0, persist-credentials: false }
+        with: { ref: "${{ vars.BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
       - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
           path: _ctl
           persist-credentials: false
-      # Runs while the workspace is still on main: the configuration never comes from the
-      # agent's branch. It also copies the chosen preset to ./_preset
+      # Runs while the workspace is still on the base branch: the configuration never comes
+      # from the agent's branch. It also copies the chosen preset to ./_preset
       - id: cfg
         run: bash "$CTL/config.sh"
         env:

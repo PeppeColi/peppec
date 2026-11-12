@@ -15,6 +15,7 @@ REPO=""
 REPO_LIST=""
 KEY_FILE=""
 PRESET=""
+BASE_BRANCH=main
 OUT_DIR="peppec-bot"
 SECRETS="CLAUDE_CODE_OAUTH_TOKEN AGENT_TOKEN APP_PRIVATE_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID"
 WORK_DIRS=".agent/ _ctl/ _preset/ _extra/ _base/"
@@ -110,7 +111,8 @@ api() {
   if out=$(gh api "$@" 2> /dev/null); then printf '%s\n' "$out"; else return 1; fi
 }
 engine_file() { api -H "Accept: application/vnd.github.raw" "repos/$ENGINE/contents/$1?ref=$REF"; }
-host_file() { api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/$1"; }
+# host_file PATH [BRANCH]: a file of the host repository, on the default branch unless told
+host_file() { api -H "Accept: application/vnd.github.raw" "repos/$REPO/contents/$1${2:+?ref=$2}"; }
 open_url() {
   if command -v open > /dev/null 2>&1; then open "$1"; elif command -v xdg-open > /dev/null 2>&1; then xdg-open "$1"; else return 1; fi
 }
@@ -374,6 +376,10 @@ init_variables() {
   ask TZ_NAME "Time zone" "${value:-$(system_tz)}"
   TZ="$TZ_NAME" date > /dev/null 2>&1 || die "unknown time zone: $TZ_NAME"
   set_var TZ_NAME "$TZ_NAME"
+  value=$(var_of BASE_BRANCH)
+  ask BASE_BRANCH "Branch the agent starts from and its pull requests are merged into" "${value:-main}"
+  git check-ref-format --branch "$BASE_BRANCH" > /dev/null 2>&1 || die "not a branch name: $BASE_BRANCH"
+  set_var BASE_BRANCH "$BASE_BRANCH"
   # The list is read on descriptor 3, so the questions can still read the terminal
   while IFS='|' read -r name default question <&3; do
     value=$(var_of "$name")
@@ -513,18 +519,19 @@ init_files() {
 
 init_ruleset() {
   step "Branch protection"
-  local existing
+  local existing branches=main
+  [ "$BASE_BRANCH" = main ] || branches="main and $BASE_BRANCH"
   if ! existing=$(api "repos/$REPO/rulesets" --jq '.[] | select(.target == "branch") | .id'); then
-    warn "main is not protected: rulesets are not available here (private repositories need a paid plan)"
+    warn "$branches not protected: rulesets are not available here (private repositories need a paid plan)"
     return
   fi
   if [ -n "$existing" ]; then
     ok "a branch ruleset already exists: left as it is"
-    note "It should require the status check 'ci / ci' on main."
+    note "It should require the status check 'ci / ci' on $branches."
     return
   fi
-  if jq -n '{name: "main", target: "branch", enforcement: "active",
-        conditions: {ref_name: {include: ["refs/heads/main"], exclude: []}},
+  if jq -n --arg name "$branches" --arg base "$BASE_BRANCH" '{name: $name, target: "branch", enforcement: "active",
+        conditions: {ref_name: {include: (["refs/heads/main", "refs/heads/" + $base] | unique), exclude: []}},
         bypass_actors: [{actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always"}],
         rules: [{type: "deletion"}, {type: "non_fast_forward"},
           {type: "pull_request", parameters: {required_approving_review_count: 0,
@@ -533,7 +540,7 @@ init_ruleset() {
           {type: "required_status_checks", parameters: {strict_required_status_checks_policy: false,
             required_status_checks: [{context: "ci / ci"}]}}]}' \
       | gh api -X POST "repos/$REPO/rulesets" --input - > /dev/null 2>&1; then
-    ok "ruleset 'main' created: pull request and the check 'ci / ci' required, admins can bypass"
+    ok "ruleset '$branches' created: pull request and the check 'ci / ci' required, admins can bypass"
   else
     warn "could not create the ruleset (rulesets on private repositories need a paid plan)"
   fi
@@ -561,9 +568,15 @@ cmd_init() {
   step "Next steps"
   note "1. Review the files, then commit and push them to main:"
   note "     git add .github .coderabbit.yaml .gitignore && git commit -m 'chore: install PEPPEC' && git push"
-  note "2. Install CodeRabbit on $REPO: https://github.com/apps/coderabbitai"
-  note "3. Prepare the Telegram bot: peppec bot"
-  note "4. Check everything: peppec doctor"
+  local n=2
+  if [ "$BASE_BRANCH" != main ]; then
+    note "2. Bring $BASE_BRANCH level with main, so it has the same files (this also creates it):"
+    note "     git push origin main:$BASE_BRANCH"
+    n=3
+  fi
+  note "$n. Install CodeRabbit on $REPO: https://github.com/apps/coderabbitai"
+  note "$((n + 1)). Prepare the Telegram bot: peppec bot"
+  note "$((n + 2)). Check everything: peppec doctor"
   if [ "$PROBLEMS" -gt 0 ]; then
     printf '\n%s%d problem(s) to fix, then run init again (it keeps what is already set):%s\n%s' "$R" "$PROBLEMS" "$N" "$PROBLEM_LIST"
     exit 1
@@ -574,9 +587,9 @@ cmd_init() {
 # A file that is not on the default branch: say so, and whether it is waiting in the local clone
 missing_file() {
   if [ "$IN_CLONE" = true ] && [ -f "$CLONE_ROOT/$1" ]; then
-    bad "$1 is in your clone but not on main yet: commit and push it"
+    bad "$1 is in your clone but not on ${2:-main} yet: commit and push it"
   else
-    bad "$1 missing on the default branch"
+    bad "$1 missing on ${2:-the default branch}"
   fi
 }
 
@@ -601,6 +614,15 @@ cmd_doctor() {
   while IFS='|' read -r name _ _; do
     local v; v=$(var_of "$name"); [ -z "$v" ] || is_number "$v" || bad "$name is not a number: $v"
   done <<< "$NUMBERS"
+  # Not in the list above: without it the base branch is main
+  BASE_BRANCH=$(var_of BASE_BRANCH); BASE_BRANCH="${BASE_BRANCH:-main}"
+  local default_branch; default_branch=$(gh api "repos/$REPO" --jq .default_branch)
+  if [ "$BASE_BRANCH" = "$default_branch" ]; then ok "base branch: $BASE_BRANCH"
+  elif gh api "repos/$REPO/branches/$BASE_BRANCH" > /dev/null 2>&1; then
+    ok "base branch: $BASE_BRANCH (issues are closed by the workflow; you merge it into $default_branch)"
+  else
+    bad "the base branch '$BASE_BRANCH' does not exist: git push origin $default_branch:$BASE_BRANCH"
+  fi
   local tz; tz=$(var_of TZ_NAME)
   if [ -n "$tz" ] && [ ! -e "/usr/share/zoneinfo/$tz" ] && [ ! -e "/var/db/timezone/zoneinfo/$tz" ]; then
     warn "TZ_NAME '$tz' is not a time zone known to this computer"
@@ -671,9 +693,14 @@ cmd_doctor() {
       *) bad "the '$f' workflow is disabled ($state): gh workflow enable $f.yml -R $REPO";;
     esac
   done
-  content=$(host_file .github/peppec.yml || true)
+  # The agent and the checks of its pull requests read the configuration from the base branch
+  content=$(host_file .github/peppec.yml "$BASE_BRANCH" || true)
+  if [ "$BASE_BRANCH" != "$default_branch" ] && [ -n "$content" ] \
+     && [ "$content" != "$(host_file .github/peppec.yml || true)" ]; then
+    warn ".github/peppec.yml differs between $BASE_BRANCH and $default_branch: the agent uses the one on $BASE_BRANCH"
+  fi
   preset=$(sed -n 's/^preset:[[:space:]]*//p' <<< "$content" | head -n 1)
-  if [ -z "$content" ]; then missing_file .github/peppec.yml
+  if [ -z "$content" ]; then missing_file .github/peppec.yml "$BASE_BRANCH"
   elif [ -z "$preset" ]; then bad ".github/peppec.yml has no preset"
   elif gh api "repos/$ENGINE/contents/presets/$preset/preset.yml?ref=${ref:-$REF}" > /dev/null 2>&1; then ok "preset $preset"
   else bad "preset '$preset' does not exist in the engine at ${ref:-$REF}"; fi
@@ -690,13 +717,16 @@ cmd_doctor() {
   fi
 
   step "Branch protection"
-  local checks
-  if ! checks=$(api "repos/$REPO/rules/branches/main" \
-      --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | join(", ")'); then
-    warn "main is not protected: rulesets are not available here (private repositories need a paid plan)"
-  elif [ -z "$checks" ]; then warn "main requires no status check: add 'ci / ci' to an active ruleset"
-  elif grep -q 'ci / ci' <<< "$checks"; then ok "main requires: $checks"
-  else bad "main requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
+  local checks branch branches="$default_branch"
+  [ "$BASE_BRANCH" = "$default_branch" ] || branches="$default_branch $BASE_BRANCH"
+  for branch in $branches; do
+    if ! checks=$(api "repos/$REPO/rules/branches/$branch" \
+        --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | join(", ")'); then
+      warn "$branch is not protected: rulesets are not available here (private repositories need a paid plan)"
+    elif [ -z "$checks" ]; then warn "$branch requires no status check: add 'ci / ci' to an active ruleset"
+    elif grep -q 'ci / ci' <<< "$checks"; then ok "$branch requires: $checks"
+    else bad "$branch requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
+  done
 
   step "Last runs"
   for f in ci agent; do

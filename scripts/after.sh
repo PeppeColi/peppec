@@ -2,6 +2,7 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 B="agent/issue-$ISSUE"
+BASE="${BASE_BRANCH:-main}"
 
 # Time budget: add this run's working minutes to the issue counter
 used=$(GH_TOKEN="$APP_TOKEN" marker_get "$ISSUE" minutes)
@@ -72,9 +73,16 @@ fi
 
 if [ "$ACTION" = start ]; then
   # Also recovers a branch pushed in an earlier run whose PR was never created
-  if [ "$(git rev-list --count origin/main..HEAD)" -gt 0 ]; then
+  if [ "$(git rev-list --count "origin/$BASE..HEAD")" -gt 0 ]; then
     [ "$pushed" = true ] || git push -q "https://x-access-token:${AGENT_TOKEN}@github.com/${REPO}.git" "HEAD:$B"
-    url=$(gh pr create -R "$REPO" --head "$B" --title "$TITLE" --body "Closes #$ISSUE")
+    # "Closes" works only towards the default branch. Towards another base it is left out:
+    # the workflow closes the issue, and the keyword would close it a second time, even if
+    # reopened in the meantime, when the base branch is later merged into the default one
+    body="Closes #$ISSUE"
+    if [ "$BASE" != "$(gh api "repos/$REPO" --jq .default_branch)" ]; then
+      body="Issue #$ISSUE. The workflow closes it when this pull request is merged into \`$BASE\`."
+    fi
+    url=$(gh pr create -R "$REPO" --head "$B" --base "$BASE" --title "$TITLE" --body "$body")
     add_label "${url##*/}" "review 1"
     exit 0
   fi
