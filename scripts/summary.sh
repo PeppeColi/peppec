@@ -7,7 +7,16 @@ list() { jq -r '.[] | "- #\(.number) \(.title)"'; }
 merged=$(gh pr list -R "$REPO" --state merged --search "merged:>=$since" --json number,title | list)
 blocked=$(gh issue list -R "$REPO" --state open --label "needs human" --json number,title | list)
 questions=$(gh issue list -R "$REPO" --state open --label "question open" --json number,title | list)
-queue=$(gh issue list -R "$REPO" --state open --label ready --limit 200 --json number --jq length)
+ready=$(gh issue list -R "$REPO" --state open --label ready --limit 200 --json number --jq '.[].number')
+queue=$(grep -c . <<< "$ready" || true)
+# Ready issues that an open issue blocks: they start only when that one is closed
+waiting=0
+for n in $ready; do
+  if [ "$(gh api "repos/$REPO/issues/$n" --jq '.issue_dependencies_summary.blocked_by // 0')" -gt 0 ]; then
+    waiting=$((waiting + 1))
+  fi
+done
+if [ "$waiting" -gt 0 ]; then queue="$queue, $waiting of them waiting for a blocking issue"; fi
 expiry=""
 # expires_soon DATE "what expires" "what to do": adds a warning during the last 30 days
 expires_soon() {
