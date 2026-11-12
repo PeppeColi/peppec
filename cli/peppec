@@ -517,6 +517,31 @@ init_files() {
   if [ -n "$added" ]; then ok ".gitignore (added:$added)"; else ok ".gitignore (unchanged)"; fi
 }
 
+# True when a deletion rule applies to the base branch from a ruleset without a bypass list
+base_branch_kept() {
+  local id
+  for id in $(gh api "repos/$REPO/rules/branches/$BASE_BRANCH" \
+      --jq '.[] | select(.type == "deletion") | .ruleset_id' 2> /dev/null); do
+    [ "$(gh api "repos/$REPO/rulesets/$id" --jq '.bypass_actors | length' 2> /dev/null)" != 0 ] || return 0
+  done
+  return 1
+}
+
+# GitHub deletes the head branch of a merged pull request, and the base branch is one when it is brought to main.
+# The main ruleset does not stop it: admins bypass it, and the one who merges is usually an admin.
+init_keep_base() {
+  [ "$BASE_BRANCH" != main ] || return 0
+  if base_branch_kept; then ok "$BASE_BRANCH is kept after its merges into main"; return; fi
+  if jq -n --arg name "keep $BASE_BRANCH" --arg base "$BASE_BRANCH" '{name: $name, target: "branch", enforcement: "active",
+        conditions: {ref_name: {include: ["refs/heads/" + $base], exclude: []}},
+        bypass_actors: [], rules: [{type: "deletion"}]}' \
+      | gh api -X POST "repos/$REPO/rulesets" --input - > /dev/null 2>&1; then
+    ok "ruleset 'keep $BASE_BRANCH' created: nobody can delete $BASE_BRANCH, so it survives its merges into main"
+  else
+    warn "$BASE_BRANCH will be deleted when you merge it into main: restore it each time with git push origin main:$BASE_BRANCH"
+  fi
+}
+
 init_ruleset() {
   step "Branch protection"
   local existing branches=main
@@ -564,6 +589,7 @@ cmd_init() {
   init_secrets
   init_files
   init_ruleset
+  init_keep_base
 
   step "Next steps"
   note "1. Review the files, then commit and push them to main:"
@@ -737,6 +763,13 @@ cmd_doctor() {
     elif grep -q 'ci / ci' <<< "$checks"; then ok "$branch requires: $checks"
     else bad "$branch requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
   done
+  # Bringing the base branch to $default_branch makes it the head of a merged pull request, which GitHub deletes.
+  # A deletion rule stops that only in a ruleset nobody can bypass: the one who merges is usually an admin.
+  if [ "$BASE_BRANCH" != "$default_branch" ] \
+     && [ "$(gh api "repos/$REPO" --jq .delete_branch_on_merge 2> /dev/null)" = true ] \
+     && ! base_branch_kept; then
+    warn "$BASE_BRANCH will be deleted when you merge it into $default_branch: peppec init adds the ruleset that keeps it; without rulesets, restore it after each merge with git push origin $default_branch:$BASE_BRANCH"
+  fi
 
   step "Last runs"
   for f in ci agent; do
