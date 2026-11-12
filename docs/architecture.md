@@ -26,7 +26,7 @@ The bot uses long polling, so it needs no public address and no open ports. Noti
 
 ```mermaid
 flowchart TD
-    A[Oldest issue labelled ready] --> B[Agent implements it on agent/issue-N]
+    A[Oldest ready issue that no open issue blocks] --> B[Agent implements it on agent/issue-N]
     B --> Q{Unclear?}
     Q -- yes --> W[Question on Telegram, waits for your reply]
     W --> B
@@ -41,6 +41,8 @@ flowchart TD
     D -- yes --> M[Merge, manual or automatic]
     M --> A
 ```
+
+The queue is the open issues labelled `ready`, oldest first. An issue that another open issue blocks (GitHub's "blocked by" relationship, in the sidebar of the issue or with `gh issue edit <N> --add-blocked-by <M>`) is skipped until the blocking issue is closed, so a group of issues can be queued at once and still be built in order. The daily summary says how many issues are waiting this way: a blocking issue that is not labelled `ready` holds them indefinitely.
 
 A single workflow wakes up every 15 minutes and on every relevant event: CI finished, review submitted, pull request closed, bot command. Each time it reads the state back from GitHub and picks exactly one move, so it can restart at any point. Only one run executes at a time.
 

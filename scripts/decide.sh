@@ -48,7 +48,14 @@ merged_pr() {
     --jq "[.[] | select(.mergedAt >= \"$since\")] | sort_by(.mergedAt) | last | .number // empty"
 }
 
-active=$(active_issue)
+# The open issues that block an issue (GitHub's "blocked by" relationship), on one line.
+# $2, optional: an issue to count as closed
+open_blockers() {
+  gh api --paginate "repos/$REPO/issues/$1/dependencies/blocked_by?per_page=100" \
+    --jq ".[] | select(.state == \"open\" and .number != ${2:-0}) | \"#\(.number)\"" | paste -sd' ' -
+}
+
+active=$(active_issue) closed=""
 # An open issue whose pull request is merged: the base branch is not the default one, so
 # GitHub did not close it, and it was merged by hand or the run that merged it stopped early
 if [ -n "$active" ]; then
@@ -56,8 +63,9 @@ if [ -n "$active" ]; then
   if [ -n "$done_pr" ]; then
     echo "PR #$done_pr of issue #$active is merged: closing the issue"
     close_merged "$active"
-    # Left out by number: right after the close the list may still show it as open
-    active=$(active_issue "$active")
+    # Left out by number: right after the close the lists may still show it as open
+    closed=$active
+    active=$(active_issue "$closed")
   fi
 fi
 
@@ -68,9 +76,15 @@ if [ -z "$active" ]; then
   if [ "$mode" = manual ] && [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ] \
      && [[ "$EVENT_HEAD_REF" == agent/* ]]; then ok=true; fi
   [ "$ok" = true ] || { echo "Outside the work window"; exit 0; }
-  issue=$(gh issue list -R "$REPO" --state open --label ready --limit 200 --json number,createdAt,labels \
-    --jq '[.[] | select([.labels[].name] | index("needs human") | not)] | sort_by(.createdAt) | .[0].number // empty')
-  [ -n "$issue" ] || { echo "No ready issues"; exit 0; }
+  # The oldest ready issue that no open issue blocks
+  ready=$(gh issue list -R "$REPO" --state open --label ready --limit 200 --json number,createdAt,labels \
+    --jq '[.[] | select([.labels[].name] | index("needs human") | not)] | sort_by(.createdAt) | .[].number')
+  for n in $ready; do
+    blockers=$(open_blockers "$n" "$closed")
+    if [ -z "$blockers" ]; then issue=$n; break; fi
+    echo "Issue #$n waits for $blockers"
+  done
+  [ -n "$issue" ] || { echo "No ready issues to start"; exit 0; }
   size=$(size_of "$(labels_of "$issue")")
   action=start; round=1; minutes=$(( $(budget "$issue") + 10 )); exit 0
 fi
