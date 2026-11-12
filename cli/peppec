@@ -737,6 +737,12 @@ cmd_doctor() {
     elif grep -q 'ci / ci' <<< "$checks"; then ok "$branch requires: $checks"
     else bad "$branch requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
   done
+  # Bringing the base branch to $default_branch makes it the head of a merged pull request, which GitHub deletes
+  if [ "$BASE_BRANCH" != "$default_branch" ] \
+     && [ "$(gh api "repos/$REPO" --jq .delete_branch_on_merge 2> /dev/null)" = true ] \
+     && ! gh api "repos/$REPO/rules/branches/$BASE_BRANCH" --jq '.[].type' 2> /dev/null | grep -qx deletion; then
+    warn "$BASE_BRANCH will be deleted when you merge it into $default_branch: add it to a ruleset that restricts deletions, or restore it after each merge with git push origin $default_branch:$BASE_BRANCH"
+  fi
 
   step "Last runs"
   for f in ci agent; do
