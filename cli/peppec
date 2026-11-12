@@ -693,6 +693,14 @@ cmd_doctor() {
       *) bad "the '$f' workflow is disabled ($state): gh workflow enable $f.yml -R $REPO";;
     esac
   done
+  # GitHub takes the workflow files from the default branch for scheduled and manual runs,
+  # and from the base branch for the runs a pull request starts: they must not differ
+  if [ "$BASE_BRANCH" != "$default_branch" ]; then
+    for f in agent ci summary; do
+      [ "$(host_file ".github/workflows/$f.yml" || true)" = "$(host_file ".github/workflows/$f.yml" "$BASE_BRANCH" || true)" ] \
+        || bad "$f.yml differs between $BASE_BRANCH and $default_branch: merge $default_branch into $BASE_BRANCH"
+    done
+  fi
   # The agent and the checks of its pull requests read the configuration from the base branch
   content=$(host_file .github/peppec.yml "$BASE_BRANCH" || true)
   if [ "$BASE_BRANCH" != "$default_branch" ] && [ -n "$content" ] \

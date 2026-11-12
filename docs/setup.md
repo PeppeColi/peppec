@@ -256,7 +256,8 @@ Then add `dev` to the target branches of the ruleset of Phase 1. `peppec init` a
 What changes:
 
 - **Issues are closed by the workflow.** GitHub closes an issue by itself only when its pull request reaches the default branch. A closed issue therefore means "merged into `dev`", not "on `main`".
-- **The configuration is read from `dev`.** `.github/peppec.yml` and your setup action travel with the code they check, and reach `main` together with it. The workflow files are still the ones on `main`: GitHub runs scheduled workflows from the default branch. `peppec doctor` warns when the configuration differs between the two branches.
+- **The configuration is read from `dev`.** `.github/peppec.yml` and your setup action travel with the code they check, and reach `main` together with it. `peppec doctor` warns when the configuration differs between the two branches.
+- **The workflow files must be the same on both branches.** GitHub runs the scheduled and manual runs from the copy on `main`, and the runs started by a pull request (review submitted, pull request closed) from the copy on `dev`. A change to them, such as an [upgrade](#upgrading), goes to `main` first and is then merged into `dev`. `peppec doctor` reports a difference as a problem.
 - **Bringing `dev` to `main` is yours to do**, with a pull request merged with a merge commit. A squash would leave the two branches with different histories, and the next pull request between them would conflict. A fix made directly on `main` must be merged back into `dev`.
 
 ## Phase 6 — Telegram bot
@@ -325,7 +326,7 @@ If something gets stuck, look first at the log of the `decide` job: it always sa
 
 ## Upgrading
 
-The engine version is the ref after `@` in the three workflows, repeated in `engine_ref`. To upgrade, change both in each file. `v1` follows every compatible release; use a full version or a commit SHA if you prefer to upgrade deliberately.
+The engine version is the ref after `@` in the three workflows, repeated in `engine_ref`. To upgrade, change both in each file. With a base branch other than `main`, merge `main` into it afterwards, so both branches run the same version. `v1` follows every compatible release; use a full version or a commit SHA if you prefer to upgrade deliberately.
 
 The bot follows the same versions: `docker compose pull && docker compose up -d`, then `/version`.
 
