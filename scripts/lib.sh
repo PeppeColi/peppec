@@ -7,9 +7,13 @@ notify() {
   # Also in the job log, so the reason of a stop can be read without Telegram
   echo "notify: $text"
   # $2, optional: the buttons under the message, as the reply_markup of the Telegram API
-  curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  # Telegram's refusal (wrong chat, bot blocked, bad markup) is only in its answer: log it
+  local answer
+  answer=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     -d chat_id="$TELEGRAM_CHAT_ID" --data-urlencode text="$text" \
-    ${2:+--data-urlencode "reply_markup=$2"} > /dev/null
+    ${2:+--data-urlencode "reply_markup=$2"}) || true
+  jq -e .ok <<< "$answer" > /dev/null 2>&1 \
+    || echo "notify: Telegram did not deliver it: $(jq -r '.description // empty' <<< "$answer" 2> /dev/null || echo "$answer")"
 }
 # A notification about a blocked issue, with the buttons the bot acts on: "action|value|",
 # the repository being the one the message starts with (see press in bot/bot.py)
