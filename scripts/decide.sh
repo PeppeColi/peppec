@@ -206,6 +206,17 @@ case "$state" in
     elif ! has "$pl" "ready to merge"; then action=notify_ready; fi
     exit 0;;
   CHANGES_REQUESTED)
+    # The agent may have answered this review instead of changing the code (after.sh): CodeRabbit
+    # replies within a minute or two, and approves when convinced. Without an approval by
+    # REVIEW_RETRY_MINUTES the next round starts, and the agent reads CodeRabbit's replies
+    rid=$(jq -r --arg sha "$sha" '[.[] | select(.commit_id == $sha and .state == "CHANGES_REQUESTED")] | last | .id' <<< "$reviews")
+    replied_at=$( {
+      gh api --paginate "repos/$REPO/pulls/$pr/comments?per_page=100" --jq '.[] | {body, created_at}'
+      gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" --jq '.[] | {body, created_at}'
+    } | jq -rs --arg m "<!-- peppec:reply=$rid -->" 'map(select(.body | contains($m)) | .created_at) | sort | last // empty')
+    if [ -n "$replied_at" ] && [ "$(age_minutes "$replied_at")" -lt "$REVIEW_RETRY_MINUTES" ]; then
+      echo "Waiting for CodeRabbit to weigh the agent's reply ($(age_minutes "$replied_at") min)"; exit 0
+    fi
     if [ "$round" -ge "$MAX_REVIEW_ROUNDS" ]; then
       action=stop; reason="review not passed after $round rounds"; exit 0
     fi

@@ -71,6 +71,30 @@ if ! git diff --cached --quiet; then
   pushed=true
 fi
 
+# Findings the agent left unchanged on purpose: its reasons go to CodeRabbit, in the thread of
+# each finding (.agent/replies/<comment id>.md) or on the pull request (.agent/replies/review.md).
+# CodeRabbit weighs them and approves when convinced; decide.sh gives it time before the next round
+replied=false
+if [ "$ACTION" = fix_review ] && [ -d .agent/replies ] && [ -s .agent/review-id ]; then
+  marker="<!-- peppec:reply=$(cat .agent/review-id) -->"
+  for f in .agent/replies/*.md; do
+    [ -s "$f" ] || continue
+    id=$(basename "$f" .md)
+    body="@coderabbitai $(cat "$f")
+
+$marker"
+    if [ "$id" = review ]; then
+      gh pr comment "$PR" -R "$REPO" --body "$body" > /dev/null && replied=true
+    elif [[ "$id" =~ ^[0-9]+$ ]]; then
+      if gh api "repos/$REPO/pulls/$PR/comments/$id/replies" -f body="$body" > /dev/null; then
+        replied=true
+      else
+        echo "Could not reply to review comment $id"
+      fi
+    fi
+  done
+fi
+
 if [ "$ACTION" = start ]; then
   # Also recovers a branch pushed in an earlier run whose PR was never created
   if [ "$(git rev-list --count "origin/$BASE..HEAD")" -gt 0 ]; then
@@ -100,10 +124,13 @@ $out"
   fi
 fi
 
-if [ "$pushed" = false ]; then
+if [ "$pushed" = false ] && [ "$replied" = false ]; then
   add_label "$ISSUE" "needs human"
   notify_blocked "The agent produced no changes on #$ISSUE."
   exit 0
+fi
+if [ "$pushed" = false ]; then
+  notify "The agent changed nothing on #$ISSUE and answered CodeRabbit instead: https://github.com/$REPO/pull/$PR"
 fi
 
 case "$ACTION" in

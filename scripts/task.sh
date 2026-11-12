@@ -10,7 +10,7 @@ fi
 if [ "$ACTION" = start ]; then
   add_label "$ISSUE" "in progress"; rm_label "$ISSUE" "ready"
 fi
-mkdir -p .agent; rm -f .agent/question.md .agent/spec.md
+mkdir -p .agent; rm -rf .agent/question.md .agent/spec.md .agent/replies .agent/review-id
 # The issue this one is a sub-issue of, when you wrote it: the specification of the larger
 # piece of work, given to the agent as background in a file of its own
 if parent=$(gh api "repos/$REPO/issues/$ISSUE/parent" 2> /dev/null) \
@@ -41,9 +41,20 @@ echo "app_slug=${APP_LOGIN%\[bot\]}" >> "$GITHUB_OUTPUT"
   if [ "$ACTION" = fix_review ]; then
     rid=$(gh api "repos/$REPO/pulls/$PR/reviews?per_page=100" \
       --jq '[.[] | select(.user.login == "coderabbitai[bot]" and .state == "CHANGES_REQUESTED")] | last | .id')
+    # after.sh posts the agent's replies as answers to this review
+    echo "$rid" > .agent/review-id
     echo; echo "## CodeRabbit review to address"
     gh api "repos/$REPO/pulls/$PR/reviews/$rid" --jq .body
+    # Each finding with its number, followed by the replies in its thread from the owner (and
+    # so the agent's earlier replies), the app and CodeRabbit: nobody else's text reaches the agent
+    thread=$(mktemp)
+    gh api --paginate "repos/$REPO/pulls/$PR/comments?per_page=100" | jq -s 'add // []' > "$thread"
     gh api "repos/$REPO/pulls/$PR/reviews/$rid/comments?per_page=100" \
-      --jq '.[] | "### \(.path):\(.line // .original_line)\n\(.body)\n"'
+      | jq -r --slurpfile all "$thread" --arg a "$OWNER_LOGIN" --arg b "$APP_LOGIN" '.[] | . as $c
+        | "### \(.path):\(.line // .original_line) (comment \(.id))\n\(.body)\n",
+          ($all[0][] | select(.in_reply_to_id == $c.id
+              and (.user.login == $a or .user.login == $b or .user.login == "coderabbitai[bot]"))
+           | "#### Reply from \(.user.login)\n\(.body)\n")'
+    rm -f "$thread"
   fi
 } > .agent/task.md
