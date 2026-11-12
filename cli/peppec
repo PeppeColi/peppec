@@ -622,6 +622,8 @@ cmd_doctor() {
     ok "base branch: $BASE_BRANCH (issues are closed by the workflow; you merge it into $default_branch)"
   else
     bad "the base branch '$BASE_BRANCH' does not exist: git push origin $default_branch:$BASE_BRANCH"
+    # One problem, one line: the checks below look at $default_branch, the branch it will be created from
+    BASE_BRANCH="$default_branch"
   fi
   local tz; tz=$(var_of TZ_NAME)
   if [ -n "$tz" ] && [ ! -e "/usr/share/zoneinfo/$tz" ] && [ ! -e "/var/db/timezone/zoneinfo/$tz" ]; then
