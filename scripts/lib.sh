@@ -43,3 +43,20 @@ marker_set() {
     gh api -X POST "repos/$REPO/issues/$1/comments" -f body="<!-- peppec:$2=$3 -->" > /dev/null
   fi
 }
+# Tells you when the last sub-issue of a parent issue is closed: the whole feature is merged
+# and can be tried. $1 is the sub-issue just closed, counted as closed even if the API still
+# lists it as open. The number of sub-issues is remembered on the parent, so the message is
+# sent once, and again only if sub-issues are added later and closed in turn.
+notify_feature_done() {
+  local parent pn subs total open
+  parent=$(gh api "repos/$REPO/issues/$1/parent" 2> /dev/null) || return 0
+  [ "$(jq -r .repository_url <<< "$parent")" = "https://api.github.com/repos/$REPO" ] || return 0
+  pn=$(jq -r .number <<< "$parent")
+  subs=$(gh api --paginate "repos/$REPO/issues/$pn/sub_issues?per_page=100" | jq -s 'add // []')
+  total=$(jq length <<< "$subs")
+  open=$(jq --argjson n "$1" '[.[] | select(.state == "open" and .number != $n)] | length' <<< "$subs")
+  [ "$open" -eq 0 ] || return 0
+  [ "$(marker_get "$pn" done)" != "$total" ] || return 0
+  marker_set "$pn" done "$total"
+  notify "All $total sub-issues of #$pn \"$(jq -r .title <<< "$parent")\" are merged into ${BASE_BRANCH:-main}: the feature is ready to be tried. https://github.com/$REPO/issues/$pn"
+}
