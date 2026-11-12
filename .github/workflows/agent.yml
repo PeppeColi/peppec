@@ -90,6 +90,9 @@ jobs:
           EVENT_MERGED: ${{ github.event.pull_request.merged }}
           EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           FORCE: ${{ inputs.force }}
+          # For the message sent when the last sub-issue of a feature is closed
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       - if: failure()
         run: |
           [ "$GITHUB_EVENT_NAME" != schedule ] || [ "$(date +%-M)" -lt 15 ] || exit 0

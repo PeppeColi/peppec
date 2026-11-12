@@ -15,7 +15,8 @@ case "$ACTION" in
   merge)
     gh pr merge "$PR" -R "$REPO" --squash
     close_merged "$ISSUE"
-    notify "Merged PR #$PR (issue #$ISSUE).";;
+    notify "Merged PR #$PR (issue #$ISSUE)."
+    notify_feature_done "$ISSUE";;
   notify_ready)
     add_label "$PR" "ready to merge"
     notify "PR #$PR for issue #$ISSUE is ready to merge: https://github.com/$REPO/pull/$PR";;

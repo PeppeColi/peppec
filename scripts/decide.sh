@@ -65,8 +65,15 @@ if [ -n "$active" ]; then
     close_merged "$active"
     # Left out by number: right after the close the lists may still show it as open
     closed=$active
+    notify_feature_done "$closed"
     active=$(active_issue "$closed")
   fi
+fi
+
+# A merge done by hand into the default branch: GitHub has closed the issue by itself
+if [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ] \
+   && [[ "$EVENT_HEAD_REF" =~ ^agent/issue-([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" != "$closed" ]; then
+  notify_feature_done "${BASH_REMATCH[1]}"
 fi
 
 if [ -z "$active" ]; then
