@@ -44,6 +44,8 @@ flowchart TD
 
 The queue is the open issues labelled `ready`, oldest first. An issue that another open issue blocks (GitHub's "blocked by" relationship, in the sidebar of the issue or with `gh issue edit <N> --add-blocked-by <M>`) is skipped until the blocking issue is closed, so a group of issues can be queued at once and still be built in order. The daily summary says how many issues are waiting this way: a blocking issue that is not labelled `ready` holds them indefinitely.
 
+An issue can be a sub-issue of a larger one that holds the specification of a whole feature. The agent then receives the body of the parent too, in `.agent/spec.md`, as background: it builds only what its own issue asks.
+
 A single workflow wakes up every 15 minutes and on every relevant event: CI finished, review submitted, pull request closed, bot command. Each time it reads the state back from GitHub and picks exactly one move, so it can restart at any point. Only one run executes at a time.
 
 ## Presets and configuration
@@ -183,7 +185,7 @@ Two hidden counters are kept as comments (`<!-- peppec:KEY=VALUE -->`): the minu
 
 On a public repository anyone can open issues and comment. These rules stop a stranger, and the agent itself, from steering the system.
 
-- **Who gives instructions.** Agents work only on issues labelled `ready`, and only you and the app can apply labels. The task contains only the comments written by your account and by the app.
+- **Who gives instructions.** Agents work only on issues labelled `ready`, and only you and the app can apply labels. The task contains only the comments written by your account and by the app. When the issue is a sub-issue, the body of its parent is added as background, only if your account wrote the parent.
 - **Who can command the bot.** Only your Telegram chat.
 - **Secrets per step.** Each secret reaches only the step that needs it. The step where Claude runs sees only the Claude token; the app token is created after Claude has finished.
 - **The agent never commits.** The workflow commits and pushes, after checking what changed. Dependencies, build output and caches listed by the preset are left out even when the project's `.gitignore` misses them. Changes to protected paths (`.github`, plus the ones of the preset and of the configuration) are refused and the issue is labelled `needs human`.
