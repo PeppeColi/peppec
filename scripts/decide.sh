@@ -112,6 +112,7 @@ if has "$il" "awaiting quota"; then
 fi
 
 base=$(size_of "$il")
+# Only the agent's own branch: the base branch -> main merge is the owner's end-to-end sign-off, never automatic
 pr=$(gh pr list -R "$REPO" --head "agent/issue-$issue" --state open --json number --jq '.[0].number // empty')
 left=$(budget "$issue")
 if [ "$left" -le 0 ]; then action=stop; reason="time budget of $MAX_ISSUE_MINUTES minutes used up"; exit 0; fi

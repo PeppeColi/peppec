@@ -26,7 +26,7 @@ gh issue edit <ISSUE> --add-blocked-by <BLOCKER>
 
 4. **Collect the feature on a base branch.** With [a base branch other than `main`](setup.md#a-base-branch-other-than-main) the slices are merged into it, and `main` gets the feature only when it is complete.
 5. **Try it when you are told.** When the last sub-issue is closed you get a Telegram message. Try the feature on the base branch; what does not work becomes a new sub-issue of the same specification, and you get the message again when those are closed too.
-6. **Bring it to `main`** with a pull request merged with a merge commit, and close the specification.
+6. **Bring it to `main`** with a pull request merged with a merge commit, and close the specification. This merge is yours, always, in either merge mode: merging the base branch into `main` is how you declare that the feature passed its end-to-end test. PEPPEC never opens or merges that pull request.
 
 To have the feature checked end to end by the machine as well, write the scenarios in the specification while planning, in given/when/then form, and make the last sub-issue "automate these scenarios", blocked by all the others. The agent then translates scenarios you wrote instead of inventing its own exam, and they run with the checks from then on.
 
