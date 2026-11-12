@@ -64,7 +64,9 @@ notify_feature_done() {
   [ "$open" -eq 0 ] || return 0
   [ "$(marker_get "$pn" done)" != "$total" ] || return 0
   marker_set "$pn" done "$total"
-  notify "All $total sub-issues of #$pn \"$(jq -r .title <<< "$parent")\" are merged into ${BASE_BRANCH:-main}: the feature is ready to be tried. https://github.com/$REPO/issues/$pn"
+  # The button asks the bot for one sentence and makes it a new sub-issue (report in bot/bot.py)
+  notify "All $total sub-issues of #$pn \"$(jq -r .title <<< "$parent")\" are merged into ${BASE_BRANCH:-main}: the feature is ready to be tried. https://github.com/$REPO/issues/$pn" \
+    "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$pn|\"}]]}"
 }
 
 # The text under the "Out of scope" heading of a Markdown text on standard input, up to the

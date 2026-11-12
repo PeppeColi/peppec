@@ -44,7 +44,7 @@ flowchart TD
 
 The queue is the open issues labelled `ready`, oldest first. An issue that another open issue blocks (GitHub's "blocked by" relationship, in the sidebar of the issue or with `gh issue edit <N> --add-blocked-by <M>`) is skipped until the blocking issue is closed, so a group of issues can be queued at once and still be built in order. The daily summary says how many issues are waiting this way: a blocking issue that is not labelled `ready` holds them indefinitely.
 
-An issue can be a sub-issue of a larger one that holds the specification of a whole feature. The agent then receives the body of the parent too, in `.agent/spec.md`, as background: it builds only what its own issue asks. The "Out of scope" section of the issue, when there is one, is copied into the pull request, so that the reviewer does not ask for work that belongs to another issue. When the last sub-issue of a parent is closed you get a Telegram message: the whole feature is merged and can be tried.
+An issue can be a sub-issue of a larger one that holds the specification of a whole feature. The agent then receives the body of the parent too, in `.agent/spec.md`, as background: it builds only what its own issue asks. The "Out of scope" section of the issue, when there is one, is copied into the pull request, so that the reviewer does not ask for work that belongs to another issue. When the last sub-issue of a parent is closed you get a Telegram message: the whole feature is merged and can be tried. Its Report a problem button turns one sentence of yours into a new sub-issue of the parent, `ready` and `size: S`; the bot adds the labels only after linking it, so the agent never starts it without the specification.
 
 A single workflow wakes up every 15 minutes and on every relevant event: CI finished, review submitted, pull request closed, bot command. Each time it reads the state back from GitHub and picks exactly one move, so it can restart at any point. Only one run executes at a time.
 
@@ -131,7 +131,7 @@ The workflow merges only the pull requests of its own `agent/issue-*` branches. 
 
 The bot answers only your chat and acts on GitHub as the app.
 
-There is little to type. `/status` answers with one message per repository, and under each one the buttons that change it: pause or resume the queue, switch the merge mode and the schedule, unblock the issue in progress or give it a hint. The notifications about a blocked issue carry the Unblock and Hint buttons too. A Hint button asks for the text: write it as the reply the bot opens for you. Typing `/` shows the list of the commands.
+There is little to type. `/status` answers with one message per repository, and under each one the buttons that change it: pause or resume the queue, switch the merge mode and the schedule, unblock the issue in progress or give it a hint. The notifications about a blocked issue carry the Unblock and Hint buttons too. A Hint button asks for the text: write it as the reply the bot opens for you. The message about a feature ready to be tried carries a Report a problem button, which works the same way. Typing `/` shows the list of the commands.
 
 The commands still work when typed in full:
 
@@ -160,8 +160,8 @@ The Resume button only lifts the pause; `/unblock` and the Unblock button also c
 
 The bot can also serve a web page, meant for a phone: the state of every repository at a glance, and the same actions as the bot. It is off unless `DASHBOARD_PASSWORD` is set in the bot's `.env`.
 
-- The home page only shows: what is waiting for you (blocked issues, open questions, pull requests ready to merge in manual mode) and one line per repository. Nothing on it acts.
-- Touching a line opens its page, where the buttons are: Unblock and Give a hint on a blocked issue, the answer to a question, the merge mode, the schedule and the pause of a repository.
+- The home page only shows: what is waiting for you (blocked issues, open questions, pull requests ready to merge in manual mode), the features ready to be tried (open specifications whose sub-issues are all closed) and one line per repository. Nothing on it acts.
+- Touching a line opens its page, where the buttons are: Unblock and Give a hint on a blocked issue, the answer to a question, Report a problem on a feature ready to be tried, the merge mode, the schedule and the pause of a repository.
 - Every action taken from the dashboard is also reported in the Telegram chat.
 
 - Optionally, the home page also shows the usage of your Claude subscription: the current session, the weekly limit and any limit per model, each with when it resets. It is read from Anthropic when the page opens and when you press "Refresh usage", never on a timer. A reading less than a minute old is shown again instead of asking Anthropic, and when Anthropic answers `429 Too Many Requests` the bot asks nothing more until its `Retry-After` has passed (a minute without one), showing the last reading with a note. It needs Claude Code logged in inside the bot's container (see [setup](setup.md)); without that login the section is hidden. The usage comes from the endpoint behind Claude Code's `/usage`, which Anthropic does not document: if it changes, the section shows an error and the rest of the page keeps working. The token from `claude setup-token` cannot read it, so this is a separate login. When its access token has expired, the bot runs `claude -p ok --model haiku` once to renew it, which costs a tiny Haiku request. The limits are those of your whole account, your own sessions included.

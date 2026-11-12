@@ -26,6 +26,8 @@ PREFIX = re.compile(r"^\[([\w.-]+/[\w.-]+)\] ")
 QUESTION = re.compile(r"^(?:\[\S+\] )?Question on #(\d+):")
 # The message a "Hint" button asks to reply to
 HINT = re.compile(r"^Hint for ([\w.-]+/[\w.-]+)#(\d+):")
+# The message a "Report a problem" button asks to reply to; the number is the specification's
+REPORT = re.compile(r"^Problem with ([\w.-]+/[\w.-]+)#(\d+):")
 # The menu Telegram shows when you type "/"
 COMMANDS = [
     ("status", "State of the queues, with buttons to change it"),
@@ -197,7 +199,32 @@ class Repo:
                 "pr": {"number": pr, "labels": self.labels(pr), "url": f"{out['url']}/pull/{pr}"} if pr else None}
         out["queue"] = [{"number": i["number"], "title": i["title"], "size": size_of([x["name"] for x in i["labels"]])}
                         for i in self.issues("ready") if not any(x["name"] == "in progress" for x in i["labels"])]
+        out["trying"] = [{"number": i["number"], "title": i["title"], "url": f"{out['url']}/issues/{i['number']}",
+                          "total": i["sub_issues_summary"]["total"]} for i in self.features_done()]
         return out
+
+    def features_done(self):
+        """The open specifications whose sub-issues are all closed: features ready to be tried."""
+        params = {"state": "open", "per_page": 100, "sort": "created", "direction": "asc"}
+        return [i for i in self.gh("GET", "/issues", params=params) if "pull_request" not in i
+                and (s := i.get("sub_issues_summary") or {}).get("total") and s["completed"] == s["total"]]
+
+    def report(self, spec, text):
+        """A problem found while trying a feature: a new sub-issue of its specification, size S,
+        in the queue. Labelled only once linked, so the agent never starts it without the spec."""
+        parent = self.gh("GET", f"/issues/{spec}")
+        if parent.get("state") != "open" or "pull_request" in parent:
+            raise UserError(f"{self.name}#{spec} is not an open issue.")
+        text = text.strip()
+        first = text.splitlines()[0].strip()
+        title = first if len(first) <= 80 else first[:79].rstrip() + "…"
+        body = (f"Found while trying the feature of #{spec} on the base branch, reported from the bot:\n\n"
+                f"{text}\n\nThe specification, with its scenarios, is the parent issue.")
+        issue = self.gh("POST", "/issues", json={"title": title, "body": body})
+        self.gh("POST", f"/issues/{spec}/sub_issues", json={"sub_issue_id": issue["id"]})
+        self.gh("POST", f"/issues/{issue['number']}/labels", json={"labels": ["ready", "size: S"]})
+        self.dispatch()
+        return f"Reported as {self.name}#{issue['number']}, a sub-issue of #{spec}, size S, in the queue."
 
     def apply(self, action, value=""):
         """The actions that need no text, shared by the buttons and the dashboard."""
@@ -304,6 +331,12 @@ def ask_hint(repo, n):
          {"force_reply": True, "input_field_placeholder": "Hint for the agent"})
 
 
+def ask_report(repo, spec):
+    """Asks what does not work in a feature: the answer is a reply to this message, see REPORT."""
+    send(f"Problem with {repo.name}#{spec}: reply to this message with what does not work, in one sentence.",
+         {"force_reply": True, "input_field_placeholder": "What does not work"})
+
+
 def names():
     return ", ".join(r.name for r in REPOS)
 
@@ -367,9 +400,15 @@ def handle(msg):
             if not repo:
                 raise UserError(f"I do not follow {m.group(1)}. Repositories: {names()}.")
             return send(repo.hint(int(m.group(2)), text))
+        m = REPORT.match(reply.get("text") or "")
+        if m:
+            repo = find(m.group(1))
+            if not repo:
+                raise UserError(f"I do not follow {m.group(1)}. Repositories: {names()}.")
+            return send(repo.report(int(m.group(2)), text))
         m = QUESTION.match(reply.get("text") or "")
         if not m:
-            return send("Replies are accepted only to \"Question on #N\" messages.")
+            return send("Replies are accepted only to \"Question on #N\", \"Hint for\" and \"Problem with\" messages.")
         if not context:
             return send("This message does not say which repository it comes from: "
                         "upgrade the engine of that repository to 1.6 or later.")
@@ -417,6 +456,7 @@ def handle(msg):
              "Without a repository, /status and /pause apply to all of them. The other commands need it "
              "when there is more than one, unless you send them as a reply to a notification.\n"
              "To answer a question, reply to its message.\n"
+             "When a feature is ready to be tried, its message has a \"Report a problem\" button.\n"
              f"Repositories: {names()}.")
     return None
 
@@ -432,6 +472,9 @@ def press(query):
     if action == "hint" and value.isdigit():
         ask_hint(repo, int(value))
         done = "Reply with the text of the hint."
+    elif action == "report" and value.isdigit():
+        ask_report(repo, int(value))
+        done = "Reply with what does not work."
     elif action == "refresh":
         done = "Updated."
     else:
@@ -440,7 +483,7 @@ def press(query):
         text, markup = repo.panel()
         tg("editMessageText", chat_id=CHAT, message_id=msg["message_id"], text=text.replace("`", ""),
            reply_markup=markup)
-    elif action != "hint":
+    elif action not in ("hint", "report"):
         send(done)  # a notification stays as it is: the outcome goes in a new message
     return done
 
@@ -496,10 +539,10 @@ def dashboard_action(req):
     action, value = str(req.get("action", "")), str(req.get("value", ""))
     text = str(req.get("text", "")).strip()[:4000]
     with LOCK:
-        if action in ("hint", "answer"):
+        if action in ("hint", "answer", "report"):
             if not value.isdigit() or not text:
                 raise UserError("The text is missing.")
-            done = repo.hint(int(value), text) if action == "hint" else repo.answer(int(value), text)
+            done = {"hint": repo.hint, "answer": repo.answer, "report": repo.report}[action](int(value), text)
         else:
             done = repo.apply(action, value)
         CACHE.pop(repo.key, None)  # only this repository is read again
