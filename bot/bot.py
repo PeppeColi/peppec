@@ -324,7 +324,10 @@ def send(text, markup=None):
 
 def send_panels(repos):
     for r in repos:
-        send(*r.panel())
+        try:
+            send(*r.panel())
+        except Exception as e:  # one repository that cannot be read does not hide the others
+            send(f"{r.name}\n{explain(e)}")
 
 
 def ask_hint(repo, n):
@@ -527,7 +530,12 @@ def dashboard_state(fresh=False):
         now = time.time()
         for r in REPOS:
             if now - CACHE.get(r.key, (0.0, None))[0] > (5 if fresh else 20):
-                CACHE[r.key] = (time.time(), r.state())
+                try:
+                    read = r.state()
+                except Exception as e:  # one repository that cannot be read does not hide the others
+                    read = {"name": r.name, "key": r.key, "url": f"https://github.com/{r.name}",
+                            "error": explain(e)}
+                CACHE[r.key] = (time.time(), read)
         # "at" is the oldest reading: the page never claims to be fresher than it is
         data = {"version": VERSION, "at": int(min(CACHE[r.key][0] for r in REPOS)),
                 "repos": [CACHE[r.key][1] for r in REPOS]}
