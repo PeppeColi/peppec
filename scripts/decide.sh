@@ -37,6 +37,23 @@ ctrl=$(labels_of "$CONTROL_ISSUE")
 if has "$ctrl" "paused"; then echo "Queue paused"; exit 0; fi
 mode=manual; has "$ctrl" "auto mode" && mode=automatic
 
+# Without its base branch (deleted by hand, or by GitHub after a merge into the default branch)
+# the queue has nothing to start from or to merge into: every issue would fail in turn. So the
+# whole queue stops here and you are told once. The "base missing" label on the control panel
+# remembers that the message was sent; the queue goes on by itself when the branch is back
+if base_branch_missing; then
+  echo "The base branch $BASE_BRANCH does not exist: queue stopped"
+  if ! has "$ctrl" "base missing"; then
+    add_label "$CONTROL_ISSUE" "base missing"
+    notify "Queue stopped: the base branch $BASE_BRANCH does not exist. Create it again, for example with: git push origin $(gh api "repos/$REPO" --jq .default_branch):$BASE_BRANCH. The queue goes on by itself once the branch is back. $RUN_URL"
+  fi
+  exit 0
+fi
+if has "$ctrl" "base missing"; then
+  rm_label "$CONTROL_ISSUE" "base missing"
+  notify "The base branch $BASE_BRANCH is back: the queue goes on."
+fi
+
 # $1, optional: an issue to leave out
 active_issue() {
   gh issue list -R "$REPO" --state open --label "in progress" --json number,createdAt \

@@ -90,6 +90,7 @@ ci 5|Check fix attempt 5
 paused|Queue paused (control panel)
 auto mode|Automatic merge enabled (control panel)
 always on|New issues start at any hour, not only at night (control panel)
+base missing|The base branch does not exist: queue stopped until it is back (control panel)
 EOF
 ```
 
@@ -259,6 +260,7 @@ What changes:
 - **The configuration is read from `dev`.** `.github/peppec.yml` and your setup action travel with the code they check, and reach `main` together with it. `peppec doctor` warns when the configuration differs between the two branches.
 - **The workflow files must be the same on both branches.** GitHub runs the scheduled and manual runs from the copy on `main`, and the runs started by a pull request (review submitted, pull request closed) from the copy on `dev`. A change to them, such as an [upgrade](#upgrading), goes to `main` first and is then merged into `dev`. `peppec doctor` reports a difference as a problem.
 - **Bringing `dev` to `main` is yours to do**, with a pull request merged with a merge commit. A squash would leave the two branches with different histories, and the next pull request between them would conflict. A fix made directly on `main` must be merged back into `dev`. `dev` stays after the merge: GitHub does not delete merged branches here (Phase 1), on any plan. Do not press "Delete branch" on that pull request. The second ruleset makes the button fail; the first one does not, because admins bypass it. Where rulesets are not available and `dev` was deleted by mistake, "Restore branch" on the same pull request brings it back.
+- **Without `dev` the queue stops.** If the branch is missing, nothing is started and you get one Telegram message; the queue goes on by itself when the branch is back (see [Merge modes](architecture.md#merge-modes)).
 
 ## Phase 6 — Telegram bot
 

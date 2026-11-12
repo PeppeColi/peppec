@@ -292,7 +292,7 @@ function home() {
           "All " + f.total + " sub-issues merged")))),
     el("div", {class: "group"}, el("div", {class: "label"}, "Repositories"),
       state.repos.map((r) => el("div", {class: "card"}, row("#/repo/" + r.key, short(r),
-        cap(r.mode) + " · " + (r.schedule === "always" ? "Always on" : "Nightly") + " · " + (r.paused ? "Paused" : "Running"),
+        cap(r.mode) + " · " + (r.schedule === "always" ? "Always on" : "Nightly") + " · " + (r.base_missing ? "Base branch missing" : r.paused ? "Paused" : "Running"),
         (r.active ? "#" + r.active.number + " in progress" : "No issue in progress") + " · " + r.queue.length + " in queue")))),
     claude(),
     el("div", {class: "small center"}, "bot " + state.version),

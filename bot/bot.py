@@ -152,6 +152,8 @@ class Repo:
                f"Mode: {'automatic' if auto else 'manual'}",
                f"Schedule: {'always' if always else 'nightly'}",
                f"Paused: {'yes' if paused else 'no'}"]
+        if "base missing" in c:
+            out.append("Stopped: the base branch does not exist")
         rows = [[self.button("Resume", "resume") if paused else self.button("Pause", "pause")],
                 [self.button(f"Mode \u2192 {'manual' if auto else 'automatic'}", "mode",
                              "manual" if auto else "automatic"),
@@ -177,7 +179,7 @@ class Repo:
         out = {"name": self.name, "key": self.key, "url": f"https://github.com/{self.name}",
                "mode": "automatic" if "auto mode" in c else "manual",
                "schedule": "always" if "always on" in c else "nightly",
-               "paused": "paused" in c, "active": None}
+               "paused": "paused" in c, "base_missing": "base missing" in c, "active": None}
         active = self.issues("in progress")
         if active:
             issue = active[0]

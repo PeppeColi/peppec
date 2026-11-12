@@ -39,7 +39,8 @@ ci 4|Check fix attempt 4
 ci 5|Check fix attempt 5
 paused|Queue paused (control panel)
 auto mode|Automatic merge enabled (control panel)
-always on|New issues start at any hour, not only at night (control panel)'
+always on|New issues start at any hour, not only at night (control panel)
+base missing|The base branch does not exist: queue stopped until it is back (control panel)'
 
 # name|default|question; an empty default means the value is computed or asked without one
 NUMBERS='WORK_START_HOUR|22|Hour at which agents may start new issues (0-23)
@@ -705,6 +706,7 @@ cmd_doctor() {
       case "$state" in *"auto mode"*) note "merge mode: automatic";; *) note "merge mode: manual";; esac
       case "$state" in *"always on"*) note "schedule: always";; *) note "schedule: nightly";; esac
       case "$state" in *paused*) warn "the queue is paused";; esac
+      case "$state" in *"base missing"*) warn "the queue is stopped: its base branch was missing at the last run";; esac
     fi
   fi
 
