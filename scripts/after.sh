@@ -82,6 +82,18 @@ if [ "$ACTION" = start ]; then
     if [ "$BASE" != "$(gh api "repos/$REPO" --jq .default_branch)" ]; then
       body="Issue #$ISSUE. The workflow closes it when this pull request is merged into \`$BASE\`."
     fi
+    # What the issue leaves out goes into the pull request: the reviewer sees only the pull
+    # request, and would otherwise ask for work that belongs to another issue of the feature
+    out=$(gh issue view "$ISSUE" -R "$REPO" --json body --jq '.body // ""' | out_of_scope)
+    if [ -n "$out" ]; then
+      body="$body
+
+## Out of scope
+
+The issue leaves the following out on purpose, usually because another issue covers it. Please do not ask for it in the review.
+
+$out"
+    fi
     url=$(gh pr create -R "$REPO" --head "$B" --base "$BASE" --title "$TITLE" --body "$body")
     add_label "${url##*/}" "review 1"
     exit 0
