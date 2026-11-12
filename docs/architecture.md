@@ -67,7 +67,7 @@ Two more keys cover what a preset cannot know: `options` passes values to the pr
 
 CI and the agent use the same definition: CI runs the setup and the check commands, and the agent's prompt tells it to run the same commands until they pass.
 
-The configuration is always read from `main`. Pull requests from `agent/*` branches are checked with the configuration of the base branch, so the agent cannot weaken its own checks.
+The configuration is always read from the base branch: `main`, or the branch named by the `BASE_BRANCH` variable. Pull requests from `agent/*` branches are checked with the configuration of the base branch, so the agent cannot weaken its own checks.
 
 ## Model selection
 
@@ -116,6 +116,8 @@ When the Claude quota runs out, the issue gets the `awaiting quota` label, you g
 | --- | --- | --- |
 | Manual (default) | You, with the Merge button | The queue waits for your merge |
 | Automatic | The workflow, as the app, as soon as the review passes | The queue runs on its own through the work window |
+
+Pull requests are merged into the base branch: `main`, or the branch named by the `BASE_BRANCH` variable. GitHub closes an issue by itself only when its pull request reaches the default branch, so with another base branch the workflow closes it: right after an automatic merge, and at its next run after a merge done by hand. An issue you reopen after a merge is worked on again.
 
 ## Telegram bot
 
@@ -183,7 +185,7 @@ On a public repository anyone can open issues and comment. These rules stop a st
 - **Who can command the bot.** Only your Telegram chat.
 - **Secrets per step.** Each secret reaches only the step that needs it. The step where Claude runs sees only the Claude token; the app token is created after Claude has finished.
 - **The agent never commits.** The workflow commits and pushes, after checking what changed. Dependencies, build output and caches listed by the preset are left out even when the project's `.gitignore` misses them. Changes to protected paths (`.github`, plus the ones of the preset and of the configuration) are refused and the issue is labelled `needs human`.
-- **Engine and configuration out of reach.** The scripts and the presets come from the engine repository at a fixed ref; the configuration comes from `main`. The agent's token has no permission on workflows. After Claude has run, the workflow takes a fresh copy of the scripts before using the GitHub tokens.
+- **Engine and configuration out of reach.** The scripts and the presets come from the engine repository at a fixed ref; the configuration comes from the base branch. The agent's token has no permission on workflows. After Claude has run, the workflow takes a fresh copy of the scripts before using the GitHub tokens.
 - **Forks.** Pull requests from forks never receive secrets, and the orchestrator ignores them.
 
 One limit to know: the tools the agent may run (`cargo`, `npm`, …) execute code from the repository, in the same job that later uses the GitHub tokens. The measures above reduce the risk; they are not a sandbox.

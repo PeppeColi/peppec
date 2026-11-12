@@ -19,6 +19,12 @@ notify_blocked() {
 add_label() { gh api -X POST "repos/$REPO/issues/$1/labels" -f "labels[]=$2" > /dev/null; }
 rm_label() { gh api -X DELETE "repos/$REPO/issues/$1/labels/$(jq -rn --arg l "$2" '$l|@uri')" > /dev/null 2>&1 || true; }
 labels_of() { gh api "repos/$REPO/issues/$1/labels" --jq '.[].name'; }
+# GitHub closes an issue by itself only when its pull request is merged into the default
+# branch: with another base branch, or if that did not happen, the workflow closes it
+close_merged() {
+  gh api -X PATCH "repos/$REPO/issues/$1" -f state=closed -f state_reason=completed > /dev/null
+  rm_label "$1" "in progress"
+}
 has() { grep -qxF -- "$2" <<< "$1"; }
 age_minutes() { echo $(( ($(date +%s) - $(date -d "$1" +%s)) / 60 )); }
 # Hidden marker comments on an issue or PR: <!-- peppec:KEY=VALUE -->

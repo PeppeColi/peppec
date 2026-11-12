@@ -32,8 +32,34 @@ ctrl=$(labels_of "$CONTROL_ISSUE")
 if has "$ctrl" "paused"; then echo "Queue paused"; exit 0; fi
 mode=manual; has "$ctrl" "auto mode" && mode=automatic
 
-active=$(gh issue list -R "$REPO" --state open --label "in progress" --json number,createdAt \
-  --jq 'sort_by(.createdAt) | .[0].number // empty')
+# $1, optional: an issue to leave out
+active_issue() {
+  gh issue list -R "$REPO" --state open --label "in progress" --json number,createdAt \
+    --jq "[.[] | select(.number != ${1:-0})] | sort_by(.createdAt) | .[0].number // empty"
+}
+# The agent's pull request of an issue, if it was merged since the issue last entered
+# "in progress" or was reopened: an issue reopened after a merge is worked on again
+merged_pr() {
+  local since
+  since=$(gh api --paginate "repos/$REPO/issues/$1/events?per_page=100" \
+    --jq '.[] | select(.event == "reopened" or (.event == "labeled" and .label.name == "in progress")) | .created_at' | tail -1)
+  [ -n "$since" ] || return 0
+  gh pr list -R "$REPO" --head "agent/issue-$1" --state merged --json number,mergedAt \
+    --jq "[.[] | select(.mergedAt >= \"$since\")] | sort_by(.mergedAt) | last | .number // empty"
+}
+
+active=$(active_issue)
+# An open issue whose pull request is merged: the base branch is not the default one, so
+# GitHub did not close it, and it was merged by hand or the run that merged it stopped early
+if [ -n "$active" ]; then
+  done_pr=$(merged_pr "$active")
+  if [ -n "$done_pr" ]; then
+    echo "PR #$done_pr of issue #$active is merged: closing the issue"
+    close_merged "$active"
+    # Left out by number: right after the close the list may still show it as open
+    active=$(active_issue "$active")
+  fi
+fi
 
 if [ -z "$active" ]; then
   ok=false

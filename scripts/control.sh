@@ -14,7 +14,7 @@ case "$ACTION" in
     notify_blocked "Queue stopped on #$ISSUE: $REASON. $RUN_URL";;
   merge)
     gh pr merge "$PR" -R "$REPO" --squash
-    rm_label "$ISSUE" "in progress"
+    close_merged "$ISSUE"
     notify "Merged PR #$PR (issue #$ISSUE).";;
   notify_ready)
     add_label "$PR" "ready to merge"
