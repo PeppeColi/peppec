@@ -156,6 +156,7 @@ function claude() {
       el("span", {class: l.warn ? "warn-text" : "muted"},
         (l.percent ?? "?") + "%" + (l.resets ? " · resets " + when(l.resets) : "")))));
   return el("div", {class: "group"}, head, body,
+    !usageProblem && usage && usage.note && el("div", {class: "small warn-text"}, usage.note),
     usage && usage.at && el("div", {class: "small"}, "read at " + new Date(usage.at * 1000).toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"})));
 }
 

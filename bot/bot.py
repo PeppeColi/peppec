@@ -51,6 +51,8 @@ CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR", "/claude"))
 CREDENTIALS = CLAUDE_DIR / ".credentials.json"
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 USAGE_LOCK = threading.Lock()
+USAGE_REUSE = 60  # seconds a reading is shown again instead of asking Anthropic
+USAGE_CACHE = {"last": None, "wait_until": 0}  # last reading; no request before wait_until (429)
 LOGIN_HINT = "run 'docker compose run --rm peppec-bot claude' on the bot's machine and log in"
 
 
@@ -527,11 +529,29 @@ def usage_name(limit):
     return f"Week · {model}" if model else name
 
 
+def retry_after(r):
+    """Seconds Anthropic asks to wait after a 429: Retry-After in seconds, else one minute."""
+    try:
+        return max(1, min(int(r.headers.get("Retry-After", "")), 3600))
+    except ValueError:
+        return USAGE_REUSE
+
+
 def claude_usage():
-    """The limits of the Claude subscription, read from Anthropic when the page asks."""
+    """The limits of the Claude subscription, read from Anthropic when the page asks.
+
+    A reading younger than USAGE_REUSE seconds is returned again, and after a 429 nothing is
+    asked until Retry-After has passed: the last reading is returned with a note, if there is one.
+    """
     if not CREDENTIALS.exists():
         return {"enabled": False}
     with USAGE_LOCK:
+        now = time.time()
+        last = USAGE_CACHE["last"]
+        if last and now - last["at"] < USAGE_REUSE:
+            return last
+        if now < USAGE_CACHE["wait_until"]:
+            return usage_later(last, USAGE_CACHE["wait_until"] - now)
         token, expires = claude_token()
         if expires - time.time() < 60:
             refresh_claude_login()
@@ -542,11 +562,24 @@ def claude_usage():
             "Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"})
         if r.status_code in (401, 403):
             raise UserError(f"Anthropic refused the Claude login ({r.status_code}): {LOGIN_HINT}.")
+        if r.status_code == 429:
+            wait = retry_after(r)
+            USAGE_CACHE["wait_until"] = time.time() + wait
+            return usage_later(last, wait)
         r.raise_for_status()
         limits = [{"name": usage_name(x), "percent": x.get("percent"),
                    "warn": x.get("severity", "normal") != "normal", "resets": x.get("resets_at")}
                   for x in r.json().get("limits") or []]
-        return {"enabled": True, "at": int(time.time()), "limits": limits}
+        USAGE_CACHE["last"] = {"enabled": True, "at": int(time.time()), "limits": limits}
+        return USAGE_CACHE["last"]
+
+
+def usage_later(last, wait):
+    """Anthropic asked to wait: the last reading with a note, or an error when there is none."""
+    note = f"Anthropic asks to wait: try again in {max(1, round(wait))} s."
+    if not last:
+        raise UserError(note)
+    return {**last, "note": note}
 
 
 class Dashboard(BaseHTTPRequestHandler):
