@@ -124,6 +124,32 @@ set_var() { # set_var NAME VALUE: writes only when the value changes
     gh variable set "$1" -R "$REPO" -b "$2" > /dev/null; ok "$1 = $2 (set)"
   fi
 }
+del_var() { if [ -n "$(var_of "$1")" ]; then gh variable delete "$1" -R "$REPO" > /dev/null; ok "$1 (removed)"; fi; }
+# The problems of a PEPPEC_BRANCHES value, one per line. Same rules as template_ok in scripts/lib.sh:
+# a feature template names {spec} and not {n}, every other kind names {n}
+branch_problems() {
+  local line kind t
+  while IFS= read -r line; do
+    line=$(tr -d '[:space:]' <<< "$line"); [ -n "$line" ] || continue
+    [[ "$line" == *=* ]] || { echo "'$line' is not kind=template"; continue; }
+    kind=${line%%=*} t=${line#*=}
+    case " feature work hotfix sync single " in *" $kind "*) ;; *) echo "unknown kind '$kind'"; continue;; esac
+    if [ "$kind" = feature ]; then
+      [[ "$t" == *"{spec}"* && "$t" != *"{n}"* ]] || echo "feature must contain {spec} and not {n}: $t"
+    else
+      [[ "$t" == *"{n}"* ]] || echo "$kind must contain {n}: $t"
+    fi
+    git check-ref-format --branch "$(sed 's/{spec}/1-x/g; s/{n}/1/g; s/{slug}/x/g' <<< "$t")" > /dev/null 2>&1 \
+      || echo "$kind does not give a valid branch name: $t"
+  done <<< "$1"
+}
+# The ruleset pattern of the feature branches of a PEPPEC_BRANCHES value ({spec} becomes *)
+feature_pattern() {
+  local t
+  t=$( { grep -m1 '^[[:space:]]*feature[[:space:]]*=' <<< "$1" || true; } | cut -d= -f2- | tr -d '[:space:]')
+  t=${t:-feature/\{spec\}/dev}
+  echo "refs/heads/${t//\{spec\}/*}"
+}
 is_number() { case "$1" in ''|*[!0-9]*) return 1;; *) return 0;; esac; }
 epoch_of() { date -d "$1" +%s 2> /dev/null || date -j -f "%Y-%m-%d" "$1" +%s 2> /dev/null; }
 next_year() { date -d "+1 year" +%Y-%m-%d 2> /dev/null || date -v+1y +%Y-%m-%d; }
@@ -398,6 +424,7 @@ init_variables() {
   ask BASE_BRANCH "Branch the agent starts from and its pull requests are merged into" "${value:-main}"
   git check-ref-format --branch "$BASE_BRANCH" > /dev/null 2>&1 || die "not a branch name: $BASE_BRANCH"
   set_var BASE_BRANCH "$BASE_BRANCH"
+  init_feature_variables
   # The list is read on descriptor 3, so the questions can still read the terminal
   while IFS='|' read -r name default question <&3; do
     value=$(var_of "$name")
@@ -406,6 +433,28 @@ init_variables() {
     set_var "$name" "$value"
     if [ "$name" = SUMMARY_HOUR ]; then SUMMARY_HOUR="$value"; fi
   done 3<<< "$NUMBERS"
+}
+
+# Feature branches and their end-to-end tests (docs/setup.md, "Feature branches")
+init_feature_variables() {
+  local value problems name question default=n
+  value=$(var_of PEPPEC_BRANCHES)
+  [ -z "$value" ] || default=y
+  if ! confirm "Give each specification its own feature branch, merged by you into $BASE_BRANCH" "$default"; then
+    for name in PEPPEC_BRANCHES PEPPEC_E2E_FEATURE PEPPEC_E2E_ALL; do del_var "$name"; done
+    return
+  fi
+  [ -n "$value" ] || value='feature=feature/{spec}/dev'
+  problems=$(branch_problems "$value")
+  [ -z "$problems" ] || die "PEPPEC_BRANCHES: ${problems//$'\n'/; }"
+  set_var PEPPEC_BRANCHES "$value"
+  note "Branch names: see \"Feature branches\" in docs/setup.md to change them."
+  while IFS='|' read -r name question <&3; do
+    value=$(var_of "$name")
+    ask value "$question (empty: none, - to remove)" "$value"
+    if [ -z "$value" ] || [ "$value" = - ]; then del_var "$name"; else set_var "$name" "$value"; fi
+  done 3<<< 'PEPPEC_E2E_FEATURE|End-to-end tests of one feature, {spec} = its specification
+PEPPEC_E2E_ALL|End-to-end tests of the whole project'
 }
 
 # The personal token is the one people confuse with the app's key or with gh's own token
@@ -635,9 +684,12 @@ init_ruleset() {
   if [ -n "$existing" ]; then
     ok "a branch ruleset already exists: left as it is"
     note "It should require the status check 'ci / ci' on $branches."
+    [ -z "$(var_of PEPPEC_E2E_ALL)" ] || note "And 'ci / e2e_all' on $BASE_BRANCH, for the end-to-end tests of the whole project."
     return
   fi
-  if jq -n --arg name "$branches" --arg base "$BASE_BRANCH" '{name: $name, target: "branch", enforcement: "active",
+  local checks='["ci / ci"]'
+  [ -z "$(var_of PEPPEC_E2E_ALL)" ] || checks='["ci / ci", "ci / e2e_all"]'
+  if jq -n --arg name "$branches" --arg base "$BASE_BRANCH" --argjson checks "$checks" '{name: $name, target: "branch", enforcement: "active",
         conditions: {ref_name: {include: (["refs/heads/main", "refs/heads/" + $base] | unique), exclude: []}},
         bypass_actors: [{actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always"}],
         rules: [{type: "deletion"}, {type: "non_fast_forward"},
@@ -645,11 +697,31 @@ init_ruleset() {
             dismiss_stale_reviews_on_push: false, require_code_owner_review: false,
             require_last_push_approval: false, required_review_thread_resolution: false}},
           {type: "required_status_checks", parameters: {strict_required_status_checks_policy: false,
-            required_status_checks: [{context: "ci / ci"}]}}]}' \
+            required_status_checks: [$checks[] | {context: .}]}}]}' \
       | gh api -X POST "repos/$REPO/rulesets" --input - > /dev/null 2>&1; then
-    ok "ruleset '$branches' created: pull request and the check 'ci / ci' required, admins can bypass"
+    ok "ruleset '$branches' created: pull request and the checks $(jq -r 'join(", ")' <<< "$checks") required, admins can bypass"
   else
     warn "could not create the ruleset (rulesets on private repositories need a paid plan)"
+  fi
+}
+
+# Feature branches: nobody rewrites their history. No other rule: the workflow pushes the merges of
+# the base branch into them and deletes them once you have merged them
+init_feature_rules() {
+  local value pattern
+  value=$(var_of PEPPEC_BRANCHES)
+  [ -n "$value" ] || return 0
+  pattern=$(feature_pattern "$value")
+  if api "repos/$REPO/rulesets" --jq '.[].name' 2> /dev/null | grep -qxF "feature branches"; then
+    ok "ruleset 'feature branches' already exists"; return
+  fi
+  if jq -n --arg p "$pattern" '{name: "feature branches", target: "branch", enforcement: "active",
+        conditions: {ref_name: {include: [$p], exclude: []}}, bypass_actors: [],
+        rules: [{type: "non_fast_forward"}]}' \
+      | gh api -X POST "repos/$REPO/rulesets" --input - > /dev/null 2>&1; then
+    ok "ruleset 'feature branches' created: no force push on ${pattern#refs/heads/}"
+  else
+    warn "feature branches not protected (no rulesets here): their history can be rewritten by hand"
   fi
 }
 
@@ -673,6 +745,7 @@ cmd_init() {
   init_planning
   init_ruleset
   init_keep_base
+  init_feature_rules
 
   step "Next steps"
   local paths=".github .coderabbit.yaml .gitignore"
@@ -739,6 +812,15 @@ cmd_doctor() {
     bad "the base branch '$BASE_BRANCH' does not exist: git push origin $default_branch:$BASE_BRANCH"
     # One problem, one line: the checks below look at $default_branch, the branch it will be created from
     BASE_BRANCH="$default_branch"
+  fi
+  local fb problems
+  fb=$(var_of PEPPEC_BRANCHES)
+  if [ -n "$fb" ]; then
+    problems=$(branch_problems "$fb")
+    if [ -z "$problems" ]; then ok "feature branches: $(feature_pattern "$fb" | sed 's|refs/heads/||')"
+    else while IFS= read -r p; do bad "PEPPEC_BRANCHES: $p"; done <<< "$problems"; fi
+  elif [ -n "$(var_of PEPPEC_E2E_FEATURE)$(var_of PEPPEC_E2E_ALL)" ]; then
+    warn "end-to-end tests are set but never run: they run on feature branches, and PEPPEC_BRANCHES is not set"
   fi
   local tz; tz=$(var_of TZ_NAME)
   if [ -n "$tz" ] && [ ! -e "/usr/share/zoneinfo/$tz" ] && [ ! -e "/var/db/timezone/zoneinfo/$tz" ]; then
@@ -876,6 +958,10 @@ cmd_doctor() {
     elif [ -z "$checks" ]; then warn "$branch requires no status check: add 'ci / ci' to an active ruleset"
     elif grep -q 'ci / ci' <<< "$checks"; then ok "$branch requires: $checks"
     else bad "$branch requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
+    if [ "$branch" = "$BASE_BRANCH" ] && [ -n "$(var_of PEPPEC_E2E_ALL)" ] && [ -n "$checks" ] \
+       && ! grep -q 'ci / e2e_all' <<< "$checks"; then
+      warn "$branch does not require 'ci / e2e_all': a red end-to-end suite would not block your merge of a feature"
+    fi
   done
   # Bringing the base branch to $default_branch makes it the head of a merged pull request, which GitHub deletes
   # when "Automatically delete head branches" is on. A deletion rule stops that only in a ruleset nobody can

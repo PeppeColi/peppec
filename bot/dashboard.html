@@ -289,7 +289,7 @@ function home() {
       el("div", {class: "label"}, "Ready to try · " + trying.length),
       el("div", {class: "card"}, trying.map(([r, f]) =>
         row("#/feature/" + r.key + "/" + f.number, short(r) + " #" + f.number + " " + f.title,
-          "All " + f.total + " sub-issues merged")))),
+          f.checking ? "Being checked: base branch, end-to-end tests" : "All " + f.total + " sub-issues merged")))),
     el("div", {class: "group"}, el("div", {class: "label"}, "Repositories"),
       state.repos.map((r) => el("div", {class: "card"}, r.error
         ? row("#/repo/" + r.key, short(r), "Cannot be read", el("span", {class: "small warn-text"}, r.error))
@@ -359,14 +359,19 @@ function featurePage(repo, number) {
   const box = el("textarea", {id: "text", placeholder: "What does not work, in one sentence"});
   return [back,
     el("div", {class: "group"}, el("div", {class: "muted"}, short(repo) + " · specification #" + feature.number),
-      el("h1", {}, feature.title), el("div", {class: "pill"}, "Ready to try")),
+      el("h1", {}, feature.title), el("div", {class: "pill"}, feature.checking ? "Being checked" : "Ready to try")),
     messages(),
-    el("div", {class: "card pad"}, "All " + feature.total + " sub-issues are merged into the base branch. " +
-      "Try the feature there; when it works, bringing it to main is your merge."),
+    el("div", {class: "card pad"}, feature.pr
+      ? (feature.checking
+        ? "All " + feature.total + " sub-issues are merged into " + feature.pr.branch + ". The workflow is still bringing in the base branch or running the end-to-end tests: you get a message when it is ready."
+        : "All " + feature.total + " sub-issues are merged into " + feature.pr.branch + ". Try the feature there; when it works, merge its pull request into the base branch.")
+      : "All " + feature.total + " sub-issues are merged into the base branch. " +
+        "Try the feature there; when it works, bringing it to main is your merge."),
     el("div", {class: "group"}, el("label", {for: "text"}, "Report a problem"), box),
     el("div", {class: "group"},
       el("button", {type: "button", disabled: busy, on: () => box.value.trim() && act(repo, "report", feature.number, box.value)}, busy ? "Sending…" : "Report a problem"),
       el("div", {class: "small center"}, "Creates a sub-issue of #" + feature.number + ", size S, and puts it in the queue.")),
+    feature.pr && out("Open its pull request (#" + feature.pr.number + ")", feature.pr.url, "link"),
     out("Open the specification on GitHub", feature.url, "link")];
 }
 
