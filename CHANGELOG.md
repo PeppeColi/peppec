@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.28.1] - 2026-11-13
+
 ### Security
 
 - The hidden markers that hold the queue's state (branch, time used, feature branch, review
@@ -354,7 +356,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.28.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.28.1...HEAD
+[1.28.1]: https://github.com/PeppeColi/peppec/compare/v1.28.0...v1.28.1
 [1.28.0]: https://github.com/PeppeColi/peppec/compare/v1.27.1...v1.28.0
 [1.27.1]: https://github.com/PeppeColi/peppec/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/PeppeColi/peppec/compare/v1.26.0...v1.27.0
