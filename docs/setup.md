@@ -210,6 +210,7 @@ gh variable set AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal tok
 | `SUMMARY_HOUR` | Hour of the daily summary, in `TZ_NAME` |
 | `BASE_BRANCH` | Optional: the branch the agent starts from and its pull requests are merged into. `main` when not set. See [A base branch other than `main`](#a-base-branch-other-than-main) |
 | `PEPPEC_BRANCHES` | Optional: the names of the agent's branches, and a feature branch for each specification. See [Feature branches](#feature-branches) |
+| `PEPPEC_E2E_FEATURE`, `PEPPEC_E2E_ALL` | Optional, with feature branches: the end-to-end tests of one feature and of the whole project. See [End-to-end tests](#end-to-end-tests) |
 | `CLAUDE_TOKEN_EXPIRES`, `AGENT_TOKEN_EXPIRES` | The summary warns you during the 30 days before each date. The second is optional: leave it out for a token that never expires |
 
 ## Phase 5 — Workflows and configuration
@@ -301,6 +302,20 @@ How it works:
 - **When the last work unit is merged** the workflow opens a pull request from the feature branch into the base branch, brings the base branch into the feature (see below) and sends the "ready to be tried" message with the link of the pull request. Try the feature on its branch, then merge that pull request yourself: the workflow never merges it. The merge closes the specification and removes the feature branch.
 - **The feature follows the base branch only at the end.** While it is built the feature branch is left alone. When it is finished the workflow merges the base branch into it. If the two conflict, it opens a sync work unit, a sub-issue of the specification: the workflow makes the merge, the agent resolves the conflict markers, and its pull request is merged with a merge commit (in manual mode, merge it that way yourself: a squash would bring the conflict back). The "ready to be tried" message comes once that work unit is merged. If the base branch moves again while a finished feature waits for you, the workflow merges it in again and tells you, or opens a new sync work unit.
 - **A variable, not `.github/peppec.yml`:** a feature branch carries the configuration of the day it was created.
+
+### End-to-end tests
+
+With feature branches, two optional repository variables run end-to-end tests on the pull request of each feature into the base branch:
+
+```bash
+gh variable set PEPPEC_E2E_FEATURE -R "$R" -b 'npx playwright test --grep @spec-{spec}'
+gh variable set PEPPEC_E2E_ALL -R "$R" -b 'npx playwright test'
+```
+
+- **`PEPPEC_E2E_FEATURE`**: the tests of one feature. `{spec}` becomes the number of its specification; how the tests are picked (a tag, a folder, a name) is up to your command. The agent is told the command, and writes the scenarios of the specification so that it picks them. The tests run once the feature is finished (CI job `ci / e2e_feature`); the "ready to be tried" message waits for them. If they fail, the workflow opens a work unit of size L with the end of the log; after two such work units it tells you and stops opening them.
+- **`PEPPEC_E2E_ALL`**: the whole suite (CI job `ci / e2e_all`), on the same pull request. Add `ci / e2e_all` to the required checks of the ruleset of the base branch: a red suite then blocks your merge.
+- A variable left out turns its level off. On every other pull request both jobs succeed without running anything, so requiring them blocks nothing else.
+- The tests run after the setup of the preset and your `extra_setup`, with the feature's own configuration: services and browsers go in your setup action. They count towards nothing but their own job: give them the time they need in the workflow, not in `STALL_MINUTES`, which only bounds how long the workflow waits before telling you there is no result.
 
 ## Phase 6 — Telegram bot
 

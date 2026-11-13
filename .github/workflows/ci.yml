@@ -1,6 +1,10 @@
 # Reusable workflow: the CI of a host repository. It runs the setup of the preset and the
 # check commands, the same ones the agent is told to run (see examples/ci.yml).
 # The resulting check run is named "<caller job> / ci", normally "ci / ci".
+# On the pull request of a feature branch into the base branch (PEPPEC_BRANCHES) it also runs the
+# end-to-end tests: "ci / e2e_feature" (PEPPEC_E2E_FEATURE, read by the agent workflow) and
+# "ci / e2e_all" (PEPPEC_E2E_ALL, to require in the ruleset of the base branch). On any other
+# pull request those two jobs succeed without running anything.
 name: ci
 on:
   workflow_call:
@@ -56,3 +60,73 @@ jobs:
       - run: bash -euxo pipefail -c "$CHECK"
         env:
           CHECK: ${{ steps.cfg.outputs.check }}
+
+  e2e_feature:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          persist-credentials: false
+      - id: f
+        run: bash _ctl/scripts/e2e.sh plan
+        env:
+          COMMAND: ${{ vars.PEPPEC_E2E_FEATURE }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          BASE_BRANCH: ${{ vars.BASE_BRANCH || 'main' }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PEPPEC_BRANCHES: ${{ vars.PEPPEC_BRANCHES }}
+      # A feature branch is not the agent's: it is checked with its own configuration, like CI
+      - if: steps.f.outputs.run == 'true'
+        id: cfg
+        run: bash _ctl/scripts/config.sh
+      - if: steps.f.outputs.run == 'true'
+        uses: ./_preset
+        with:
+          options: ${{ steps.cfg.outputs.options }}
+      - if: steps.f.outputs.run == 'true' && steps.cfg.outputs.extra_setup != ''
+        uses: ./_extra
+      - if: steps.f.outputs.run == 'true'
+        run: bash -euxo pipefail -c "$E2E"
+        env:
+          E2E: ${{ steps.f.outputs.command }}
+
+  e2e_all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          persist-credentials: false
+      - id: f
+        run: bash _ctl/scripts/e2e.sh plan
+        env:
+          COMMAND: ${{ vars.PEPPEC_E2E_ALL }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          BASE_BRANCH: ${{ vars.BASE_BRANCH || 'main' }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PEPPEC_BRANCHES: ${{ vars.PEPPEC_BRANCHES }}
+      # A feature branch is not the agent's: it is checked with its own configuration, like CI
+      - if: steps.f.outputs.run == 'true'
+        id: cfg
+        run: bash _ctl/scripts/config.sh
+      - if: steps.f.outputs.run == 'true'
+        uses: ./_preset
+        with:
+          options: ${{ steps.cfg.outputs.options }}
+      - if: steps.f.outputs.run == 'true' && steps.cfg.outputs.extra_setup != ''
+        uses: ./_extra
+      - if: steps.f.outputs.run == 'true'
+        run: bash -euxo pipefail -c "$E2E"
+        env:
+          E2E: ${{ steps.f.outputs.command }}
