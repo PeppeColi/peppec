@@ -9,6 +9,15 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-11-13
+
+### Changed
+
+- `dev` from day one: on a new installation `peppec init` proposes `dev` as the base branch,
+  creates it at the commit of `main`, and prints one push that lands the install commit on both
+  branches (in an empty repository that push creates them). An existing `dev` with commits `main`
+  lacks gets a pull request from `main` instead. Installations already on `main` keep it.
+
 ## [1.26.0] - 2026-11-13
 
 ### Added
@@ -310,7 +319,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.26.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.27.0...HEAD
+[1.27.0]: https://github.com/PeppeColi/peppec/compare/v1.26.0...v1.27.0
 [1.26.0]: https://github.com/PeppeColi/peppec/compare/v1.25.0...v1.26.0
 [1.25.0]: https://github.com/PeppeColi/peppec/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/PeppeColi/peppec/compare/v1.23.0...v1.24.0

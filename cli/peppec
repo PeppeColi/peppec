@@ -420,10 +420,13 @@ init_variables() {
   ask TZ_NAME "Time zone" "${value:-$(system_tz)}"
   TZ="$TZ_NAME" date > /dev/null 2>&1 || die "unknown time zone: $TZ_NAME"
   set_var TZ_NAME "$TZ_NAME"
+  # A new installation gets dev from day one; an existing one without the variable has been on main
   value=$(var_of BASE_BRANCH)
-  ask BASE_BRANCH "Branch the agent starts from and its pull requests are merged into" "${value:-main}"
+  [ -n "$value" ] || { if [ "$FRESH" = true ]; then value=dev; else value=main; fi; }
+  ask BASE_BRANCH "Branch the agent starts from and its pull requests are merged into" "$value"
   git check-ref-format --branch "$BASE_BRANCH" > /dev/null 2>&1 || die "not a branch name: $BASE_BRANCH"
   set_var BASE_BRANCH "$BASE_BRANCH"
+  init_base_branch
   init_feature_variables
   # The list is read on descriptor 3, so the questions can still read the terminal
   while IFS='|' read -r name default question <&3; do
@@ -433,6 +436,30 @@ init_variables() {
     set_var "$name" "$value"
     if [ "$name" = SUMMARY_HOUR ]; then SUMMARY_HOUR="$value"; fi
   done 3<<< "$NUMBERS"
+}
+
+# The base branch exists from day one: created now at the commit of main, so the install commit can
+# land on both in the same push. In an empty repository that first push creates both.
+init_base_branch() {
+  [ "$BASE_BRANCH" != main ] || return 0
+  if api "repos/$REPO/branches/$BASE_BRANCH" > /dev/null; then ok "branch $BASE_BRANCH exists"; return; fi
+  local sha
+  if ! sha=$(api "repos/$REPO/git/ref/heads/main" --jq .object.sha); then
+    note "The repository is empty: the push of the install commit creates main and $BASE_BRANCH together."
+    return
+  fi
+  if api -X POST "repos/$REPO/git/refs" -f "ref=refs/heads/$BASE_BRANCH" -f "sha=$sha" > /dev/null; then
+    ok "branch $BASE_BRANCH created from main"
+  else
+    bad "could not create the branch $BASE_BRANCH: git push origin main:$BASE_BRANCH"
+  fi
+}
+
+# How dev relates to main: identical (or main is empty), behind (main has more) or ahead/diverged
+base_vs_main() {
+  local status
+  status=$(api "repos/$REPO/compare/main...$BASE_BRANCH" --jq .status) || { echo identical; return; }
+  echo "$status"
 }
 
 # Feature branches and their end-to-end tests (docs/setup.md, "Feature branches")
@@ -738,6 +765,7 @@ cmd_init() {
   [ "$(gh api "repos/$REPO" --jq .default_branch)" = main ] || die "the default branch of $REPO must be 'main'"
   printf '%sPEPPEC%s on %s%s%s, engine %s@%s\n' "$B" "$N" "$B" "$REPO" "$N" "$ENGINE" "$REF"
   load_vars
+  FRESH=false; [ -n "$(var_of CONTROL_ISSUE)" ] || FRESH=true
   SECRET_NAMES=$(gh secret list -R "$REPO" --json name --jq '.[].name')
   init_labels
   init_settings
@@ -755,13 +783,23 @@ cmd_init() {
   local paths=".github .coderabbit.yaml .gitignore CHANGELOG.md"
   [ -f CLAUDE.md ] && paths="$paths CLAUDE.md"
   [ -f "$TRIAGE_FILE" ] && paths="$paths $TRIAGE_FILE"
-  note "1. Review the files, then commit and push them to main:"
-  note "     git add $paths && git commit -m 'chore: install PEPPEC' && git push"
   local n=2
-  if [ "$BASE_BRANCH" != main ]; then
-    note "2. Bring $BASE_BRANCH level with main, so it has the same files (this also creates it):"
-    note "     git push origin main:$BASE_BRANCH"
-    n=3
+  if [ "$BASE_BRANCH" = main ]; then
+    note "1. Review the files, then commit and push them to main:"
+    note "     git add $paths && git commit -m 'chore: install PEPPEC' && git push"
+  else
+    case "$(base_vs_main)" in
+      identical|behind)
+        note "1. Review the files, then commit them on main and push the same commit to main and $BASE_BRANCH:"
+        note "     git add $paths && git commit -m 'chore: install PEPPEC'"
+        note "     git push --atomic origin HEAD:main HEAD:$BASE_BRANCH";;
+      *)
+        note "1. Review the files, then commit them on main and push:"
+        note "     git add $paths && git commit -m 'chore: install PEPPEC' && git push"
+        note "2. $BASE_BRANCH has commits main lacks: bring main into it with a pull request, merged with a merge commit:"
+        note "     gh pr create -B $BASE_BRANCH -H main -t 'chore: install PEPPEC' -b 'Same workflow files on both branches.'"
+        n=3;;
+    esac
   fi
   note "$n. Install CodeRabbit on $REPO: https://github.com/apps/coderabbitai"
   note "$((n + 1)). Prepare the Telegram bot: peppec bot"

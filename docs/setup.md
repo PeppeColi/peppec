@@ -42,7 +42,7 @@ What stays manual, because it needs your login or a secret only you can generate
 
 1. Before `init`: create the GitHub App, generate its private key and install it on the repository (Phase 2, steps 1–3); create the Telegram bot (step 6).
 2. During `init`: paste the Claude token, your personal token and the bot token when asked. The values are read without echo and sent straight to GitHub.
-3. After `init`: commit and push the files it wrote, install CodeRabbit (Phase 3), then run `peppec bot` and copy the folder it prepares to the bot's machine (Phase 6).
+3. After `init`: commit the files it wrote and push them to `main` and `dev` together (`init` prints the command), install CodeRabbit (Phase 3), then run `peppec bot` and copy the folder it prepares to the bot's machine (Phase 6).
 
 `init` also creates `CHANGELOG.md` when the repository has none, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format: the agent adds one line under "Unreleased" in each pull request, and turning those lines into a version is yours. An existing changelog is left alone; it needs a `## [Unreleased]` heading.
 
@@ -74,6 +74,7 @@ PEPPEC can be installed on a project that already has code, history and habits. 
 - [ ] **Services the tests need** (a database, system packages, generated files) go in a small setup action of yours, named by `extra_setup` (see [Services and other project-specific setup](#services-and-other-project-specific-setup)).
 - [ ] **Workflow files with the same names.** `init` writes `agent.yml`, `ci.yml` and `summary.yml`, and asks before overwriting a file that differs. The required check is `ci / ci` from PEPPEC's workflow: rename your own CI first (for example to `build.yml`) and keep both.
 - [ ] **No open issue labelled `ready` that you do not want built.** The first run takes the oldest one. If `ready` already means something else to you, rename your label first.
+- [ ] **A `dev` branch, if you already have one.** `init` proposes `dev` as the base branch and uses it as it is. If it has commits `main` lacks, `init` tells you to bring `main` into it with a pull request after the install commit, so both branches run the same workflow files.
 - [ ] **Existing branch protection.** `init` leaves an existing branch ruleset alone and only tells you what it should require; check that it requires `ci / ci`.
 
 Two planning sessions are worth doing before the first feature: see [Working on an existing codebase](planning.md#working-on-an-existing-codebase).
@@ -224,7 +225,7 @@ gh variable set AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal tok
 | `STALL_MINUTES` | How long a pull request may wait for a CI result; a review may take twice as long |
 | `LARGE_FROM_ROUND` | Review round from which the model of size L takes over |
 | `SUMMARY_HOUR` | Hour of the daily summary, in `TZ_NAME` |
-| `BASE_BRANCH` | Optional: the branch the agent starts from and its pull requests are merged into. `main` when not set. See [A base branch other than `main`](#a-base-branch-other-than-main) |
+| `BASE_BRANCH` | The branch the agent starts from and its pull requests are merged into. `main` when not set; `peppec init` proposes `dev` on a new installation. See [The base branch `dev`](#the-base-branch-dev) |
 | `PEPPEC_BRANCHES` | Optional: the names of the agent's branches, and a feature branch for each specification. See [Feature branches](#feature-branches) |
 | `PEPPEC_E2E_FEATURE`, `PEPPEC_E2E_ALL` | Optional, with feature branches: the end-to-end tests of one feature and of the whole project. See [End-to-end tests](#end-to-end-tests) |
 | `CLAUDE_TOKEN_EXPIRES`, `AGENT_TOKEN_EXPIRES` | The summary warns you during the 30 days before each date. The second is optional: leave it out for a token that never expires |
@@ -243,7 +244,7 @@ curl -fsSL "$base/peppec.yml" -o .github/peppec.yml
 2. In `.github/peppec.yml` choose the [preset](../presets) for your project. Each preset's README lists what it installs and checks; any default can be overridden.
 3. If the tests need something the preset does not install, add your own setup action as described below.
 4. In `summary.yml`, adjust the cron hours to your time zone as explained in the file.
-5. Commit and push to `main` from your account. Check that the `ci` workflow passes.
+5. Commit, and push the same commit to `main` and to the base branch from your account (`git push --atomic origin HEAD:main HEAD:dev`, see [the base branch](#the-base-branch-dev)). Check that the `ci` workflow passes.
 6. Go back to the ruleset of Phase 1 and add **`ci / ci`** to "Require status checks to pass".
 
 Workflow and configuration changes are always yours to make: the agent's token cannot touch workflows, and the agent's changes under `.github` are refused. The same goes for the files that steer the agent: `.claude`, `CLAUDE.md` and `AGENTS.md` (also in subdirectories), `docs/agents` and `docs/adr`. When a task needs them, the agent asks a question instead.
@@ -271,16 +272,24 @@ extra_setup: .github/actions/services
 
 The action must live under `.github/`, so the agent cannot change it. Like the rest of the configuration, it is read from the base branch.
 
-### A base branch other than `main`
+### The base branch `dev`
 
-By default the agent's pull requests are merged into `main`. To collect them on another branch first, for example `dev`, and bring them to `main` yourself when a group of issues is complete and tested:
+The agent's pull requests are collected on a branch of their own, `dev`, and you bring them to `main` when a group of issues is complete and tested. `dev` exists from day one: on a new installation `peppec init` proposes it, creates it at the commit of `main`, and asks you to push the install commit to both branches at once, so they are born with the same files:
 
 ```bash
-git push origin main:dev                        # create the branch, with the same files as main
+git add .github .coderabbit.yaml .gitignore CHANGELOG.md CLAUDE.md && git commit -m 'chore: install PEPPEC'
+git push --atomic origin HEAD:main HEAD:dev     # one push, both branches; in an empty repository it creates them
+```
+
+By hand, create `dev` before the install commit (`git push origin main:dev`, or with the first push above in an empty repository) and set the variable:
+
+```bash
 gh variable set BASE_BRANCH -R "$R" -b dev
 ```
 
-Then add `dev` to the target branches of the ruleset of Phase 1, and create a second branch ruleset for `dev` alone, with only "Restrict deletions" and an empty bypass list. `peppec init` asks for the branch, sets the variable and creates the second ruleset. On a private repository of a free plan rulesets are not available: `dev` works all the same, only without that second guard.
+Then add `dev` to the target branches of the ruleset of Phase 1, and create a second branch ruleset for `dev` alone, with only "Restrict deletions" and an empty bypass list. `peppec init` creates the second ruleset itself. On a private repository of a free plan rulesets are not available: `dev` works all the same, only without that second guard.
+
+If `dev` already exists with commits `main` lacks, push the install commit to `main` and bring `main` into `dev` with a pull request merged with a merge commit; `init` prints the command. To merge the agent's work straight into `main` instead, answer `main` when `init` asks for the base branch: an installation made before this default keeps `main` unless you change it.
 
 What changes:
 
