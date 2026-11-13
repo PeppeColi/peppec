@@ -219,7 +219,7 @@ jobs:
         run: bash "$CTL/config.sh"
         env:
           SIZE: ${{ needs.decide.outputs.size }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: task
           path: .agent
@@ -304,11 +304,11 @@ jobs:
           sparse-checkout: scripts
           persist-credentials: false
       # Outside the workspace: the two folders never mix with the repository's files
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: task
           path: ${{ runner.temp }}/task
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: result
           path: ${{ runner.temp }}/result
