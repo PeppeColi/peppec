@@ -43,32 +43,16 @@ Any way of creating issues works. One that fits well is the set of skills in [ma
 | Slice | `/to-tickets` | The sub-issues, with their "blocked by" links |
 | Build | PEPPEC, in place of `/implement` | One pull request per issue |
 
-Their setup skill writes `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md` in your repository, and the other skills read them every time. Two edits make them produce issues PEPPEC accepts.
+Two things make them produce issues PEPPEC accepts, and `peppec init` sets up both. Run their setup skill (`/setup-matt-pocock-skills`) first, then `init`; `peppec doctor` tells you when either is missing or out of date.
 
-In `docs/agents/triage-labels.md`, map the label for work an agent can take to `ready`:
+**A PEPPEC section in `CLAUDE.md`.** Every session on your computer reads `CLAUDE.md`, so the rules reach the planning skills without you repeating them: what an issue for the agent needs, scenarios in every specification, no `ready` label on the specification. It also tells `/wayfinder` what to write in the Notes of every map it charts: the map plans and never writes production code, its destination is a specification with given/when/then scenarios, every behaviour it decides must be checkable by a test, none of its issues gets `ready`. Without those Notes a map can drift into building the feature itself, and PEPPEC would then build it a second time.
+
+The section sits between a `<!-- peppec:start` line and a `<!-- peppec:end -->` line, outside the "Agent skills" block the setup skill rewrites, so running that skill again does not remove it. `init` adds it at the end of the file, creates the file if there is none (importing `AGENTS.md` when that is the file you have), and replaces the section when the engine's version changes, leaving the rest of the file alone. Do not edit it: your next `init` puts the engine's text back. To set it up by hand, copy [`examples/claude-md-section.md`](../examples/claude-md-section.md), without its first line, at the end of your `CLAUDE.md`.
+
+**The `ready` label in `docs/agents/triage-labels.md`.** The skills apply the label written in this file for work an agent can take. `init` maps it to `ready`; by hand, change the row to:
 
 ```markdown
 | `ready-for-agent`          | `ready`              | Fully specified, ready for an AFK agent  |
 ```
 
-At the end of `docs/agents/issue-tracker.md`, add:
-
-```markdown
-## Issues built by PEPPEC
-
-Issues labelled `ready` are built by an agent that sees only the issue itself, the owner's
-comments on it and the body of its parent issue. When you create one:
-
-- Make it a sub-issue of the specification and set its blockers with the native
-  "blocked by" relationship, never as text in the body.
-- Give it a size label: `size: S` for a small, mechanical change, `size: L` for one that
-  crosses several parts of the code or needs design judgement, no size label otherwise.
-- Write it so that it stands on its own: do not point to other issues, files of this
-  session or links for anything the agent needs.
-- Every acceptance criterion must be something an automated test can fail: the agent
-  cannot run the program.
-- End with an "Out of scope" section.
-- Do not label the specification itself `ready`.
-```
-
-The wording of those two files belongs to that project and may change: check them after running its setup skill.
+Earlier versions of this page asked you to add an "Issues built by PEPPEC" section at the end of `docs/agents/issue-tracker.md`. The section in `CLAUDE.md` replaces it: delete it, so the two cannot disagree.
