@@ -49,6 +49,7 @@ Then, inside a clone of your repository:
 peppec init      # labels, settings, variables, secrets, workflow files, CLAUDE.md section, branch protection
 peppec doctor    # checks the installation
 peppec bot       # prepares the folder for the machine that runs the Telegram bot
+peppec skills    # checks the planning skills on this computer (also run by a SessionStart hook)
 ```
 
 One bot can follow several repositories: `peppec bot -R owner/first -R owner/second`.

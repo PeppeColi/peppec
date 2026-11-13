@@ -11,6 +11,7 @@ set -euo pipefail
 ENGINE="${PEPPEC_ENGINE:-PeppeColi/peppec}"
 REF="${PEPPEC_REF:-v1}"
 YES=false
+HOOK=false
 REPO=""
 REPO_LIST=""
 KEY_FILE=""
@@ -233,9 +234,101 @@ triage_state() {
     END { print (mapped ? "mapped" : (row ? "other" : "none")) }'
 }
 
+# PEPPEC needs a default branch named main. Renaming it on GitHub moves its pull requests and
+# protection rules along; the clone in use is renamed too
+init_default_branch() {
+  local db; db=$(gh api "repos/$REPO" --jq .default_branch)
+  [ "$db" != main ] || return 0
+  api "repos/$REPO/branches/main" > /dev/null \
+    && die "the default branch is '$db' and a branch 'main' also exists: make main the default under Settings → General, then run init again"
+  confirm "The default branch is '$db', and PEPPEC needs 'main'. Rename '$db' to 'main' on GitHub? Its pull requests and rules follow it" n \
+    || die "the default branch of $REPO must be 'main': rename it, then run init again"
+  api -X POST "repos/$REPO/branches/$db/rename" -f new_name=main > /dev/null \
+    || die "could not rename '$db' (an empty repository has nothing to rename): rename it under Settings → Branches"
+  step "Default branch"
+  ok "'$db' renamed to 'main' on GitHub"
+  if git show-ref --verify --quiet "refs/heads/$db"; then
+    git branch -m "$db" main && git fetch -q origin && git branch -q -u origin/main main \
+      && git remote set-head origin -a > /dev/null && ok "this clone follows main too" \
+      || warn "rename it in this clone too: git branch -m $db main && git fetch origin && git branch -u origin/main main"
+  fi
+  note "Other clones: git branch -m $db main && git fetch origin && git branch -u origin/main main"
+}
+
+# On a new installation, issues already labelled ready would be built at once, the oldest first
+init_ready_issues() {
+  local list n
+  list=$(gh issue list -R "$REPO" --state open --label ready --limit 200 --json number,title \
+    --jq '.[] | "\(.number)|\(.title)"' 2> /dev/null || true)
+  [ -n "$list" ] || return 0
+  step "Issues already labelled ready"
+  while IFS='|' read -r n title; do note "#$n $title"; done <<< "$list"
+  if confirm "The first run would build the oldest of these $(wc -l <<< "$list" | tr -d ' '). Remove ready from all of them?" n; then
+    while IFS='|' read -r n _; do gh issue edit "$n" -R "$REPO" --remove-label ready > /dev/null; done <<< "$list"
+    ok "ready removed: put it back on the ones you want built"
+  else
+    warn "left as they are: the queue starts with the oldest, once PEPPEC is installed"
+  fi
+}
+
+# The planning skills of the mattpocock-skills plugin on this computer. PEPPEC relies on three of
+# their behaviours; a plugin update that changes one breaks the planning flow without an error.
+# The plugin loads a new version when Claude Code starts, which is when the hook below runs
+SKILLS_HOOK='peppec skills --hook 2> /dev/null || gh peppec skills --hook 2> /dev/null || true'
+# "path|version|sha" of the installed plugin; fails when it is not installed
+skills_install() {
+  local f="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/installed_plugins.json"
+  [ -f "$f" ] || return 1
+  jq -r '.plugins // {} | to_entries[] | select(.key | startswith("mattpocock-skills@")) | .value
+    | (if type == "array" then .[0] else . end)
+    | "\(.installPath)|\(.version // "?")|\((.gitCommitSha // "")[0:7])"' "$f" 2> /dev/null | grep -m 1 .
+}
+# One line per behaviour PEPPEC relies on that the installed skills no longer show
+skills_problems() {
+  local d="$1" f
+  f=$(find "$d" -path '*setup-matt-pocock-skills/triage-labels.md' 2> /dev/null | head -n 1)
+  if [ -z "$f" ] || [ "$(triage_state < "$f")" = none ]; then
+    echo "the triage label map has no ready-for-agent row: peppec init can no longer map it to ready"
+  fi
+  f=$(find "$d" -path '*to-tickets/SKILL.md' 2> /dev/null | head -n 1)
+  if [ -z "$f" ] || ! grep -q 'ready-for-agent' "$f"; then
+    echo "/to-tickets no longer applies ready-for-agent: its tickets may get a label the queue does not build"
+  fi
+  grep -rqs 'wayfinder:map' "$d" \
+    || echo "the wayfinder labels changed: the queue skips only labels starting with wayfinder:"
+}
+# peppec skills [--hook]: with --hook, silent when all is well, otherwise a message for the session
+cmd_skills() {
+  local inst problems
+  command -v jq > /dev/null 2>&1 || { [ "$HOOK" = true ] && return 0; die "jq is required but not installed"; }
+  if ! inst=$(skills_install); then
+    [ "$HOOK" = true ] || note "mattpocock-skills is not installed on this computer: nothing to check"
+    return 0
+  fi
+  problems=$(skills_problems "${inst%%|*}")
+  local version sha label
+  IFS='|' read -r _ version sha <<< "$inst"
+  label="mattpocock-skills $version${sha:+ ($sha)}"
+  if [ "$HOOK" = true ]; then
+    [ -n "$problems" ] || return 0
+    jq -n --arg m "PEPPEC: $label changed what PEPPEC relies on: ${problems//$'\n'/; }. Issues written now may not be built. See docs/planning.md." \
+      '{systemMessage: $m, hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $m}}'
+    return 0
+  fi
+  if [ -z "$problems" ]; then ok "$label: labels and label map as PEPPEC expects"
+  else while IFS= read -r p; do warn "$label: $p"; done <<< "$problems"; fi
+}
+# The hook in .claude/settings.json; empty when absent
+hook_of() { jq -r '[.hooks.SessionStart[]?.hooks[]?.command | select(contains("skills --hook"))] | first // empty' 2> /dev/null; }
+
 init_labels() {
   step "Labels"
-  local n=0
+  local n=0 old
+  # ready already in use with another meaning: its description is about to change
+  old=$(gh label list -R "$REPO" --limit 200 --json name,description --jq '.[] | select(.name == "ready") | .description' || true)
+  if [ -n "$old" ] && [ "$old" != "$(sed -n 's/^ready|//p' <<< "$LABELS")" ]; then
+    warn "the label ready already existed ('$old'): from now on it means \"build this issue\""
+  fi
   while IFS='|' read -r name desc; do
     gh label create "$name" -R "$REPO" --description "$desc" --force > /dev/null
     n=$((n + 1))
@@ -576,6 +669,19 @@ init_secrets() {
   fi
 }
 
+# A workflow of the project with one of PEPPEC's names (often ci.yml): moved aside, so both run.
+# PEPPEC's own files call the engine's reusable workflow
+keep_own_workflow() {
+  local f=".github/workflows/$1.yml" to
+  [ -f "$f" ] && ! grep -q "/\.github/workflows/$1\.yml@" "$f" || return 0
+  to=".github/workflows/$1-own.yml"; [ "$1" != ci ] || to=.github/workflows/build.yml
+  [ ! -e "$to" ] || { warn "$f is yours, and $to exists too: you will be asked before $f is overwritten"; return 0; }
+  if confirm "$f is your own workflow, and PEPPEC needs that name. Rename it to $to and keep both?" y; then
+    if git ls-files --error-unmatch "$f" > /dev/null 2>&1; then git mv "$f" "$to"; else mv "$f" "$to"; fi
+    ok "$f renamed to $to: if a ruleset requires its checks, their names do not change"
+  fi
+}
+
 init_files() {
   step "Files"
   local presets detected="" content f line cron
@@ -597,6 +703,7 @@ init_files() {
     content=$(engine_file "examples/$f.yml" | sed -e '/^# Copy to /d' \
       -e "s|\\.yml@v1\$|.yml@$REF|" -e "s|engine_ref: v1|engine_ref: $REF|" \
       -e "s|cron: '0 7,8 \\* \\* \\*'|cron: '$cron'|")
+    keep_own_workflow "$f"
     write_file ".github/workflows/$f.yml" "$content"
   done
   if [ -f .github/peppec.yml ]; then ok ".github/peppec.yml (kept)"; else
@@ -676,6 +783,22 @@ init_planning() {
         warn "$TRIAGE_FILE: issues the skills mark ready-for-agent will not be built"
       fi;;
   esac
+}
+
+# A SessionStart hook for the planning sessions: it checks the planning skills each time Claude Code
+# starts in this repository, and says something only when they changed what PEPPEC relies on
+init_skills_hook() {
+  local f=.claude/settings.json current tmp
+  current=$(cat "$f" 2> /dev/null || echo '{}')
+  jq -e . <<< "$current" > /dev/null 2>&1 || { warn "$f is not valid JSON: hook not added"; return; }
+  if [ -n "$(hook_of <<< "$current")" ]; then ok "$f: the planning skills are checked when a session starts"; return; fi
+  confirm "Add a hook to $f that checks the planning skills when Claude Code starts here?" y \
+    || { warn "no hook: a change in the planning skills shows only in peppec doctor"; return; }
+  mkdir -p .claude; tmp=$(mktemp)
+  jq --arg c "$SKILLS_HOOK" '.hooks.SessionStart = ((.hooks.SessionStart // []) + [{matcher: "startup", hooks: [{type: "command", command: $c, timeout: 30}]}])' \
+    <<< "$current" > "$tmp" && cat "$tmp" > "$f"
+  rm -f "$tmp"
+  ok "$f (hook added: it runs peppec skills --hook)"
 }
 
 # True when a deletion rule applies to the base branch from a ruleset without a bypass list
@@ -762,11 +885,12 @@ cmd_init() {
   cd "$(git rev-parse --show-toplevel)"
   [ -n "$REPO" ] && die "init works on the current clone: do not pass -R"
   resolve_repo
-  [ "$(gh api "repos/$REPO" --jq .default_branch)" = main ] || die "the default branch of $REPO must be 'main'"
+  init_default_branch
   printf '%sPEPPEC%s on %s%s%s, engine %s@%s\n' "$B" "$N" "$B" "$REPO" "$N" "$ENGINE" "$REF"
   load_vars
   FRESH=false; [ -n "$(var_of CONTROL_ISSUE)" ] || FRESH=true
   SECRET_NAMES=$(gh secret list -R "$REPO" --json name --jq '.[].name')
+  [ "$FRESH" = false ] || init_ready_issues
   init_labels
   init_settings
   init_control_panel
@@ -775,6 +899,7 @@ cmd_init() {
   init_secrets
   init_files
   init_planning
+  init_skills_hook
   init_ruleset
   init_keep_base
   init_feature_rules
@@ -782,6 +907,7 @@ cmd_init() {
   step "Next steps"
   local paths=".github .coderabbit.yaml .gitignore CHANGELOG.md"
   [ -f CLAUDE.md ] && paths="$paths CLAUDE.md"
+  [ -f .claude/settings.json ] && paths="$paths .claude/settings.json"
   [ -f "$TRIAGE_FILE" ] && paths="$paths $TRIAGE_FILE"
   local n=2
   if [ "$BASE_BRANCH" = main ]; then
@@ -996,6 +1122,9 @@ cmd_doctor() {
       *) warn "$TRIAGE_FILE does not map ready-for-agent to ready: issues from /to-tickets will not be built (peppec init fixes it)";;
     esac
   fi
+  HOOK=false cmd_skills
+  if [ -n "$(host_file .claude/settings.json | hook_of)" ]; then ok ".claude/settings.json checks the planning skills when a session starts"
+  else warn "no hook checks the planning skills when a session starts (peppec init adds it to .claude/settings.json)"; fi
 
   step "Branch protection"
   local checks branch branches="$default_branch"
@@ -1007,6 +1136,14 @@ cmd_doctor() {
     elif [ -z "$checks" ]; then warn "$branch requires no status check: add 'ci / ci' to an active ruleset"
     elif grep -q 'ci / ci' <<< "$checks"; then ok "$branch requires: $checks"
     else bad "$branch requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
+    local reviews
+    if [ "$branch" = "$BASE_BRANCH" ] && reviews=$(api "repos/$REPO/rules/branches/$branch" \
+        --jq '[.[] | select(.type == "pull_request") | .parameters] | "\(map(.required_approving_review_count // 0) | max // 0)|\(any(.require_code_owner_review))"') \
+        && [ "$reviews" != "0|false" ]; then
+      local what="${reviews%|*} approving reviews"
+      [ "${reviews#*|}" = false ] || what="$what and a code owner review"
+      warn "$branch requires $what: the workflow merges with the app, which may not satisfy them, so automatic merges can be refused"
+    fi
     if [ "$branch" = "$BASE_BRANCH" ] && [ -n "$(var_of PEPPEC_E2E_ALL)" ] && [ -n "$checks" ] \
        && ! grep -q 'ci / e2e_all' <<< "$checks"; then
       warn "$branch does not require 'ci / e2e_all': a red end-to-end suite would not block your merge of a feature"
@@ -1035,6 +1172,16 @@ cmd_doctor() {
       *) warn "$f: $state";;
     esac
   done
+  # The checks must start green: for the agent "done" means "the checks pass"
+  state=$(gh run list -R "$REPO" --workflow ci.yml --branch "$default_branch" --event push --limit 1 \
+    --json conclusion --jq '.[0].conclusion // ""' 2> /dev/null || true)
+  [ "$state" != failure ] || warn "the last CI run on $default_branch failed: the agent cannot tell its own failures from these"
+  local slowest stall; stall=$(var_of STALL_MINUTES); stall=${stall:-120}
+  local minutes='[.[] | (.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601)] | (max // 0) / 60 | floor'
+  slowest=$(gh run list -R "$REPO" --workflow ci.yml --status success --limit 10 --json createdAt,updatedAt \
+    --jq "$minutes" 2> /dev/null || echo 0)
+  if [ "${slowest:-0}" -ge "$stall" ]; then warn "CI took up to $slowest minutes, STALL_MINUTES is $stall: issues will stop waiting for it; raise STALL_MINUTES"
+  elif [ "${slowest:-0}" -ge $(( stall / 2 )) ]; then note "CI takes up to $slowest minutes, STALL_MINUTES is $stall"; fi
 
   echo
   if [ "$PROBLEMS" -gt 0 ]; then printf '%s%d problem(s)%s, %d warning(s)\n' "$R" "$PROBLEMS" "$N" "$WARNINGS"; exit 1; fi
@@ -1146,6 +1293,9 @@ Usage:
       make one bot follow several repositories that share the app, the bot and the chat.
   peppec update
       Replace this script with the current one of the engine.
+  peppec skills [--hook]
+      Check that the planning skills on this computer still do what PEPPEC relies on.
+      With --hook (the SessionStart hook init adds) it prints only when something changed.
 
 Options:
   --ref <ref>   Engine version to install (default: v1)
@@ -1165,6 +1315,7 @@ while [ $# -gt 0 ]; do
     --ref) REF="${2:-}"; shift 2;;
     --out) OUT_DIR="${2:-}"; shift 2;;
     -y|--yes) YES=true; shift;;
+    --hook) HOOK=true; shift;;
     -h|--help) usage; exit 0;;
     *) die "unknown option: $1";;
   esac
@@ -1174,6 +1325,7 @@ case "$COMMAND" in
   doctor) cmd_doctor;;
   bot) cmd_bot;;
   update) cmd_update;;
+  skills) cmd_skills;;
   ""|help|-h|--help) usage;;
   *) die "unknown command: $COMMAND (try 'peppec help')";;
 esac

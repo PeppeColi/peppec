@@ -48,7 +48,7 @@ What stays manual, because it needs your login or a secret only you can generate
 
 `init` also writes the PEPPEC section of `CLAUDE.md`, which tells the planning sessions on your computer how to write issues PEPPEC can build: see [Planning work for the agents](planning.md#producing-the-issues-with-a-planning-session).
 
-`peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, `CHANGELOG.md`, the PEPPEC section of `CLAUDE.md`, branch protection, the expiry of the Claude token. With `--key <app.pem>` it also checks that the app is installed on the repository.
+`peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, `CHANGELOG.md`, the PEPPEC section of `CLAUDE.md`, the planning skills on your computer, branch protection, the speed of CI, the expiry of the Claude token. With `--key <app.pem>` it also checks that the app is installed on the repository.
 
 For unattended use, `peppec init --yes` never asks: it keeps what is set, takes the defaults and reads the secrets from the environment.
 
@@ -69,13 +69,14 @@ All `gh` commands run on your computer, signed in as `<USER>`.
 PEPPEC can be installed on a project that already has code, history and habits. Check these before running `init`; the first three are blocking.
 
 - [ ] **A preset fits the language** (`rust-v1`, `php-v1`). Another language needs a new preset: see [CONTRIBUTING.md](../CONTRIBUTING.md).
-- [ ] **The default branch is `main`.** `init` stops otherwise; rename it under Settings → Branches.
+- [ ] **The default branch is `main`.** Otherwise `init` offers to rename it on GitHub (its pull requests and rules follow it) and in your clone; it stops if you decline, or if a branch `main` already exists.
 - [ ] **The preset's checks pass on the code as it is.** For the agent "done" means "the checks pass", so they must start green, and a test suite that matters is what makes them meaningful. On a mature project a strict linter often fails at first: fix the warnings, or declare your own commands under `check:` in `.github/peppec.yml`, which replaces the preset's for CI and the agent alike.
 - [ ] **Services the tests need** (a database, system packages, generated files) go in a small setup action of yours, named by `extra_setup` (see [Services and other project-specific setup](#services-and-other-project-specific-setup)).
-- [ ] **Workflow files with the same names.** `init` writes `agent.yml`, `ci.yml` and `summary.yml`, and asks before overwriting a file that differs. The required check is `ci / ci` from PEPPEC's workflow: rename your own CI first (for example to `build.yml`) and keep both.
-- [ ] **No open issue labelled `ready` that you do not want built.** The first run takes the oldest one. If `ready` already means something else to you, rename your label first.
+- [ ] **Workflow files with the same names.** `init` writes `agent.yml`, `ci.yml` and `summary.yml`. When one of them is your own workflow, it offers to rename yours (`ci.yml` to `build.yml`, the others to `<name>-own.yml`) so both run. The required check is `ci / ci` from PEPPEC's workflow.
+- [ ] **No open issue labelled `ready` that you do not want built.** The first run takes the oldest one. On a new installation `init` lists them and offers to remove the label; it also warns when `ready` already existed with another description. If `ready` means something else to you, rename your label first.
 - [ ] **A `dev` branch, if you already have one.** `init` proposes `dev` as the base branch and uses it as it is. If it has commits `main` lacks, `init` tells you to bring `main` into it with a pull request after the install commit, so both branches run the same workflow files.
-- [ ] **Existing branch protection.** `init` leaves an existing branch ruleset alone and only tells you what it should require; check that it requires `ci / ci`.
+- [ ] **Existing branch protection.** `init` leaves an existing branch ruleset alone and only tells you what it should require; check that it requires `ci / ci`. `peppec doctor` warns when the base branch requires approving reviews or a code owner review: the workflow merges with the app, so automatic merges can be refused.
+- [ ] **CI fast enough, and green.** `peppec doctor` warns when the last CI run on `main` failed, and when CI has taken longer than `STALL_MINUTES` (120 by default): issues would stop waiting for it.
 
 Two planning sessions are worth doing before the first feature: see [Working on an existing codebase](planning.md#working-on-an-existing-codebase).
 

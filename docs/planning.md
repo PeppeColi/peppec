@@ -77,4 +77,14 @@ The section sits between a `<!-- peppec:start` line and a `<!-- peppec:end -->` 
 | `ready-for-agent`          | `ready`              | Fully specified, ready for an AFK agent  |
 ```
 
+### When the skills change
+
+The skills come as a Claude Code plugin, `mattpocock-skills`. Installed from the official marketplace it updates by itself, and the new version loads the next time Claude Code starts. PEPPEC relies on three of its behaviours: the `ready-for-agent` row of the label map, `/to-tickets` applying that label, and the `wayfinder:` labels. Three checks tell you when an update changes one of them:
+
+- **When a session starts.** `init` adds a SessionStart hook to `.claude/settings.json` that runs `peppec skills --hook` (or `gh peppec skills --hook`). It says nothing while all is well; otherwise the session opens with a message such as "PEPPEC: mattpocock-skills 1.4.0 changed what PEPPEC relies on: /to-tickets no longer applies ready-for-agent…", before you write any issue. It needs `peppec` or the gh extension on your computer.
+- **In the queue.** At every run the workflow looks for open issues labelled `ready-for-agent` but not `ready`, and sends one Telegram message for each: they would never be built.
+- **In `peppec doctor`** and `peppec skills`, which show the installed version and the same checks.
+
+If you prefer to change version only on purpose, install the plugin from its own marketplace pinned to a release, where automatic updates are off by default: `/plugin marketplace add mattpocock/skills#v1.3.2`, then install `mattpocock-skills` from it, and uninstall the copy from the official marketplace (the skills have the same names). To upgrade, add the marketplace again with the new tag, run `/setup-matt-pocock-skills`, then `peppec init`.
+
 Earlier versions of this page asked you to add an "Issues built by PEPPEC" section at the end of `docs/agents/issue-tracker.md`. The section in `CLAUDE.md` replaces it: delete it, so the two cannot disagree.
