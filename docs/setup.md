@@ -62,6 +62,20 @@ Prerequisites:
 
 All `gh` commands run on your computer, signed in as `<USER>`.
 
+## On an existing repository
+
+PEPPEC can be installed on a project that already has code, history and habits. Check these before running `init`; the first three are blocking.
+
+- [ ] **A preset fits the language** (`rust-v1`, `php-v1`). Another language needs a new preset: see [CONTRIBUTING.md](../CONTRIBUTING.md).
+- [ ] **The default branch is `main`.** `init` stops otherwise; rename it under Settings → Branches.
+- [ ] **The preset's checks pass on the code as it is.** For the agent "done" means "the checks pass", so they must start green, and a test suite that matters is what makes them meaningful. On a mature project a strict linter often fails at first: fix the warnings, or declare your own commands under `check:` in `.github/peppec.yml`, which replaces the preset's for CI and the agent alike.
+- [ ] **Services the tests need** (a database, system packages, generated files) go in a small setup action of yours, named by `extra_setup` (see [Services and other project-specific setup](#services-and-other-project-specific-setup)).
+- [ ] **Workflow files with the same names.** `init` writes `agent.yml`, `ci.yml` and `summary.yml`, and asks before overwriting a file that differs. The required check is `ci / ci` from PEPPEC's workflow: rename your own CI first (for example to `build.yml`) and keep both.
+- [ ] **No open issue labelled `ready` that you do not want built.** The first run takes the oldest one. If `ready` already means something else to you, rename your label first.
+- [ ] **Existing branch protection.** `init` leaves an existing branch ruleset alone and only tells you what it should require; check that it requires `ci / ci`.
+
+Two planning sessions are worth doing before the first feature: see [Working on an existing codebase](planning.md#working-on-an-existing-codebase).
+
 ## Phase 1 — Repository settings and labels
 
 1. Add the working folders of the workflows to `.gitignore`:

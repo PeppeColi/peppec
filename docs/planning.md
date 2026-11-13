@@ -33,6 +33,25 @@ To have the feature checked end to end by the machine as well, write the scenari
 
 Keep a feature to a handful of issues, and plan the next one after seeing the first built: issues written long before they run describe code that no longer exists.
 
+## Working on an existing codebase
+
+Two sessions produce no issues but make every later one better. Run them on the base branch, and bring what they write (glossary, decision records) there too.
+
+- **A glossary.** `/grill-with-docs` pointed at the repository compares what you say with the code, points out contradictions, and writes `GLOSSARY.md` term by term. Specifications and work units then use those words, and the agent is told to use them too.
+- **A picture of the architecture.** `/improve-codebase-architecture` reads the commit history, looks at the code that changes most, and reports the shallow modules worth deepening, without touching the code. On an existing project it shows where tests have no good place to hook in, before an agent is asked to work there.
+
+Then pick the way into the queue by the kind of work; every way ends with issues labelled `ready`:
+
+| You have | Way | Tried with PEPPEC |
+| --- | --- | --- |
+| A feature that can be decided in one session | `/grill-with-docs` → `/to-spec` → `/to-tickets` | yes |
+| A backlog of issues written by others | `/triage` | no |
+| A hard bug | the `diagnosing-bugs` skill | no |
+| A large, unclear change: a rewrite, a migration, a new subsystem | `/wayfinder` → `/to-spec` → `/to-tickets` | no |
+| Technical debt, refactoring | `/improve-codebase-architecture`, then the first way | no |
+
+On existing code, prefer the test points that already exist when `/to-spec` asks for them, and let `/to-tickets` put any preparatory refactoring first.
+
 ## Producing the issues with a planning session
 
 Any way of creating issues works. One that fits well is the set of skills in [mattpocock/skills](https://github.com/mattpocock/skills), run in Claude Code on your computer:

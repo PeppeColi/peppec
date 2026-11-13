@@ -22,6 +22,9 @@ the map reads them:
 ### Specifications
 
 - Include the scenarios, in given/when/then form, under a heading named "Scenarios".
+- If the repository has end-to-end tests per feature (the `PEPPEC_E2E_FEATURE` variable), the
+  scenarios become those tests: tag or name them with the number of the specification, so that
+  the command selects them.
 - Never label the specification itself `ready`: only its work units get it.
 
 ### Work units
