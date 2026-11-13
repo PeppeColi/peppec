@@ -47,7 +47,7 @@ Then pick the way into the queue by the kind of work; every way ends with issues
 | You have | Way | Tried with PEPPEC |
 | --- | --- | --- |
 | A feature that can be decided in one session | `/grill-with-docs` → `/to-spec` → `/to-tickets` | yes |
-| A backlog of issues written by others | `/triage` | no |
+| A backlog of issues written by others | `/triage`, then a new issue of yours for each one to build: the queue builds only issues written by you or the app | no |
 | A hard bug | the `diagnosing-bugs` skill | no |
 | A large, unclear change: a rewrite, a migration, a new subsystem | `/wayfinder` → `/to-spec` → `/to-tickets` | no |
 | Technical debt, refactoring | `/improve-codebase-architecture`, then the first way | no |

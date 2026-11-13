@@ -136,6 +136,17 @@ if [ -z "$active" ]; then
     marker_set "$n" notworkunit 1
     notify "#$n has the ready label but is not a work unit (it has sub-issues, or a wayfinder label): the queue skips it. Remove ready from it, and put it on its sub-issues instead. https://github.com/$REPO/issues/$n"
   done
+  # Written by someone else: its body would reach the agent's prompt, and its author can still
+  # edit it after you label it. The label goes, so the bot and the dashboard do not count it
+  [ -n "${OWNER_LOGIN:-}" ] || { echo "OWNER_LOGIN is not set: no issue starts (peppec doctor)"; exit 0; }
+  for n in $(jq -r --arg o "$OWNER_LOGIN" --arg a "${APP_LOGIN:-}" \
+      '.[] | select(.user.login != $o and .user.login != $a) | .number' <<< "$open_ready"); do
+    echo "Issue #$n was not written by $OWNER_LOGIN or the app: ready removed"
+    rm_label "$n" ready
+    notify "#$n has the ready label but was not written by you: the queue never builds it, and the label is removed. Its author could change its text after you label it. Copy what you want built into an issue of your own. https://github.com/$REPO/issues/$n"
+  done
+  open_ready=$(jq --arg o "$OWNER_LOGIN" --arg a "${APP_LOGIN:-}" \
+    '[.[] | select(.user.login == $o or .user.login == $a)]' <<< "$open_ready")
   ready=$(jq -r '.[] | select('"$NOT_WORK_UNIT"' | not) | .number' <<< "$open_ready")
   first=""
   for n in $ready; do

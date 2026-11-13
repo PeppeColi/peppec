@@ -53,13 +53,20 @@ if parent=$(gh api "repos/$REPO/issues/$ISSUE/parent" 2> /dev/null) \
     echo; jq -r '.body // ""' <<< "$parent"
   } > .agent/spec.md
 fi
-I=$(gh issue view "$ISSUE" -R "$REPO" --json title,body)
+I=$(gh api "repos/$REPO/issues/$ISSUE")
+# The queue builds only issues you or the app wrote (decide.sh): a second check, since the body
+# goes to the agent as it is
+author=$(jq -r .user.login <<< "$I")
+if [ "$author" != "$OWNER_LOGIN" ] && [ "$author" != "$APP_LOGIN" ]; then
+  echo "::error::Issue #$ISSUE was written by $author, not by $OWNER_LOGIN or the app: not given to the agent"
+  exit 1
+fi
 echo "title=$(jq -r .title <<< "$I")" >> "$GITHUB_OUTPUT"
 # The app's short name, for the bots allowed to trigger Claude: "name[bot]" -> "name"
 echo "app_slug=${APP_LOGIN%\[bot\]}" >> "$GITHUB_OUTPUT"
 {
   echo "# Issue #$ISSUE: $(jq -r .title <<< "$I")"
-  echo; jq -r .body <<< "$I"
+  echo; jq -r '.body // ""' <<< "$I"
   echo; echo "## Authorized comments"
   # Read with the REST API: "gh issue view" names the app without "[bot]", so the answers
   # and hints the Telegram bot posts as the app would not match APP_LOGIN

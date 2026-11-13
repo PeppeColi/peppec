@@ -49,6 +49,8 @@ env:
   PEPPEC_E2E_FEATURE: ${{ vars.PEPPEC_E2E_FEATURE }}
   # Only the specifications you wrote get a feature branch (spec_of in scripts/lib.sh)
   OWNER_LOGIN: ${{ vars.OWNER_LOGIN }}
+  # With OWNER_LOGIN, the only authors whose ready issues the queue builds
+  APP_LOGIN: ${{ vars.APP_LOGIN }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   CTL: _ctl/scripts
 
@@ -172,7 +174,6 @@ jobs:
         run: bash "$CTL/task.sh"
         env:
           GH_TOKEN: ${{ secrets.AGENT_TOKEN }}
-          APP_LOGIN: ${{ vars.APP_LOGIN }}
           CI_WORKFLOW: ${{ inputs.ci_workflow }}
           # A sync work unit starts with a merge made by the workflow
           GIT_NAME: ${{ vars.AGENT_GIT_NAME }}
