@@ -53,7 +53,7 @@ peppec bot       # prepares the folder for the machine that runs the Telegram bo
 
 One bot can follow several repositories: `peppec bot -R owner/first -R owner/second`.
 
-If `~/.local/bin` is not in your `PATH`, call it with its full path. `peppec update` replaces the script with the current version.
+If `~/.local/bin` is not in your `PATH`, call it with its full path. `peppec update` replaces the script with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update.
 
 It asks for what only you can provide: the tokens and your preferences. It creates the GitHub App with you, in the browser: you only confirm. [docs/setup.md](docs/setup.md) explains each step and how to do everything by hand.
 

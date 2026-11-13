@@ -1110,14 +1110,24 @@ cmd_update() {
      || ! bash -n "$tmp" 2> /dev/null; then
     rm -f "$tmp"; die "could not download a valid cli/peppec from $ENGINE@$REF"
   fi
+  local release; release=$(release_of "$REF")
   if cmp -s "$tmp" "$self"; then
-    rm -f "$tmp"; ok "already up to date with $ENGINE@$REF"
+    rm -f "$tmp"; ok "already up to date with $ENGINE@$REF${release:+ ($release)}"
+    note "Only this script is compared: a release that changes the workflows alone leaves it as it is."
   else
     chmod +x "$tmp"
     # A rename, not an overwrite: bash is still reading the old file
     mv "$tmp" "$self"
-    ok "updated to $ENGINE@$REF: $self"
+    ok "updated to $ENGINE@$REF${release:+ ($release)}: $self"
   fi
+}
+
+# The release a ref points to (v1 -> v1.27.0); empty when no vX.Y.Z tag is on that commit
+release_of() {
+  local sha
+  sha=$(api "repos/$ENGINE/commits/$1" --jq .sha) || return 0
+  api "repos/$ENGINE/git/matching-refs/tags/v" \
+    --jq "[.[] | select(.object.sha == \"$sha\") | .ref | ltrimstr(\"refs/tags/\") | select(test(\"^v[0-9]+\\\\.[0-9]+\\\\.[0-9]+\$\"))] | last // empty" || true
 }
 
 usage() {
