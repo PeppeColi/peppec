@@ -9,6 +9,23 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-11-13
+
+### Added
+
+- Existing projects: on a new installation `peppec init` lists the open issues already labelled
+  `ready` and offers to remove the label; warns when `ready` existed with another description;
+  offers to rename your own `ci.yml` to `build.yml` (the others to `<name>-own.yml`) and a default
+  branch other than `main`. `peppec doctor` warns when the base branch requires approving or code
+  owner reviews, when the last CI run on `main` failed, and when CI takes longer than
+  `STALL_MINUTES`.
+- Planning skills: `peppec skills` checks that the installed `mattpocock-skills` plugin still does
+  what PEPPEC relies on (the `ready-for-agent` row of the label map, `/to-tickets` applying it,
+  the `wayfinder:` labels). `peppec init` adds a SessionStart hook to `.claude/settings.json` that
+  runs it when Claude Code starts and speaks only when something changed; `peppec doctor` shows
+  it too. The queue sends one Telegram message for each open issue labelled `ready-for-agent`
+  but not `ready`.
+
 ## [1.27.1] - 2026-11-13
 
 ### Fixed
@@ -327,7 +344,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.27.1...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.28.0...HEAD
+[1.28.0]: https://github.com/PeppeColi/peppec/compare/v1.27.1...v1.28.0
 [1.27.1]: https://github.com/PeppeColi/peppec/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/PeppeColi/peppec/compare/v1.26.0...v1.27.0
 [1.26.0]: https://github.com/PeppeColi/peppec/compare/v1.25.0...v1.26.0

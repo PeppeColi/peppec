@@ -117,6 +117,17 @@ if [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ]; then
   if [ -n "$merged_issue" ] && [ "$merged_issue" != "$closed" ]; then notify_feature_done "$merged_issue"; fi
 fi
 
+# Issues the planning skills labelled ready-for-agent but not ready: the label map in
+# docs/agents/triage-labels.md is not the one init wrote, or the skills changed with an update.
+# The queue never builds them; told once per issue
+for n in $(gh api "repos/$REPO/issues?state=open&labels=ready-for-agent&per_page=100" \
+    --jq '.[] | select(.pull_request | not) | select([.labels[].name] | index("ready") | not) | .number' 2> /dev/null || true); do
+  echo "Issue #$n has ready-for-agent but not ready"
+  [ -z "$(marker_get "$n" labelmap)" ] || continue
+  marker_set "$n" labelmap 1
+  notify "#$n has the label ready-for-agent but not ready: the queue never builds it. The planning skills did not use the label map PEPPEC needs: run peppec doctor (and peppec skills) on your computer, then label it ready. https://github.com/$REPO/issues/$n"
+done
+
 if [ -z "$active" ]; then
   ok=false
   # "always on" on the control panel: new issues start at any hour
