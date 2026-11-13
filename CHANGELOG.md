@@ -9,6 +9,13 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- `dev` from day one: on a new installation `peppec init` proposes `dev` as the base branch,
+  creates it at the commit of `main`, and prints one push that lands the install commit on both
+  branches (in an empty repository that push creates them). An existing `dev` with commits `main`
+  lacks gets a pull request from `main` instead. Installations already on `main` keep it.
+
 ## [1.26.0] - 2026-11-13
 
 ### Added
