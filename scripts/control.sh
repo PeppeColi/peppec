@@ -20,7 +20,7 @@ case "$ACTION" in
     gh pr merge "$PR" -R "$REPO" "$method" --match-head-commit "$SHA"
     delete_agent_branch "$head"
     close_merged "$ISSUE"
-    notify "Merged PR #$PR (issue #$ISSUE)."
+    notify_info "Merged PR #$PR (issue #$ISSUE)."
     notify_feature_done "$ISSUE";;
   notify_ready)
     add_label "$PR" "ready to merge"

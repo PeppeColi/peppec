@@ -53,7 +53,7 @@ if base_branch_missing; then
 fi
 if has "$ctrl" "base missing"; then
   rm_label "$CONTROL_ISSUE" "base missing"
-  notify "The base branch $BASE_BRANCH is back: the queue goes on."
+  notify_info "The base branch $BASE_BRANCH is back: the queue goes on."
 fi
 
 # Finished features waiting for you get the base branch again when it went on (resync_features),

@@ -9,6 +9,16 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-11-14
+
+### Changed
+
+- Telegram rings only when you need to act: merges in automatic mode, quota retries, hotfix and
+  sync work units opened by the queue, the base branch coming back, an answer to CodeRabbit and the
+  trace of a dashboard action now arrive silently.
+- The daily summary arrives silently, unless a token is about to expire, and is not sent on a day
+  with nothing merged, blocked, asked or in queue.
+
 ## [1.29.2] - 2026-11-14
 
 ### Security
@@ -392,7 +402,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.29.2...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.30.0...HEAD
+[1.30.0]: https://github.com/PeppeColi/peppec/compare/v1.29.2...v1.30.0
 [1.29.2]: https://github.com/PeppeColi/peppec/compare/v1.29.1...v1.29.2
 [1.29.1]: https://github.com/PeppeColi/peppec/compare/v1.29.0...v1.29.1
 [1.29.0]: https://github.com/PeppeColi/peppec/compare/v1.28.1...v1.29.0

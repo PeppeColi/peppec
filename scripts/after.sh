@@ -56,7 +56,7 @@ if [ "$OUTCOME" != success ]; then
     notify_blocked "Claude token rejected while working on #$ISSUE: run 'claude setup-token' and update the CLAUDE_CODE_OAUTH_TOKEN secret."
   elif [ "$failure" = quota ]; then
     add_label "$ISSUE" "awaiting quota"
-    notify "Claude quota exhausted while working on #$ISSUE: will retry automatically."
+    notify_info "Claude quota exhausted while working on #$ISSUE: will retry automatically."
   else
     add_label "$ISSUE" "needs human"
     notify_blocked "Agent error on #$ISSUE: $RUN_URL"
@@ -217,7 +217,7 @@ if [ "$pushed" = false ] && [ "$replied" = false ]; then
   exit 0
 fi
 if [ "$pushed" = false ]; then
-  notify "The agent changed nothing on #$ISSUE and answered CodeRabbit instead: https://github.com/$REPO/pull/$PR"
+  notify_info "The agent changed nothing on #$ISSUE and answered CodeRabbit instead: https://github.com/$REPO/pull/$PR"
 fi
 
 case "$ACTION" in
