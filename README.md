@@ -28,7 +28,13 @@ The full picture is in [docs/architecture.md](docs/architecture.md).
 
 ## Install
 
-The command line does most of the work. Install it once, outside your projects:
+The command line does most of the work. The simplest way is the gh extension, which always runs the current version:
+
+```bash
+gh extension install PeppeColi/gh-peppec
+```
+
+With it, type `gh peppec` wherever this page says `peppec`. Or install the script once, outside your projects:
 
 ```bash
 mkdir -p ~/.local/bin

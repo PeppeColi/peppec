@@ -854,6 +854,10 @@ cmd_bot() {
 
 # ---------- update ----------
 cmd_update() {
+  if [ -n "${PEPPEC_LAUNCHER:-}" ]; then
+    ok "$PEPPEC_LAUNCHER downloads the current cli/peppec of $ENGINE@$REF on every run: nothing to update"
+    return
+  fi
   preflight
   local self="${BASH_SOURCE[0]}" tmp
   case "$self" in /dev/*|/proc/*) die "this copy is not a file on disk: nothing to update";; esac
