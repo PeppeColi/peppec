@@ -237,6 +237,20 @@ jobs:
       # Optional setup action of the host repository (extra_setup in .github/peppec.yml)
       - if: steps.cfg.outputs.extra_setup != ''
         uses: ./_extra
+      # With CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, Claude Code runs every command in a sandbox that
+      # needs bubblewrap and socat; without them the Bash tool refuses to run anything. Ubuntu
+      # 24.04 also restricts the user namespaces bubblewrap uses. The same setup as
+      # claude-code-action's own step for untrusted users
+      - name: Sandbox for the agent's commands
+        run: |
+          for i in 1 2 3; do
+            sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends bubblewrap socat && break
+            echo "apt-get attempt $i failed, retrying..."; sleep 5
+          done
+          command -v bwrap > /dev/null && command -v socat > /dev/null
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - id: clock
         run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
       - id: claude
