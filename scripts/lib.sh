@@ -284,11 +284,99 @@ notify_feature_done() {
     # is what the merge will give. A conflict becomes a work unit, and this message waits for it
     synced=$(sync_feature "$pn" "$fb") || return 0
     [ "$synced" != conflict ] || return 0
+    # With end-to-end tests the message waits for their result on the pull request (judge_features)
+    if [ -n "${PEPPEC_E2E_FEATURE:-}" ]; then
+      echo "Feature of #$pn finished: waiting for its end-to-end tests on $link"
+      return 0
+    fi
   fi
-  marker_set "$pn" done "$total"
+  ready_to_try "$pn" "$total" "$(jq -r .title <<< "$parent")" "$where" "$link"
+}
+
+# The "ready to be tried" message, once per number of sub-issues ($2) of specification $1
+ready_to_try() {
+  marker_set "$1" done "$2"
   # The button asks the bot for one sentence and makes it a new sub-issue (report in bot/bot.py)
-  notify "All $total sub-issues of #$pn \"$(jq -r .title <<< "$parent")\" are merged into $where: the feature is ready to be tried. $link" \
-    "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$pn|\"}]]}"
+  notify "All $2 sub-issues of #$1 \"$3\" are merged into $4: the feature is ready to be tried. $5" \
+    "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$1|\"}]]}"
+}
+
+# The end-to-end tests of the finished features. CI runs them on the pull request of each feature
+# branch into the base branch (job e2e_feature of the reusable CI workflow, PEPPEC_E2E_FEATURE);
+# here their result on the latest commit is read, once per commit (marker e2e):
+# - passed: "ready to be tried", if not sent yet for these sub-issues;
+# - failed: a hotfix work unit of size L with the end of the log, as a sub-issue, so the feature
+#   is finished again only once it is merged. After E2E_HOTFIXES of them the tests still fail:
+#   you are told, and nothing more is opened until they pass;
+# - no result after STALL_MINUTES: you are told once.
+# The check is named after the caller's job, like CI_CHECK ("ci / ci" -> "ci / e2e_feature")
+E2E_CHECK="${CI_CHECK:-ci / ci}"; E2E_CHECK="${E2E_CHECK% / *} / e2e_feature"; E2E_HOTFIXES=2
+judge_features() {
+  [ -n "${PEPPEC_E2E_FEATURE:-}" ] && [ -n "$(template feature)" ] || return 0
+  local prs head sha pn spec total check fails log url
+  prs=$(gh pr list -R "$REPO" --base "${BASE_BRANCH:-main}" --state open --json url,headRefName,headRefOid,body \
+    --jq '.[] | select(.body | contains("<!-- peppec:feature=")) | "\(.headRefName) \(.headRefOid) \(.url) \(.body | capture("<!-- peppec:feature=(?<n>[0-9]+) -->").n)"')
+  while read -r head sha url pn; do
+    [ -n "$pn" ] && is_feature_branch "$head" || continue
+    spec=$(gh api "repos/$REPO/issues/$pn")
+    total=$(jq '.sub_issues_summary.total // 0' <<< "$spec")
+    [ "$(jq '.sub_issues_summary.completed // 0' <<< "$spec")" -eq "$total" ] || continue
+    [ "$(marker_get "$pn" e2e)" != "$sha" ] || continue
+    check=$(gh api -X GET "repos/$REPO/commits/$sha/check-runs" -f check_name="$E2E_CHECK" \
+      --jq '.check_runs[0] | if . == null then "pending" elif .status != "completed" then "pending" else "\(.conclusion) \(.id)" end')
+    case "$check" in
+      pending)
+        if [ "$(age_minutes "$(gh api "repos/$REPO/commits/$sha" --jq .commit.committer.date)")" -ge "${STALL_MINUTES:-30}" ] \
+           && [ "$(marker_get "$pn" e2ewait)" != "$sha" ]; then
+          marker_set "$pn" e2ewait "$sha"
+          notify "No result of the end-to-end tests of #$pn after ${STALL_MINUTES:-30} minutes: check the $E2E_CHECK job on $url"
+        else
+          echo "Waiting for the end-to-end tests of #$pn"
+        fi;;
+      success*|skipped*|neutral*)
+        marker_set "$pn" e2e "$sha"; marker_set "$pn" e2efail 0
+        echo "End-to-end tests of #$pn passed on $sha"
+        if [ "$(marker_get "$pn" done)" != "$total" ]; then
+          ready_to_try "$pn" "$total" "$(jq -r .title <<< "$spec")" "$head" "$url"
+        fi;;
+      *)
+        marker_set "$pn" e2e "$sha"
+        fails=$(( $(marker_get "$pn" e2efail || true) + 0 ))
+        if [ "$fails" -ge "$E2E_HOTFIXES" ]; then
+          notify "The end-to-end tests of #$pn still fail after $fails hotfixes: fix them by hand, or press Report a problem. $url" \
+            "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$pn|\"}]]}"
+          continue
+        fi
+        marker_set "$pn" e2efail $(( fails + 1 ))
+        log=$(gh api "repos/$REPO/actions/jobs/${check#* }/logs" 2> /dev/null \
+          | sed -E 's/^[0-9-]+T[0-9:.]+Z //' | tail -n 80 || true)
+        e2e_hotfix "$pn" "$head" "$sha" "$log";;
+    esac
+  done <<< "$prs"
+}
+
+# A work unit of size L that fixes the failing end-to-end tests of a feature: a hotfix sub-issue
+# of its specification, with the end of the log
+e2e_hotfix() {
+  local pn=$1 fb=$2 sha=$3 log=$4 issue n
+  issue=$(gh api -X POST "repos/$REPO/issues" -f title="Fix the failing end-to-end tests of #$pn" \
+    -f body="The end-to-end tests of the feature of #$pn failed on \`$fb\` (commit $sha). Find the cause and fix it: the feature as its specification (the parent issue) describes it, or the tests if they are the ones that are wrong. Run them with:
+
+\`\`\`
+${PEPPEC_E2E_FEATURE//\{spec\}/$pn}
+\`\`\`
+
+End of the log:
+
+\`\`\`
+${log:-(not available)}
+\`\`\`
+
+<!-- peppec:kind=hotfix -->")
+  gh api -X POST "repos/$REPO/issues/$pn/sub_issues" -F sub_issue_id="$(jq -r .id <<< "$issue")" > /dev/null
+  n=$(jq -r .number <<< "$issue")
+  add_label "$n" ready; add_label "$n" "size: L"
+  notify "The end-to-end tests of #$pn failed: #$n will fix them. https://github.com/$REPO/issues/$n"
 }
 
 # The open pull request of a feature branch into the base branch, opened when missing. Its URL

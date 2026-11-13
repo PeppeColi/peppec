@@ -45,6 +45,8 @@ env:
   BASE_BRANCH: ${{ vars.BASE_BRANCH || 'main' }}
   # Names of the agent's branches and of the feature branches (see template in scripts/lib.sh)
   PEPPEC_BRANCHES: ${{ vars.PEPPEC_BRANCHES }}
+  # End-to-end tests of a feature, run by CI on its pull request into the base branch
+  PEPPEC_E2E_FEATURE: ${{ vars.PEPPEC_E2E_FEATURE }}
   # Only the specifications you wrote get a feature branch (spec_of in scripts/lib.sh)
   OWNER_LOGIN: ${{ vars.OWNER_LOGIN }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

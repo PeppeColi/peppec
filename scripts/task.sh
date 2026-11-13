@@ -66,6 +66,17 @@ echo "app_slug=${APP_LOGIN%\[bot\]}" >> "$GITHUB_OUTPUT"
   gh api --paginate "repos/$REPO/issues/$ISSUE/comments?per_page=100" | jq -r --arg a "$OWNER_LOGIN" --arg b "$APP_LOGIN" \
     '.[] | select(.user.login == $a or .user.login == $b)
      | select(.body | startswith("<!-- peppec:") | not) | "- \(.user.login): \(.body)"'
+  # The end-to-end tests of the feature are selected by the number of its specification: the
+  # agent writes the specification's scenarios so that the command picks them
+  if [ -n "${PEPPEC_E2E_FEATURE:-}" ] && [ -s .agent/spec.md ]; then
+    sn=$(head -1 .agent/spec.md | sed -nE 's/.*\(#([0-9]+)\)$/\1/p')
+    if [ -n "$sn" ]; then
+      echo; echo "## End-to-end tests"
+      echo "This repository runs the end-to-end tests of this feature with:"
+      echo; echo "    ${PEPPEC_E2E_FEATURE//\{spec\}/$sn}"
+      echo; echo "When this work unit writes end-to-end tests (for example the scenarios of the specification), make sure that command selects them, and that it still passes."
+    fi
+  fi
   if [ -n "$conflicts" ]; then
     echo; echo "## Files with conflict markers"
     echo "The workflow merged \`${BASE_BRANCH:-main}\` into the feature; these files still hold \`<<<<<<<\`, \`=======\` and \`>>>>>>>\` markers. Resolve them all, then run the checks."

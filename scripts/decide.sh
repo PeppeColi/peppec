@@ -56,8 +56,10 @@ if has "$ctrl" "base missing"; then
   notify "The base branch $BASE_BRANCH is back: the queue goes on."
 fi
 
-# Finished features waiting for you get the base branch again when it went on (resync_features)
+# Finished features waiting for you get the base branch again when it went on (resync_features),
+# and their end-to-end tests are read (judge_features)
 resync_features
+judge_features
 
 # True when issue $1 is a work unit of a feature already started (its feature branch exists) whose
 # pull request into the base branch is not open yet: the feature is still being built

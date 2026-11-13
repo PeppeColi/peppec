@@ -1,5 +1,6 @@
 # Copy to .github/workflows/ci.yml in your repository.
 # The check run it produces is named "ci / ci": require that name in the branch ruleset.
+# With feature branches and PEPPEC_E2E_ALL, also require "ci / e2e_all" on the base branch.
 name: ci
 on:
   pull_request:
