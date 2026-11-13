@@ -172,6 +172,9 @@ jobs:
           GH_TOKEN: ${{ secrets.AGENT_TOKEN }}
           APP_LOGIN: ${{ vars.APP_LOGIN }}
           CI_WORKFLOW: ${{ inputs.ci_workflow }}
+          # A sync work unit starts with a merge made by the workflow
+          GIT_NAME: ${{ vars.AGENT_GIT_NAME }}
+          GIT_EMAIL: ${{ vars.AGENT_GIT_EMAIL }}
       - uses: ./_preset
         with:
           options: ${{ steps.cfg.outputs.options }}

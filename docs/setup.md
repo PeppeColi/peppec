@@ -288,7 +288,7 @@ The variable holds one `kind=template` per line; a kind left out takes its defau
 | `feature` | `feature/{spec}/dev` | the base branch | The integration branch of a specification |
 | `work` | `feature/{spec}/parte-{n}` | its feature branch | A work unit of the specification |
 | `hotfix` | `feature/{spec}/hotfix-{n}` | its feature branch | A problem reported with Report a problem |
-| `sync` | `feature/{spec}/sync-{n}` | its feature branch | Reserved: bringing the base branch into the feature branch |
+| `sync` | `feature/{spec}/sync-{n}` | its feature branch | Resolving the conflicts between the base branch and the feature |
 | `single` | `fix/{n}-{slug}` | the base branch | An issue without a specification |
 
 `{spec}` is the number of the specification and its title in lowercase words joined by dashes (`78-stats`), `{n}` the number of the issue, `{slug}` its title the same way. Every template but `feature` must contain `{n}`; `feature` must contain `{spec}`. Never create a branch named like the beginning of a feature branch (`feature/78-stats` next to `feature/78-stats/dev`): git cannot hold both.
@@ -298,7 +298,8 @@ How it works:
 - **The feature branch is created by the workflow** from the base branch, when the first work unit of the specification starts. The work units are merged into it, as they would be into the base branch.
 - **Names are kept.** Each issue remembers its branch when it starts: renaming the issue or the specification, or changing the variable, never moves work already under way. Issues started before the variable keep `agent/issue-N`.
 - **One feature is built at a time.** The work units of a feature already started come first; a finished feature waits for you while the agent starts the next one.
-- **When the last work unit is merged** the workflow opens a pull request from the feature branch into the base branch and sends the "ready to be tried" message with its link. Try the feature on its branch, then merge that pull request yourself: the workflow never merges it. The merge closes the specification and removes the feature branch.
+- **When the last work unit is merged** the workflow opens a pull request from the feature branch into the base branch, brings the base branch into the feature (see below) and sends the "ready to be tried" message with the link of the pull request. Try the feature on its branch, then merge that pull request yourself: the workflow never merges it. The merge closes the specification and removes the feature branch.
+- **The feature follows the base branch only at the end.** While it is built the feature branch is left alone. When it is finished the workflow merges the base branch into it. If the two conflict, it opens a sync work unit, a sub-issue of the specification: the workflow makes the merge, the agent resolves the conflict markers, and its pull request is merged with a merge commit (in manual mode, merge it that way yourself: a squash would bring the conflict back). The "ready to be tried" message comes once that work unit is merged. If the base branch moves again while a finished feature waits for you, the workflow merges it in again and tells you, or opens a new sync work unit.
 - **A variable, not `.github/peppec.yml`:** a feature branch carries the configuration of the day it was created.
 
 ## Phase 6 — Telegram bot

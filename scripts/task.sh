@@ -25,6 +25,24 @@ fi
 if [ "$ACTION" = start ]; then
   add_label "$ISSUE" "in progress"; rm_label "$ISSUE" "ready"
 fi
+# A sync work unit, on its first run: the workflow merges the base branch into the feature itself
+# and commits the merge as it comes, conflict markers included, without pushing it. The agent
+# then only resolves the markers, and after.sh checks its changes against that commit, so the
+# changes coming from the base branch are not taken for the agent's (protected paths). The
+# work unit's pull request is merged with a merge commit, which keeps the base branch as a parent
+conflicts=""
+if [ "$ACTION" = start ] && [ "$BASE" != "${BASE_BRANCH:-main}" ] && [ "$(kind_of "$ISSUE")" = sync ] \
+   && [ "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$BASE")" ]; then
+  id=(-c user.name="$GIT_NAME" -c user.email="$GIT_EMAIL")
+  if git "${id[@]}" merge -q --no-edit "origin/${BASE_BRANCH:-main}"; then
+    echo "${BASE_BRANCH:-main} merged into $BASE without conflicts"
+  else
+    conflicts=$(git diff --name-only --diff-filter=U)
+    git add -u
+    git "${id[@]}" commit -q --no-edit
+    echo "Merged ${BASE_BRANCH:-main} into $BASE, conflicts left in: ${conflicts//$'\n'/, }"
+  fi
+fi
 mkdir -p .agent; rm -rf .agent/question.md .agent/answer.md .agent/spec.md .agent/replies .agent/review-id
 # The issue this one is a sub-issue of, when you wrote it: the specification of the larger
 # piece of work, given to the agent as background in a file of its own
@@ -48,6 +66,11 @@ echo "app_slug=${APP_LOGIN%\[bot\]}" >> "$GITHUB_OUTPUT"
   gh api --paginate "repos/$REPO/issues/$ISSUE/comments?per_page=100" | jq -r --arg a "$OWNER_LOGIN" --arg b "$APP_LOGIN" \
     '.[] | select(.user.login == $a or .user.login == $b)
      | select(.body | startswith("<!-- peppec:") | not) | "- \(.user.login): \(.body)"'
+  if [ -n "$conflicts" ]; then
+    echo; echo "## Files with conflict markers"
+    echo "The workflow merged \`${BASE_BRANCH:-main}\` into the feature; these files still hold \`<<<<<<<\`, \`=======\` and \`>>>>>>>\` markers. Resolve them all, then run the checks."
+    echo "$conflicts" | sed 's/^/- /'
+  fi
   if [ "$ACTION" = fix_ci ]; then
     echo; echo "## Failed checks (last 200 lines)"
     run=$(gh run list -R "$REPO" --workflow "$CI_WORKFLOW" --branch "$B" --limit 1 --json databaseId --jq '.[0].databaseId')

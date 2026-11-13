@@ -80,6 +80,18 @@ $RUN_URL"
     exit 0
   fi
 fi
+# A sync work unit: no conflict marker may be left in what goes to the feature branch
+if [ "$BASE" != "${BASE_BRANCH:-main}" ] && [ "$(kind_of "$ISSUE")" = sync ]; then
+  left=$(git diff -z --cached --name-only "origin/$BASE" -- \
+    | xargs -0 -r git grep --cached -l -E '^(<<<<<<<|>>>>>>>)( |$)' -- 2> /dev/null || true)
+  if [ -n "$left" ]; then
+    add_label "$ISSUE" "needs human"
+    notify_blocked "Conflict markers are still in these files on #$ISSUE, nothing was pushed:
+$left
+$RUN_URL"
+    exit 0
+  fi
+fi
 if ! git diff --cached --quiet; then
   case "$ACTION" in
     start) MSG="feat: $TITLE (#$ISSUE)";;
@@ -125,6 +137,11 @@ if [ "$ACTION" = start ]; then
     body="Closes #$ISSUE"
     if [ "$BASE" != "$(gh api "repos/$REPO" --jq .default_branch)" ]; then
       body="Issue #$ISSUE. The workflow closes it when this pull request is merged into \`$BASE\`."
+    fi
+    if [ "$BASE" != "${BASE_BRANCH:-main}" ] && [ "$(kind_of "$ISSUE")" = sync ]; then
+      body="$body
+
+It brings \`${BASE_BRANCH:-main}\` into the feature: merge it with a **merge commit**, not a squash, or the feature will conflict again."
     fi
     # Which issue the pull request belongs to, whatever its branch is called
     body="$body

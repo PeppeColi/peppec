@@ -272,26 +272,104 @@ notify_feature_done() {
   open=$(jq --argjson n "$1" '[.[] | select(.state == "open" and .number != $n)] | length' <<< "$subs")
   [ "$open" -eq 0 ] || return 0
   [ "$(marker_get "$pn" done)" != "$total" ] || return 0
-  marker_set "$pn" done "$total"
-  local where="${BASE_BRANCH:-main}" link="https://github.com/$REPO/issues/$pn" fb pr
+  local where="${BASE_BRANCH:-main}" link="https://github.com/$REPO/issues/$pn" fb pr synced
   # With a feature branch, the pull request that brings it into the base branch: opened here,
   # merged only by you, after trying the feature. Its merge closes the specification (finish_feature)
   fb=$(marker_get "$pn" feature)
   if [ -n "$fb" ]; then
     where=$fb
-    pr=$(gh pr list -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --state open --json url --jq '.[0].url // empty')
-    if [ -z "$pr" ]; then
-      pr=$(gh pr create -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" \
-        --title "$(jq -r .title <<< "$parent") (#$pn)" \
-        --body "Feature of specification #$pn. Try it on \`$fb\`, then merge this pull request: the workflow closes the specification and removes the branch. Never merged automatically.
-
-<!-- peppec:feature=$pn -->") || pr=""
-    fi
+    pr=$(feature_pr "$pn" "$fb" "$(jq -r .title <<< "$parent")")
     [ -z "$pr" ] || link=$pr
+    # The base branch went on while the feature was built: it is brought in first, so what you try
+    # is what the merge will give. A conflict becomes a work unit, and this message waits for it
+    synced=$(sync_feature "$pn" "$fb") || return 0
+    [ "$synced" != conflict ] || return 0
   fi
+  marker_set "$pn" done "$total"
   # The button asks the bot for one sentence and makes it a new sub-issue (report in bot/bot.py)
   notify "All $total sub-issues of #$pn \"$(jq -r .title <<< "$parent")\" are merged into $where: the feature is ready to be tried. $link" \
     "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$pn|\"}]]}"
+}
+
+# The open pull request of a feature branch into the base branch, opened when missing. Its URL
+feature_pr() {
+  local pn=$1 fb=$2 title=$3 pr
+  pr=$(gh pr list -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --state open --json url --jq '.[0].url // empty')
+  if [ -z "$pr" ]; then
+    pr=$(gh pr create -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --title "$title (#$pn)" \
+      --body "Feature of specification #$pn. Try it on \`$fb\`, then merge this pull request: the workflow closes the specification and removes the branch. Never merged automatically.
+
+<!-- peppec:feature=$pn -->") || pr=""
+  fi
+  echo "$pr"
+}
+
+# Brings the base branch into feature branch $2 of specification $1, with a merge commit made by
+# GitHub. Prints "merged", "current" (nothing to bring in) or "conflict"; on a conflict a sync
+# work unit is opened, once (sync_issue). Any other failure is reported and returns 1
+sync_feature() {
+  local pn=$1 fb=$2 out
+  if out=$(gh api -X POST "repos/$REPO/merges" -f base="$fb" -f head="${BASE_BRANCH:-main}" \
+             -f commit_message="Merge ${BASE_BRANCH:-main} into $fb" --jq '.sha // empty' 2>&1); then
+    if [ -n "$out" ]; then echo "Merged ${BASE_BRANCH:-main} into $fb" >&2; echo merged; else echo current; fi
+    return 0
+  fi
+  if grep -q "HTTP 409" <<< "$out"; then
+    echo "${BASE_BRANCH:-main} and $fb conflict" >&2
+    sync_issue "$pn" "$fb" >&2
+    echo conflict
+    return 0
+  fi
+  echo "Could not bring ${BASE_BRANCH:-main} into $fb: $out" >&2
+  notify "Could not bring ${BASE_BRANCH:-main} into $fb (#$pn): $out ${RUN_URL:-}" >&2
+  return 1
+}
+
+# A work unit that resolves the conflicts between the base branch and a feature branch: a
+# sub-issue of the specification, so the feature is not finished until it is merged. The workflow
+# makes the merge and leaves the conflict markers (task.sh); the agent resolves them. Opened once
+sync_issue() {
+  local pn=$1 fb=$2 subs n log issue
+  subs=$(gh api --paginate "repos/$REPO/issues/$pn/sub_issues?per_page=100" | jq -s 'add // []')
+  n=$(jq -r '[.[] | select(.state == "open" and ((.body // "") | contains("<!-- peppec:kind=sync -->")))] | .[0].number // empty' <<< "$subs")
+  if [ -n "$n" ]; then echo "Sync work unit #$n already open" >&2; return 0; fi
+  # What the base branch has and the feature does not: usually the titles of merged pull requests
+  log=$(gh api "repos/$REPO/compare/$fb...${BASE_BRANCH:-main}" \
+    --jq '.commits[-30:][] | "- " + (.commit.message | split("\n")[0])' 2> /dev/null || true)
+  issue=$(gh api -X POST "repos/$REPO/issues" -f title="Resolve the conflicts between ${BASE_BRANCH:-main} and the feature of #$pn" \
+    -f body="\`${BASE_BRANCH:-main}\` changed while the feature of #$pn was built on \`$fb\`, and the two conflict. The workflow merges \`${BASE_BRANCH:-main}\` into the feature and leaves the conflict markers in the files listed in the task.
+
+Resolve every conflict so that both sides keep working: the feature, as its specification (the parent issue) describes it, and the changes below, which are already on \`${BASE_BRANCH:-main}\`. Do not drop either side to make the conflict go away. If the two cannot both stand, ask a question.
+
+Changes on \`${BASE_BRANCH:-main}\` that the feature does not have yet:
+
+${log:-- (not available)}
+
+<!-- peppec:kind=sync -->")
+  gh api -X POST "repos/$REPO/issues/$pn/sub_issues" -F sub_issue_id="$(jq -r .id <<< "$issue")" > /dev/null
+  n=$(jq -r .number <<< "$issue")
+  add_label "$n" ready
+  notify "${BASE_BRANCH:-main} and the feature of #$pn conflict: #$n will resolve it. https://github.com/$REPO/issues/$n"
+}
+
+# The base branch went on (another feature merged, a single issue) while a finished feature waits
+# for you: it is brought into the feature again, so what you try stays what the merge will give.
+# Only features whose pull request is open and that have no open sub-issue
+resync_features() {
+  local prs pn head ahead synced
+  [ -n "$(template feature)" ] || return 0
+  prs=$(gh pr list -R "$REPO" --base "${BASE_BRANCH:-main}" --state open --json headRefName,body \
+    --jq '.[] | select(.body | contains("<!-- peppec:feature=")) | "\(.headRefName) \(.body | capture("<!-- peppec:feature=(?<n>[0-9]+) -->").n)"')
+  while read -r head pn; do
+    [ -n "$pn" ] && is_feature_branch "$head" || continue
+    [ "$(gh api "repos/$REPO/issues/$pn" --jq '(.sub_issues_summary.total // 0) - (.sub_issues_summary.completed // 0)')" -eq 0 ] || continue
+    ahead=$(gh api "repos/$REPO/compare/$head...${BASE_BRANCH:-main}" --jq .ahead_by 2> /dev/null || echo 0)
+    [ "${ahead:-0}" -gt 0 ] || continue
+    synced=$(sync_feature "$pn" "$head") || continue
+    if [ "$synced" = merged ]; then
+      notify "${BASE_BRANCH:-main} changed, and it is now merged into the feature of #$pn: try its latest version on $head. https://github.com/$REPO/issues/$pn"
+    fi
+  done <<< "$prs"
 }
 
 # The text under the "Out of scope" heading of a Markdown text on standard input, up to the
