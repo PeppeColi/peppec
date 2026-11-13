@@ -9,6 +9,17 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-11-13
+
+### Security
+
+- The agent's work is split in three jobs: `prepare` (the app's token) writes the task, `agent`
+  runs Claude with only the Claude token and the workflow's read-only token, and `publish`, on a
+  fresh runner, applies the agent's changes as a patch, checks them and pushes. The code the agent
+  runs (tests, build scripts, dependencies) could read your personal token and leave git hooks for
+  the step that pushed; now it shares no runner with a token that can write. Protected paths are
+  checked on the whole change, commits made by the agent's own code included.
+
 ## [1.28.1] - 2026-11-13
 
 ### Security
@@ -356,7 +367,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.28.1...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.29.0...HEAD
+[1.29.0]: https://github.com/PeppeColi/peppec/compare/v1.28.1...v1.29.0
 [1.28.1]: https://github.com/PeppeColi/peppec/compare/v1.28.0...v1.28.1
 [1.28.0]: https://github.com/PeppeColi/peppec/compare/v1.27.1...v1.28.0
 [1.27.1]: https://github.com/PeppeColi/peppec/compare/v1.27.0...v1.27.1

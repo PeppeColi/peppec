@@ -1,49 +1,22 @@
 # scripts/task.sh
+# Runs in the prepare job, with the app's token, before the agent job: labels the issue and
+# writes what the agent reads (.agent/task.md, .agent/spec.md), uploaded for the agent job. No
+# code of the repository runs here, and the agent job never receives a token that can write
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
-# The issue's branch and its base, from decide.sh: agent/issue-N on BASE_BRANCH, or the names of
-# PEPPEC_BRANCHES (a work unit of a specification starts from the feature branch)
 B="${BRANCH:-agent/issue-$ISSUE}"
-BASE="${BASE:-${BASE_BRANCH:-main}}"
 # A branch left from a pull request already merged, with nothing new on it (an issue reopened
 # after a merge whose branch was not removed): the work starts again from the base branch
-# The checkout keeps no credentials, and a private repository answers nothing without them
 REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
 tip=$(git ls-remote --heads "$REMOTE" "$B" | cut -f1)
 if [ -n "$tip" ] && [ -n "$(gh pr list -R "$REPO" --head "$B" --state merged --json headRefOid,isCrossRepository \
      --jq "[.[] | select((.isCrossRepository | not) and .headRefOid == \"$tip\")] | .[0].headRefOid // empty")" ]; then
   delete_agent_branch "$B"
 fi
-# The workspace is on BASE_BRANCH, where the configuration was read. The issue's base may be a
-# feature branch: a new branch starts from it, and after.sh compares the work with origin/$BASE
-git fetch -q "$REMOTE" "+refs/heads/$BASE:refs/remotes/origin/$BASE"
-if [ -n "$(git ls-remote --heads "$REMOTE" "$B")" ]; then
-  git fetch -q "$REMOTE" "+refs/heads/$B:refs/remotes/origin/$B" && git checkout -q "$B"
-else
-  git checkout -q -b "$B" "origin/$BASE"
-fi
 if [ "$ACTION" = start ]; then
   add_label "$ISSUE" "in progress"; rm_label "$ISSUE" "ready"
 fi
-# A sync work unit, on its first run: the workflow merges the base branch into the feature itself
-# and commits the merge as it comes, conflict markers included, without pushing it. The agent
-# then only resolves the markers, and after.sh checks its changes against that commit, so the
-# changes coming from the base branch are not taken for the agent's (protected paths). The
-# work unit's pull request is merged with a merge commit, which keeps the base branch as a parent
-conflicts=""
-if [ "$ACTION" = start ] && [ "$BASE" != "${BASE_BRANCH:-main}" ] && [ "$(kind_of "$ISSUE")" = sync ] \
-   && [ "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$BASE")" ]; then
-  id=(-c user.name="$GIT_NAME" -c user.email="$GIT_EMAIL")
-  if git "${id[@]}" merge -q --no-edit "origin/${BASE_BRANCH:-main}"; then
-    echo "${BASE_BRANCH:-main} merged into $BASE without conflicts"
-  else
-    conflicts=$(git diff --name-only --diff-filter=U)
-    git add -u
-    git "${id[@]}" commit -q --no-edit
-    echo "Merged ${BASE_BRANCH:-main} into $BASE, conflicts left in: ${conflicts//$'\n'/, }"
-  fi
-fi
-mkdir -p .agent; rm -rf .agent/question.md .agent/answer.md .agent/spec.md .agent/replies .agent/review-id
+rm -rf .agent; mkdir -p .agent
 # The issue this one is a sub-issue of, when you wrote it: the specification of the larger
 # piece of work, given to the agent as background in a file of its own
 if parent=$(gh api "repos/$REPO/issues/$ISSUE/parent" 2> /dev/null) \
@@ -61,9 +34,10 @@ if [ "$author" != "$OWNER_LOGIN" ] && [ "$author" != "$APP_LOGIN" ]; then
   echo "::error::Issue #$ISSUE was written by $author, not by $OWNER_LOGIN or the app: not given to the agent"
   exit 1
 fi
-echo "title=$(jq -r .title <<< "$I")" >> "$GITHUB_OUTPUT"
-# The app's short name, for the bots allowed to trigger Claude: "name[bot]" -> "name"
-echo "app_slug=${APP_LOGIN%\[bot\]}" >> "$GITHUB_OUTPUT"
+{
+  echo "title<<PEPPEC_TITLE_END"; jq -r .title <<< "$I"; echo "PEPPEC_TITLE_END"
+  echo "kind=$(kind_of "$ISSUE")"
+} >> "$GITHUB_OUTPUT"
 {
   echo "# Issue #$ISSUE: $(jq -r .title <<< "$I")"
   echo; jq -r '.body // ""' <<< "$I"
@@ -83,11 +57,6 @@ echo "app_slug=${APP_LOGIN%\[bot\]}" >> "$GITHUB_OUTPUT"
       echo; echo "    ${PEPPEC_E2E_FEATURE//\{spec\}/$sn}"
       echo; echo "When this work unit writes end-to-end tests (for example the scenarios of the specification), make sure that command selects them, and that it still passes."
     fi
-  fi
-  if [ -n "$conflicts" ]; then
-    echo; echo "## Files with conflict markers"
-    echo "The workflow merged \`${BASE_BRANCH:-main}\` into the feature; these files still hold \`<<<<<<<\`, \`=======\` and \`>>>>>>>\` markers. Resolve them all, then run the checks."
-    echo "$conflicts" | sed 's/^/- /'
   fi
   if [ "$ACTION" = fix_ci ]; then
     echo; echo "## Failed checks (last 200 lines)"
