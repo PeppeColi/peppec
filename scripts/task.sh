@@ -1,7 +1,10 @@
 # scripts/task.sh
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
-B="agent/issue-$ISSUE"
+# The issue's branch and its base, from decide.sh: agent/issue-N on BASE_BRANCH, or the names of
+# PEPPEC_BRANCHES (a work unit of a specification starts from the feature branch)
+B="${BRANCH:-agent/issue-$ISSUE}"
+BASE="${BASE:-${BASE_BRANCH:-main}}"
 # A branch left from a pull request already merged, with nothing new on it (an issue reopened
 # after a merge whose branch was not removed): the work starts again from the base branch
 # The checkout keeps no credentials, and a private repository answers nothing without them
@@ -11,10 +14,13 @@ if [ -n "$tip" ] && [ -n "$(gh pr list -R "$REPO" --head "$B" --state merged --j
      --jq "[.[] | select(.headRefOid == \"$tip\")] | .[0].headRefOid // empty")" ]; then
   delete_agent_branch "$B"
 fi
+# The workspace is on BASE_BRANCH, where the configuration was read. The issue's base may be a
+# feature branch: a new branch starts from it, and after.sh compares the work with origin/$BASE
+git fetch -q "$REMOTE" "+refs/heads/$BASE:refs/remotes/origin/$BASE"
 if [ -n "$(git ls-remote --heads "$REMOTE" "$B")" ]; then
   git fetch -q "$REMOTE" "+refs/heads/$B:refs/remotes/origin/$B" && git checkout -q "$B"
 else
-  git checkout -q -b "$B"
+  git checkout -q -b "$B" "origin/$BASE"
 fi
 if [ "$ACTION" = start ]; then
   add_label "$ISSUE" "in progress"; rm_label "$ISSUE" "ready"
