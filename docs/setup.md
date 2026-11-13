@@ -54,7 +54,7 @@ The rest of this guide describes every step in detail, and is the reference for 
 
 Prerequisites:
 
-- [ ] `git`, `gh` (GitHub CLI, signed in with `gh auth login`) and `jq` on your computer
+- [ ] `git`, `gh` 2.94 or later (GitHub CLI, signed in with `gh auth login`) and `jq` on your computer. Older versions cannot create sub-issues from the command line (`gh issue create --parent`); check with `gh --version`
 - [ ] Claude Code installed and signed in with your subscription
 - [ ] A Telegram account
 - [ ] An always-on machine with Docker and Docker Compose for the bot (a Raspberry Pi with a 64-bit system is enough)
