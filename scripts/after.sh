@@ -1,20 +1,60 @@
 # scripts/after.sh
+# Runs in the publish job, on a fresh runner where no code of the repository has run: the only
+# job that holds the tokens that can write. The agent job's result ($RESULT) is data: its changes
+# are applied as a patch on the commit the agent started from, built again here from the agent
+# job's outputs written before Claude ran (workspace.sh), and every check runs on the whole change.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 B="${BRANCH:-agent/issue-$ISSUE}"
 BASE="${BASE:-${BASE_BRANCH:-main}}"
+REMOTE="https://x-access-token:${AGENT_TOKEN}@github.com/${REPO}.git"
 
 # Time budget: add this run's working minutes to the issue counter
 used=$(GH_TOKEN="$APP_TOKEN" marker_get "$ISSUE" minutes)
 spent=$(( ($(date +%s) - CLAUDE_START) / 60 + 1 ))
 GH_TOKEN="$APP_TOKEN" marker_set "$ISSUE" minutes $(( ${used:-0} + spent ))
 
+# The commit the agent started from: the tip of its branch, of its base, or the merge of a sync
+# work unit, made again here on the same two commits
+git fetch -q "$REMOTE" "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+if [ -n "$(git ls-remote --heads "$REMOTE" "$B")" ]; then
+  git fetch -q "$REMOTE" "+refs/heads/$B:refs/remotes/origin/$B"
+fi
+if [ -n "${MERGE_PARENTS:-}" ]; then
+  read -r p1 p2 <<< "$MERGE_PARENTS"
+  git fetch -q "$REMOTE" "+refs/heads/${BASE_BRANCH:-main}:refs/remotes/origin/${BASE_BRANCH:-main}"
+  git fetch -q "$REMOTE" "$p1" "$p2"
+  git checkout -q -B "$B" "$p1"
+  git update-ref "refs/remotes/origin/${BASE_BRANCH:-main}" "$p2"
+  sync_merge "${BASE_BRANCH:-main}" > /dev/null
+else
+  git fetch -q "$REMOTE" "$START"
+  git checkout -q -B "$B" "$START"
+fi
+if [ "$(git rev-parse 'HEAD^{tree}')" != "$START_TREE" ]; then
+  add_label "$ISSUE" "needs human"
+  notify_blocked "Could not rebuild the commit the agent started from on #$ISSUE: nothing was pushed. $RUN_URL"
+  exit 0
+fi
+
+# The agent's files: the question, the answer, the replies. The review being answered comes from
+# the prepare job, not from the agent
+rm -rf .agent; mkdir -p .agent
+for f in question.md answer.md; do
+  if [ -f "$RESULT/$f" ] && [ ! -L "$RESULT/$f" ]; then cp "$RESULT/$f" ".agent/$f"; fi
+done
+if [ -d "$RESULT/replies" ] && [ ! -L "$RESULT/replies" ]; then
+  mkdir -p .agent/replies
+  find "$RESULT/replies" -maxdepth 1 -type f -name '*.md' -exec cp {} .agent/replies/ \;
+fi
+if [ -s "$TASK_DIR/review-id" ]; then cp "$TASK_DIR/review-id" .agent/review-id; fi
+failure=$(head -c 10 "$RESULT/failure" 2> /dev/null || true)
+
 if [ "$OUTCOME" != success ]; then
-  log=${EXEC_FILE:-/dev/null}; [ -f "$log" ] || log=/dev/null
-  if grep -qiE '\b401\b|invalid.{0,20}token|authentication' "$log"; then
+  if [ "$failure" = token ]; then
     add_label "$ISSUE" "needs human"
     notify_blocked "Claude token rejected while working on #$ISSUE: run 'claude setup-token' and update the CLAUDE_CODE_OAUTH_TOKEN secret."
-  elif grep -qiE 'usage limit|limit reached|rate limit|resets at' "$log"; then
+  elif [ "$failure" = quota ]; then
     add_label "$ISSUE" "awaiting quota"
     notify "Claude quota exhausted while working on #$ISSUE: will retry automatically."
   else
@@ -62,6 +102,12 @@ skip=(.agent _ctl _preset _extra)
 while IFS= read -r p; do
   if [ -n "$p" ]; then skip+=("$p"); fi
 done <<< "${NEVER_COMMIT:-}"
+# The agent's changes, as a patch: git refuses paths inside .git or outside the repository
+if [ -s "$RESULT/changes.patch" ] && ! git apply --index --binary "$RESULT/changes.patch"; then
+  add_label "$ISSUE" "needs human"
+  notify_blocked "The agent's changes on #$ISSUE could not be applied, nothing was pushed. $RUN_URL"
+  exit 0
+fi
 git add -A
 git reset -q -- "${skip[@]}"
 

@@ -168,6 +168,21 @@ kind_of() {
   k=$(gh api "repos/$REPO/issues/$1" --jq '.body // ""' | sed -nE 's/.*<!-- peppec:kind=(hotfix|sync) -->.*/\1/p' | head -1)
   echo "${k:-work}"
 }
+# Merges origin/$1 into the current branch for a sync work unit and commits the result as it
+# comes, conflict markers included. Prints the files left with conflicts. The agent job and the
+# publish job both run it on the same commits, and get the same tree (workspace.sh, after.sh)
+sync_merge() {
+  local c id=(-c user.name="${GIT_NAME:-peppec}" -c user.email="${GIT_EMAIL:-peppec@users.noreply.github.com}")
+  if git "${id[@]}" merge -q --no-edit "origin/$1" >&2; then
+    echo "$1 merged into the feature without conflicts" >&2
+  else
+    c=$(git diff --name-only --diff-filter=U)
+    git add -u
+    git "${id[@]}" commit -q --no-edit
+    echo "Merged $1 into the feature, conflicts left in: ${c//$'\n'/, }" >&2
+    echo "$c"
+  fi
+}
 valid_branch() { [ -n "$1" ] && git check-ref-format --branch "$1" > /dev/null 2>&1; }
 # Works out the branch of issue $1 the first time it starts, and remembers it (see branch_of).
 # Sets the variables branch and base; creates the feature branch from BASE_BRANCH when it is

@@ -141,20 +141,69 @@ jobs:
           AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
           REASON: ${{ needs.decide.outputs.reason }}
 
-  agent:
+  # The agent's work is split in three jobs, so the code the agent runs (tests, build scripts,
+  # dependencies) never shares a runner with a token that can write:
+  # - prepare: with the app's token, labels the issue and writes the agent's task;
+  # - agent: Claude, with the Claude token and the workflow's read-only token only; its result is
+  #   a patch, uploaded as data;
+  # - publish: on a fresh runner, checks the patch and pushes it, with your token and the app's.
+  prepare:
     needs: decide
     if: contains(fromJSON('["start","fix_ci","fix_review"]'), needs.decide.outputs.action)
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.decide.outputs.minutes) }}
+    outputs:
+      title: ${{ steps.task.outputs.title }}
+      kind: ${{ steps.task.outputs.kind }}
     env:
       ACTION: ${{ needs.decide.outputs.action }}
       ISSUE: ${{ needs.decide.outputs.issue }}
       PR: ${{ needs.decide.outputs.pr }}
-      ROUND: ${{ needs.decide.outputs.round }}
-      CI_TRIES: ${{ needs.decide.outputs.ci_tries }}
+      BRANCH: ${{ needs.decide.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.engine_repository }}
+          ref: ${{ inputs.engine_ref }}
+          path: _ctl
+          sparse-checkout: scripts
+          persist-credentials: false
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - id: task
+        run: bash "$CTL/task.sh"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          CI_WORKFLOW: ${{ inputs.ci_workflow }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: task
+          path: .agent/
+          include-hidden-files: true
+          retention-days: 1
+
+  agent:
+    needs: [decide, prepare]
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.decide.outputs.minutes) }}
+    outputs:
+      start: ${{ steps.ws.outputs.start }}
+      start_tree: ${{ steps.ws.outputs.start_tree }}
+      merge_parents: ${{ steps.ws.outputs.merge_parents }}
+      clock: ${{ steps.clock.outputs.start }}
+      outcome: ${{ steps.claude.outcome }}
+      protected_paths: ${{ steps.cfg.outputs.protected_paths }}
+      never_commit: ${{ steps.cfg.outputs.never_commit }}
+    env:
+      ACTION: ${{ needs.decide.outputs.action }}
+      ISSUE: ${{ needs.decide.outputs.issue }}
       # The issue's branch and the branch it is based on: BASE_BRANCH, or a feature branch
       BRANCH: ${{ needs.decide.outputs.branch }}
       BASE: ${{ needs.decide.outputs.base }}
+      # Removes the tokens from the environment of the commands Claude runs
+      CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: 1
     steps:
       - uses: actions/checkout@v4
         with: { ref: "${{ vars.BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
@@ -170,11 +219,15 @@ jobs:
         run: bash "$CTL/config.sh"
         env:
           SIZE: ${{ needs.decide.outputs.size }}
-      - id: task
-        run: bash "$CTL/task.sh"
+      - uses: actions/download-artifact@v4
+        with:
+          name: task
+          path: .agent
+      - id: ws
+        run: bash "$CTL/workspace.sh"
         env:
-          GH_TOKEN: ${{ secrets.AGENT_TOKEN }}
-          CI_WORKFLOW: ${{ inputs.ci_workflow }}
+          GH_TOKEN: ${{ github.token }}
+          KIND: ${{ needs.prepare.outputs.kind }}
           # A sync work unit starts with a merge made by the workflow
           GIT_NAME: ${{ vars.AGENT_GIT_NAME }}
           GIT_EMAIL: ${{ vars.AGENT_GIT_EMAIL }}
@@ -191,17 +244,44 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.AGENT_TOKEN }}
+          # Read only: the agent never pushes, the publish job does
+          github_token: ${{ github.token }}
           # The action refuses runs started by a bot, except the ones listed here
-          allowed_bots: "${{ steps.task.outputs.app_slug }},coderabbitai"
+          allowed_bots: "${{ steps.ws.outputs.app_slug }},coderabbitai"
           prompt: ${{ steps.cfg.outputs.prompt }}
           claude_args: >-
             --model ${{ steps.cfg.outputs.model }}
             --max-turns 150
             ${{ steps.cfg.outputs.tool_args }}
-      # The commands Claude ran could have altered the scripts: take a fresh copy of the engine
-      # before the steps that receive the GitHub tokens
-      - run: rm -rf _ctl
+      # From here on the runner is not trusted: the result is data, checked by the publish job
+      - run: bash "$CTL/collect.sh"
+        env:
+          RESULT: ${{ runner.temp }}/result
+          START: ${{ steps.ws.outputs.start }}
+          OUTCOME: ${{ steps.claude.outcome }}
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+          NEVER_COMMIT: ${{ steps.cfg.outputs.never_commit }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: result
+          path: ${{ runner.temp }}/result/
+          include-hidden-files: true
+          retention-days: 1
+
+  publish:
+    needs: [decide, prepare, agent]
+    runs-on: ubuntu-latest
+    env:
+      ACTION: ${{ needs.decide.outputs.action }}
+      ISSUE: ${{ needs.decide.outputs.issue }}
+      PR: ${{ needs.decide.outputs.pr }}
+      ROUND: ${{ needs.decide.outputs.round }}
+      CI_TRIES: ${{ needs.decide.outputs.ci_tries }}
+      BRANCH: ${{ needs.decide.outputs.branch }}
+      BASE: ${{ needs.decide.outputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ vars.BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
       - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.engine_repository }}
@@ -209,7 +289,15 @@ jobs:
           path: _ctl
           sparse-checkout: scripts
           persist-credentials: false
-      # The app token is created only after Claude has finished, so Claude never sees it
+      # Outside the workspace: the two folders never mix with the repository's files
+      - uses: actions/download-artifact@v4
+        with:
+          name: task
+          path: ${{ runner.temp }}/task
+      - uses: actions/download-artifact@v4
+        with:
+          name: result
+          path: ${{ runner.temp }}/result
       - id: app
         uses: actions/create-github-app-token@v2
         with:
@@ -224,16 +312,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GIT_NAME: ${{ vars.AGENT_GIT_NAME }}
           GIT_EMAIL: ${{ vars.AGENT_GIT_EMAIL }}
-          OUTCOME: ${{ steps.claude.outcome }}
-          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
-          TITLE: ${{ steps.task.outputs.title }}
-          CLAUDE_START: ${{ steps.clock.outputs.start }}
-          PROTECTED_PATHS: ${{ steps.cfg.outputs.protected_paths }}
-          NEVER_COMMIT: ${{ steps.cfg.outputs.never_commit }}
+          TASK_DIR: ${{ runner.temp }}/task
+          RESULT: ${{ runner.temp }}/result
+          START: ${{ needs.agent.outputs.start }}
+          START_TREE: ${{ needs.agent.outputs.start_tree }}
+          MERGE_PARENTS: ${{ needs.agent.outputs.merge_parents }}
+          OUTCOME: ${{ needs.agent.outputs.outcome }}
+          TITLE: ${{ needs.prepare.outputs.title }}
+          CLAUDE_START: ${{ needs.agent.outputs.clock }}
+          PROTECTED_PATHS: ${{ needs.agent.outputs.protected_paths }}
+          NEVER_COMMIT: ${{ needs.agent.outputs.never_commit }}
 
   timeout:
-    needs: [decide, agent]
-    if: always() && (needs.agent.result == 'cancelled' || needs.agent.result == 'failure')
+    needs: [decide, prepare, agent, publish]
+    if: >-
+      always() && contains(fromJSON('["cancelled","failure"]'), needs.prepare.result)
+      || always() && contains(fromJSON('["cancelled","failure"]'), needs.agent.result)
+      || always() && contains(fromJSON('["cancelled","failure"]'), needs.publish.result)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -256,5 +351,9 @@ jobs:
           ACTION: stop
           ISSUE: ${{ needs.decide.outputs.issue }}
           PR: ${{ needs.decide.outputs.pr }}
-          SKIP_IF_BLOCKED: ${{ needs.agent.result == 'failure' }}
-          REASON: ${{ needs.agent.result == 'cancelled' && 'time limit reached' || 'the agent job failed' }}
+          SKIP_IF_BLOCKED: ${{ needs.agent.result != 'cancelled' }}
+          REASON: >-
+            ${{ needs.agent.result == 'cancelled' && 'time limit reached'
+            || needs.prepare.result == 'failure' && 'the prepare job failed'
+            || needs.agent.result == 'failure' && 'the agent job failed'
+            || 'the publish job failed' }}
