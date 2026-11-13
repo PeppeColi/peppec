@@ -228,7 +228,7 @@ curl -fsSL "$base/peppec.yml" -o .github/peppec.yml
 5. Commit and push to `main` from your account. Check that the `ci` workflow passes.
 6. Go back to the ruleset of Phase 1 and add **`ci / ci`** to "Require status checks to pass".
 
-Workflow and configuration changes are always yours to make: the agent's token cannot touch workflows, and the agent's changes under `.github` are refused.
+Workflow and configuration changes are always yours to make: the agent's token cannot touch workflows, and the agent's changes under `.github` are refused. The same goes for the files that steer the agent: `.claude`, `CLAUDE.md` and `AGENTS.md` (also in subdirectories), `docs/agents` and `docs/adr`. When a task needs them, the agent asks a question instead.
 
 ### Services and other project-specific setup
 
