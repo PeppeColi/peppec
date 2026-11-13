@@ -6,6 +6,8 @@ This repository is built by PEPPEC: an agent takes the issues labelled `ready`, 
 and opens a pull request for each. It sees only the issue, the owner's comments on it and the
 body of its parent issue, and it cannot run the program: "done" means the project's checks pass.
 The triage role `ready-for-agent` is the label `ready`.
+The queue builds only issues written by the owner or the app: never put `ready` on an issue
+someone else wrote. Write a new issue with what should be built, and label that one.
 
 ### Wayfinder maps
 

@@ -96,7 +96,7 @@ A preset is a directory with a setup action, default check commands and a small 
 
 ## Security in one paragraph
 
-Agents work only on issues you labelled `ready`, and read instructions only from your comments. Each secret reaches only the workflow step that needs it; the step where Claude runs never sees the GitHub or Telegram tokens. The agent cannot change workflows, the configuration or the files that define the checks, and it never commits or pushes: the workflow does, after checking what changed. Details are in [docs/architecture.md](docs/architecture.md#security).
+Agents work only on issues you wrote and labelled `ready`, and read instructions only from your comments. Each secret reaches only the workflow step that needs it; the step where Claude runs never sees the GitHub or Telegram tokens. The agent cannot change workflows, the configuration or the files that define the checks, and it never commits or pushes: the workflow does, after checking what changed. Details are in [docs/architecture.md](docs/architecture.md#security).
 
 ## License
 
