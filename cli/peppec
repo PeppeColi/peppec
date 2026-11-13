@@ -193,6 +193,20 @@ write_file() { # write_file PATH CONTENT
 }
 put_secret() { printf '%s' "$2" | gh secret set "$1" -R "$REPO" > /dev/null; ok "$1 (set)"; }
 
+# ---------- planning sessions ----------
+# The PEPPEC section of CLAUDE.md, read by the planning sessions on the owner's computer (wayfinder,
+# /to-spec, /to-tickets). It lives between two markers, outside the block the skills' setup rewrites
+TRIAGE_FILE=docs/agents/triage-labels.md
+claude_section() { engine_file examples/claude-md-section.md | sed '/^<!-- Copy /d'; }
+# The section found in a CLAUDE.md on stdin; empty when there is none
+section_of() { sed -n '/^<!-- peppec:start/,/^<!-- peppec:end -->/p'; }
+has_end_marker() { grep -q '^<!-- peppec:end -->' <<< "$1"; }
+# State of the row of the ready-for-agent role in a triage-labels.md on stdin: mapped, other or none
+triage_state() {
+  awk -F'|' '$2 ~ /`ready-for-agent`/ { row = 1; if ($3 ~ /^[ \t]*`ready`[ \t]*$/) mapped = 1 }
+    END { print (mapped ? "mapped" : (row ? "other" : "none")) }'
+}
+
 init_labels() {
   step "Labels"
   local n=0
@@ -521,6 +535,69 @@ init_files() {
   if [ -n "$added" ]; then ok ".gitignore (added:$added)"; else ok ".gitignore (unchanged)"; fi
 }
 
+init_planning() {
+  step "Planning sessions"
+  local section current tmp text
+  if ! section=$(claude_section) || [ -z "$section" ]; then
+    warn "could not read examples/claude-md-section.md from $ENGINE@$REF: CLAUDE.md left as it is"
+  elif [ ! -f CLAUDE.md ]; then
+    # Claude Code reads CLAUDE.md, not AGENTS.md: an import keeps the instructions that are already there
+    text="$section"
+    [ -f AGENTS.md ] && text="@AGENTS.md"$'\n\n'"$section"
+    if confirm "Create CLAUDE.md with the rules planning sessions need to write issues PEPPEC builds?" y; then
+      printf '%s\n' "$text" > CLAUDE.md
+      if [ -f AGENTS.md ]; then ok "CLAUDE.md (written: imports AGENTS.md, then the PEPPEC section)"; else ok "CLAUDE.md (written)"; fi
+    else
+      warn "no CLAUDE.md: planning sessions do not know the rules of PEPPEC"
+    fi
+  else
+    current=$(section_of < CLAUDE.md)
+    if [ "$current" = "$section" ]; then
+      ok "CLAUDE.md: PEPPEC section up to date"
+    elif [ -z "$current" ]; then
+      if confirm "Add the PEPPEC section at the end of CLAUDE.md (rules for planning sessions)?" y; then
+        printf '\n%s\n' "$section" >> CLAUDE.md
+        ok "CLAUDE.md (PEPPEC section added at the end)"
+      else
+        warn "CLAUDE.md has no PEPPEC section: planning sessions do not know the rules of PEPPEC"
+      fi
+    elif ! has_end_marker "$current"; then
+      bad "CLAUDE.md has a '<!-- peppec:start' line but no '<!-- peppec:end -->': fix it by hand, then run init again"
+    elif confirm "The PEPPEC section of CLAUDE.md differs from the engine's: replace it?" y; then
+      tmp=$(mktemp)
+      printf '%s\n' "$section" > "$tmp.section"
+      awk -v file="$tmp.section" '
+        /^<!-- peppec:start/ && !done { while ((getline line < file) > 0) print line; skip = 1; done = 1; next }
+        skip { if ($0 ~ /^<!-- peppec:end -->/) skip = 0; next }
+        { print }' CLAUDE.md > "$tmp"
+      cat "$tmp" > CLAUDE.md
+      rm -f "$tmp" "$tmp.section"
+      ok "CLAUDE.md (PEPPEC section replaced, the rest kept)"
+    else
+      warn "CLAUDE.md: PEPPEC section kept as it is"
+    fi
+  fi
+
+  # Written by the setup skill of mattpocock/skills: /to-tickets applies the label of this row
+  [ -f "$TRIAGE_FILE" ] || return 0
+  case "$(triage_state < "$TRIAGE_FILE")" in
+    mapped) ok "$TRIAGE_FILE: ready-for-agent is the label ready";;
+    none) warn "$TRIAGE_FILE has no row for ready-for-agent: add one that maps it to the label ready";;
+    other)
+      if confirm "$TRIAGE_FILE: map ready-for-agent to the label ready, the one PEPPEC builds?" y; then
+        tmp=$(mktemp)
+        awk -F'|' 'BEGIN { OFS = "|" }
+          $2 ~ /`ready-for-agent`/ { cell = " `ready`"; while (length(cell) < length($3)) cell = cell " "; $3 = cell }
+          { print }' "$TRIAGE_FILE" > "$tmp"
+        cat "$tmp" > "$TRIAGE_FILE"
+        rm -f "$tmp"
+        ok "$TRIAGE_FILE (ready-for-agent mapped to ready)"
+      else
+        warn "$TRIAGE_FILE: issues the skills mark ready-for-agent will not be built"
+      fi;;
+  esac
+}
+
 # True when a deletion rule applies to the base branch from a ruleset without a bypass list
 base_branch_kept() {
   local id
@@ -593,12 +670,16 @@ cmd_init() {
   init_variables
   init_secrets
   init_files
+  init_planning
   init_ruleset
   init_keep_base
 
   step "Next steps"
+  local paths=".github .coderabbit.yaml .gitignore"
+  [ -f CLAUDE.md ] && paths="$paths CLAUDE.md"
+  [ -f "$TRIAGE_FILE" ] && paths="$paths $TRIAGE_FILE"
   note "1. Review the files, then commit and push them to main:"
-  note "     git add .github .coderabbit.yaml .gitignore && git commit -m 'chore: install PEPPEC' && git push"
+  note "     git add $paths && git commit -m 'chore: install PEPPEC' && git push"
   local n=2
   if [ "$BASE_BRANCH" != main ]; then
     note "2. Bring $BASE_BRANCH level with main, so it has the same files (this also creates it):"
@@ -637,6 +718,9 @@ cmd_doctor() {
   have=$(gh label list -R "$REPO" --limit 200 --json name --jq '.[].name')
   while IFS='|' read -r name _; do grep -qxF "$name" <<< "$have" || missing="$missing '$name'"; done <<< "$LABELS"
   if [ -z "$missing" ]; then ok "all labels present"; else bad "missing labels:$missing"; fi
+  # Created by the planning skills when their label map is the default one
+  grep -qxF 'ready-for-agent' <<< "$have" \
+    && warn "a 'ready-for-agent' label exists: PEPPEC builds only issues labelled 'ready'"
 
   step "Variables"
   missing=""
@@ -756,6 +840,30 @@ cmd_doctor() {
     ok "CodeRabbit is active: it commented recently"
   else
     warn "no recent comment from CodeRabbit: check that it is installed on $REPO"
+  fi
+
+  # Planning is optional: what is missing here is a warning, never a problem
+  step "Planning sessions"
+  local section current local_section=""
+  content=$(host_file CLAUDE.md || true)
+  [ "$IN_CLONE" = true ] && [ -f "$CLONE_ROOT/CLAUDE.md" ] && local_section=$(section_of < "$CLONE_ROOT/CLAUDE.md")
+  # The section of the engine version the workflows call
+  if ! section=$(REF="${ref:-$REF}"; claude_section) || [ -z "$section" ]; then
+    warn "could not read examples/claude-md-section.md from $ENGINE@${ref:-$REF}: CLAUDE.md not checked"
+  else
+    current=$(section_of <<< "$content")
+    if [ "$current" = "$section" ]; then ok "CLAUDE.md has the PEPPEC section of the engine at ${ref:-$REF}"
+    elif [ "$local_section" = "$section" ]; then warn "the PEPPEC section of CLAUDE.md is in your clone but not on $default_branch yet: commit and push it"
+    elif [ -z "$content" ]; then warn "no CLAUDE.md: planning sessions do not know the rules of PEPPEC (peppec init writes it)"
+    elif [ -z "$current" ]; then warn "CLAUDE.md has no PEPPEC section: planning sessions do not know the rules of PEPPEC (peppec init adds it)"
+    else warn "the PEPPEC section of CLAUDE.md differs from the engine's at ${ref:-$REF}: peppec init replaces it"; fi
+  fi
+  content=$(host_file "$TRIAGE_FILE" || true)
+  if [ -n "$content" ]; then
+    case "$(triage_state <<< "$content")" in
+      mapped) ok "$TRIAGE_FILE: ready-for-agent is the label ready";;
+      *) warn "$TRIAGE_FILE does not map ready-for-agent to ready: issues from /to-tickets will not be built (peppec init fixes it)";;
+    esac
   fi
 
   step "Branch protection"
@@ -884,7 +992,8 @@ PEPPEC command line (engine $ENGINE@$REF)
 Usage:
   peppec init [--preset <name>] [--key <app.pem>] [--yes]
       Install PEPPEC on the repository of the current clone: labels, settings, control
-      panel, variables, secrets, workflow files, branch protection. Safe to run again.
+      panel, variables, secrets, workflow files, the PEPPEC section of CLAUDE.md, branch
+      protection. Safe to run again.
   peppec doctor [-R owner/repo] [--key <app.pem>]
       Check an installation and list what is missing or wrong.
   peppec bot [-R owner/repo]... [--key <app.pem>] [--out <dir>]

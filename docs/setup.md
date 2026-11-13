@@ -44,7 +44,9 @@ What stays manual, because it needs your login or a secret only you can generate
 2. During `init`: paste the Claude token, your personal token and the bot token when asked. The values are read without echo and sent straight to GitHub.
 3. After `init`: commit and push the files it wrote, install CodeRabbit (Phase 3), then run `peppec bot` and copy the folder it prepares to the bot's machine (Phase 6).
 
-`peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, branch protection, the expiry of the Claude token. With `--key <app.pem>` it also checks that the app is installed on the repository.
+`init` also writes the PEPPEC section of `CLAUDE.md`, which tells the planning sessions on your computer how to write issues PEPPEC can build: see [Planning work for the agents](planning.md#producing-the-issues-with-a-planning-session).
+
+`peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, the PEPPEC section of `CLAUDE.md`, branch protection, the expiry of the Claude token. With `--key <app.pem>` it also checks that the app is installed on the repository.
 
 For unattended use, `peppec init --yes` never asks: it keeps what is set, takes the defaults and reads the secrets from the environment.
 

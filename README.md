@@ -45,7 +45,7 @@ chmod +x ~/.local/bin/peppec
 Then, inside a clone of your repository:
 
 ```bash
-peppec init      # labels, settings, variables, secrets, workflow files, branch protection
+peppec init      # labels, settings, variables, secrets, workflow files, CLAUDE.md section, branch protection
 peppec doctor    # checks the installation
 peppec bot       # prepares the folder for the machine that runs the Telegram bot
 ```
