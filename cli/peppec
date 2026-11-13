@@ -576,6 +576,10 @@ init_files() {
     write_file .github/peppec.yml "$(engine_file examples/peppec.yml | sed -e '/^# Copy to /d' -e "s|^preset: .*|preset: $PRESET|")"
   fi
   write_file .coderabbit.yaml "$(engine_file examples/coderabbit.yaml | sed -e '/^# Copy to /d')"
+  # The agent adds a line under "Unreleased" in each pull request; an existing changelog is yours
+  if [ -f CHANGELOG.md ]; then ok "CHANGELOG.md (kept)"; else
+    write_file CHANGELOG.md "$(engine_file examples/changelog.md | sed -e '/^<!-- Copy to /d')"
+  fi
   touch .gitignore
   local added=""
   for line in $WORK_DIRS; do
@@ -748,7 +752,7 @@ cmd_init() {
   init_feature_rules
 
   step "Next steps"
-  local paths=".github .coderabbit.yaml .gitignore"
+  local paths=".github .coderabbit.yaml .gitignore CHANGELOG.md"
   [ -f CLAUDE.md ] && paths="$paths CLAUDE.md"
   [ -f "$TRIAGE_FILE" ] && paths="$paths $TRIAGE_FILE"
   note "1. Review the files, then commit and push them to main:"
@@ -923,6 +927,13 @@ cmd_doctor() {
   else
     warn "no recent comment from CodeRabbit: check that it is installed on $REPO"
   fi
+
+  # The agent writes its entry only when the file is there: a warning, never a problem
+  step "Changelog"
+  content=$(host_file CHANGELOG.md || true)
+  if [ -z "$content" ]; then warn "no CHANGELOG.md on $default_branch: the agent writes no changelog entries (peppec init creates it)"
+  elif ! grep -qiE '^## \[?Unreleased\]?' <<< "$content"; then warn "CHANGELOG.md has no '## [Unreleased]' heading: the agent needs one to add its entries"
+  else ok "CHANGELOG.md with an Unreleased section"; fi
 
   # Planning is optional: what is missing here is a warning, never a problem
   step "Planning sessions"

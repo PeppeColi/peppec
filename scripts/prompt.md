@@ -11,6 +11,7 @@ Rules:
 - Before finishing, run these checks and fix until they all pass:
 {{check}}
 {{notes}}
+- If CHANGELOG.md exists, add one line for this change under its "Unreleased" heading, in the subsection that fits (Added, Changed, Deprecated, Removed, Fixed, Security; create the subsection if missing), written for the project's users. Keep a single line per issue: on later rounds update it, do not add another. Leave the changelog alone when users see no change (tests, refactoring) and when merging another branch.
 - Do not run the program and do not commit, push or open PRs: the workflow does that.
 - If the task is ambiguous and needs a decision, write one clear question in .agent/question.md and stop without other changes.
 - With the question, write in .agent/answer.md the answer you recommend: the option you would choose and, in one sentence, why. Write it so that it can be accepted as it is, as the answer to the question. Leave the file out only if you cannot recommend anything.
