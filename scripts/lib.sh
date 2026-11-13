@@ -34,8 +34,168 @@ close_merged() {
   gh api -X PATCH "repos/$REPO/issues/$1" -f state=closed -f state_reason=completed > /dev/null
   rm_label "$1" "in progress"
 }
-# The engine's own working branches, and nothing else: this is the only place that knows their name
-is_agent_branch() { [[ "$1" =~ ^agent/issue-[0-9]+$ ]]; }
+# Branch names. PEPPEC_BRANCHES (repository variable) holds one "kind=template" per line:
+#   feature  the integration branch of a specification, based on BASE_BRANCH
+#   work     a work unit of a specification, based on its feature branch
+#   hotfix   a problem found on a feature (Report a problem), based on its feature branch
+#   sync     BASE_BRANCH brought into a feature branch, based on that feature branch
+#   single   an issue without a specification, based on BASE_BRANCH
+# {spec} is the number of the specification and the slug of its title ("78-stats"), {n} the
+# number of the issue, {slug} the slug of its title. A kind left out takes its default below.
+# Without the variable every issue gets agent/issue-{n} on BASE_BRANCH, and there are no
+# feature branches. A variable and not .github/peppec.yml: a feature branch carries the
+# configuration of the day it was created, and would name the branches the old way
+BRANCH_DEFAULTS='feature=feature/{spec}/dev
+work=feature/{spec}/parte-{n}
+hotfix=feature/{spec}/hotfix-{n}
+sync=feature/{spec}/sync-{n}
+single=fix/{n}-{slug}'
+template() {
+  if [ -z "${PEPPEC_BRANCHES:-}" ]; then
+    [ "$1" = feature ] || echo 'agent/issue-{n}'
+    return 0
+  fi
+  local t
+  t=$( { grep -m1 "^[[:space:]]*$1[[:space:]]*=" <<< "$PEPPEC_BRANCHES" || true; } | cut -d= -f2- | tr -d '[:space:]')
+  [ -n "$t" ] || t=$(grep -m1 "^$1=" <<< "$BRANCH_DEFAULTS" | cut -d= -f2-)
+  echo "$t"
+}
+# A template the engine can use: feature names {spec} and not {n}; every other kind names {n},
+# which is how a branch is traced back to its issue. A template without it would claim
+# branches that are not the engine's, and the engine deletes its merged branches
+template_ok() {
+  case "$1" in
+    feature) [[ "$2" == *"{spec}"* && "$2" != *"{n}"* ]];;
+    *) [[ "$2" == *"{n}"* ]];;
+  esac
+}
+# Lowercase ASCII letters and digits joined by dashes, at most 30 characters
+slug() {
+  local a
+  a=$(iconv -f utf-8 -t ascii//TRANSLIT <<< "$1" 2> /dev/null) || a=$1
+  printf '%s\n' "$a" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//' | cut -c1-30 | sed -E 's/-+$//'
+}
+# $1 template, $2 {spec}, $3 {n}, $4 {slug}
+fill() {
+  local t=$1
+  t=${t//\{spec\}/$2}; t=${t//\{n\}/$3}; t=${t//\{slug\}/$4}
+  echo "$t"
+}
+# A regular expression matching the names a template gives; only {n} is captured
+template_regex() {
+  local t=$1
+  t=${t//\{spec\}/@S@}; t=${t//\{n\}/@N@}; t=${t//\{slug\}/@G@}
+  t=$(sed -E 's/[.^$*+?()|\\{}]/\\&/g; s/\[/\\[/g; s/\]/\\]/g' <<< "$t")
+  t=${t//@S@/[0-9][a-z0-9-]*}; t=${t//@N@/([0-9]+)}; t=${t//@G@/[a-z0-9-]*}
+  echo "^$t\$"
+}
+# The engine's own working branches, and nothing else: the old agent/issue-N names, and the
+# names of the templates of PEPPEC_BRANCHES. A feature branch is not one: the engine never
+# merges it, and removes it only once you have merged it (delete_feature_branch)
+is_agent_branch() {
+  [[ "$1" =~ ^agent/issue-[0-9]+$ ]] && return 0
+  [ -n "${PEPPEC_BRANCHES:-}" ] || return 1
+  is_feature_branch "$1" && return 1
+  local k t re
+  for k in work hotfix sync single; do
+    t=$(template "$k"); template_ok "$k" "$t" || continue
+    re=$(template_regex "$t")
+    [[ "$1" =~ $re ]] && return 0
+  done
+  return 1
+}
+# The issue a working branch belongs to
+issue_of_branch() {
+  [[ "$1" =~ ^agent/issue-([0-9]+)$ ]] && { echo "${BASH_REMATCH[1]}"; return; }
+  is_agent_branch "$1" || return 0
+  local k t re
+  for k in work hotfix sync single; do
+    t=$(template "$k"); template_ok "$k" "$t" || continue
+    re=$(template_regex "$t")
+    [[ "$1" =~ $re ]] && { echo "${BASH_REMATCH[1]}"; return; }
+  done
+}
+is_feature_branch() {
+  local t re; t=$(template feature)
+  template_ok feature "$t" || return 1
+  re=$(template_regex "$t")
+  [[ "$1" =~ $re ]]
+}
+# The branch of an issue and the branch it is based on, as "branch:base" (a colon never appears
+# in a branch name). Worked out once, when the issue starts (plan_branch), and remembered on the
+# issue: renaming the issue or its specification, or changing PEPPEC_BRANCHES, never moves work
+# already under way. Issues started before the marker existed keep agent/issue-N
+branch_of() {
+  local s; s=$(marker_get "$1" branch)
+  echo "${s:-agent/issue-$1:${BASE_BRANCH:-main}}"
+}
+# The specification of an issue: its parent, when you wrote it in this repository and it is not
+# a wayfinder map. The parent as JSON, or nothing
+spec_of() {
+  local p
+  p=$(gh api "repos/$REPO/issues/$1/parent" 2> /dev/null) || return 0
+  jq -e --arg r "https://api.github.com/repos/$REPO" --arg o "${OWNER_LOGIN:-}" \
+    '.repository_url == $r and .user.login == $o and (any(.labels[].name; . == "wayfinder:map") | not)' \
+    <<< "$p" > /dev/null || return 0
+  echo "$p"
+}
+# The kind of a work unit of a specification, from the hidden marker in its body: "hotfix" for a
+# problem reported on the feature, "sync" for a merge of the base branch; "work" otherwise
+kind_of() {
+  local k
+  k=$(gh api "repos/$REPO/issues/$1" --jq '.body // ""' | sed -nE 's/.*<!-- peppec:kind=(hotfix|sync) -->.*/\1/p' | head -1)
+  echo "${k:-work}"
+}
+valid_branch() { [ -n "$1" ] && git check-ref-format --branch "$1" > /dev/null 2>&1; }
+# Works out the branch of issue $1 the first time it starts, and remembers it (see branch_of).
+# Sets the variables branch and base; creates the feature branch from BASE_BRANCH when it is
+# missing. Returns 1, with the reason in plan_error, when PEPPEC_BRANCHES gives a bad name
+plan_branch() {
+  local n=$1 saved spec sn sname ft kind fb title
+  saved=$(marker_get "$n" branch)
+  if [ -n "$saved" ]; then branch=${saved%%:*} base=${saved#*:}; ensure_feature_branch "$base"; return; fi
+  base=${BASE_BRANCH:-main} kind=single sname=""
+  spec=$(spec_of "$n")
+  if [ -n "$spec" ]; then
+    kind=work
+    sn=$(jq -r .number <<< "$spec")
+    sname=$sn; title=$(slug "$(jq -r .title <<< "$spec")"); [ -z "$title" ] || sname="$sn-$title"
+    ft=$(template feature)
+    if [ -n "$ft" ] && ! template_ok feature "$ft"; then
+      plan_error="the feature template of PEPPEC_BRANCHES must contain {spec} and not {n}: '$ft'"; return 1
+    fi
+    if [ -n "$ft" ]; then
+      kind=$(kind_of "$n")
+      fb=$(marker_get "$sn" feature)
+      if [ -z "$fb" ]; then
+        fb=$(fill "$ft" "$sname" "$sn" "")
+        if ! valid_branch "$fb" || ! is_feature_branch "$fb" || [ "$fb" = "$base" ]; then
+          plan_error="PEPPEC_BRANCHES gives the feature branch of #$sn a bad name: '$fb'"; return 1
+        fi
+        marker_set "$sn" feature "$fb"
+      fi
+      base=$fb
+    fi
+  fi
+  if ! template_ok "$kind" "$(template "$kind")"; then
+    plan_error="the $kind template of PEPPEC_BRANCHES must contain {n}: '$(template "$kind")'"; return 1
+  fi
+  branch=$(fill "$(template "$kind")" "$sname" "$n" "$(slug "$(gh api "repos/$REPO/issues/$n" --jq .title)")")
+  if ! valid_branch "$branch" || ! is_agent_branch "$branch" || [ "$branch" = "$base" ]; then
+    plan_error="PEPPEC_BRANCHES gives #$n a bad branch name: '$branch'"; return 1
+  fi
+  ensure_feature_branch "$base"
+  marker_set "$n" branch "$branch:$base"
+}
+# Creates a feature branch from the tip of BASE_BRANCH when it does not exist
+ensure_feature_branch() {
+  [ "$1" != "${BASE_BRANCH:-main}" ] || return 0
+  gh api "repos/$REPO/branches/$1" --jq .name > /dev/null 2>&1 && return 0
+  local sha
+  sha=$(gh api "repos/$REPO/branches/${BASE_BRANCH:-main}" --jq .commit.sha)
+  gh api -X POST "repos/$REPO/git/refs" -f ref="refs/heads/$1" -f sha="$sha" > /dev/null
+  echo "Created the feature branch $1 from ${BASE_BRANCH:-main}"
+}
 # Removes a working branch whose pull request is merged. GitHub is told not to delete merged
 # branches (peppec init turns that off): it would also delete the base branch each time it is
 # brought to main. So the engine removes its own, never a branch with another name, and never
@@ -47,6 +207,24 @@ delete_agent_branch() {
     echo "Deleted the merged branch $1"
   else
     echo "Branch $1 not deleted: it is already gone"
+  fi
+}
+# A feature branch you have merged into the base branch: the specification is done. Closes the
+# specification (GitHub closes issues only on merges into the default branch) and removes the
+# branch, unless a pull request still starts from it or goes into it
+finish_feature() {
+  local branch=$1 spec
+  is_feature_branch "$branch" || return 0
+  spec=$(gh pr list -R "$REPO" --head "$branch" --state merged --json body --jq '.[0].body // ""' \
+    | sed -nE 's/.*<!-- peppec:feature=([0-9]+) -->.*/\1/p' | head -1)
+  if [ -n "$spec" ] && [ "$(gh api "repos/$REPO/issues/$spec" --jq .state)" = open ]; then
+    gh api -X PATCH "repos/$REPO/issues/$spec" -f state=closed -f state_reason=completed > /dev/null
+    echo "Closed specification #$spec: its feature branch is merged"
+  fi
+  [ -z "$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')" ] || return 0
+  [ -z "$(gh pr list -R "$REPO" --base "$branch" --state open --json number --jq '.[0].number // empty')" ] || return 0
+  if gh api -X DELETE "repos/$REPO/git/refs/heads/$branch" > /dev/null 2>&1; then
+    echo "Deleted the merged feature branch $branch"
   fi
 }
 # True only when GitHub says the base branch is not there. Any other failure (network, rate
@@ -95,8 +273,24 @@ notify_feature_done() {
   [ "$open" -eq 0 ] || return 0
   [ "$(marker_get "$pn" done)" != "$total" ] || return 0
   marker_set "$pn" done "$total"
+  local where="${BASE_BRANCH:-main}" link="https://github.com/$REPO/issues/$pn" fb pr
+  # With a feature branch, the pull request that brings it into the base branch: opened here,
+  # merged only by you, after trying the feature. Its merge closes the specification (finish_feature)
+  fb=$(marker_get "$pn" feature)
+  if [ -n "$fb" ]; then
+    where=$fb
+    pr=$(gh pr list -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --state open --json url --jq '.[0].url // empty')
+    if [ -z "$pr" ]; then
+      pr=$(gh pr create -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" \
+        --title "$(jq -r .title <<< "$parent") (#$pn)" \
+        --body "Feature of specification #$pn. Try it on \`$fb\`, then merge this pull request: the workflow closes the specification and removes the branch. Never merged automatically.
+
+<!-- peppec:feature=$pn -->") || pr=""
+    fi
+    [ -z "$pr" ] || link=$pr
+  fi
   # The button asks the bot for one sentence and makes it a new sub-issue (report in bot/bot.py)
-  notify "All $total sub-issues of #$pn \"$(jq -r .title <<< "$parent")\" are merged into ${BASE_BRANCH:-main}: the feature is ready to be tried. https://github.com/$REPO/issues/$pn" \
+  notify "All $total sub-issues of #$pn \"$(jq -r .title <<< "$parent")\" are merged into $where: the feature is ready to be tried. $link" \
     "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$pn|\"}]]}"
 }
 

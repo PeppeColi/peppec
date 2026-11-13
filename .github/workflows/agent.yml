@@ -43,6 +43,10 @@ env:
   CONTROL_ISSUE: ${{ vars.CONTROL_ISSUE }}
   # The branch the agent starts from and its pull requests are merged into
   BASE_BRANCH: ${{ vars.BASE_BRANCH || 'main' }}
+  # Names of the agent's branches and of the feature branches (see template in scripts/lib.sh)
+  PEPPEC_BRANCHES: ${{ vars.PEPPEC_BRANCHES }}
+  # Only the specifications you wrote get a feature branch (spec_of in scripts/lib.sh)
+  OWNER_LOGIN: ${{ vars.OWNER_LOGIN }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   CTL: _ctl/scripts
 
@@ -60,6 +64,8 @@ jobs:
       ci_tries: ${{ steps.d.outputs.ci_tries }}
       reason: ${{ steps.d.outputs.reason }}
       minutes: ${{ steps.d.outputs.minutes }}
+      branch: ${{ steps.d.outputs.branch }}
+      base: ${{ steps.d.outputs.base }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -142,6 +148,9 @@ jobs:
       PR: ${{ needs.decide.outputs.pr }}
       ROUND: ${{ needs.decide.outputs.round }}
       CI_TRIES: ${{ needs.decide.outputs.ci_tries }}
+      # The issue's branch and the branch it is based on: BASE_BRANCH, or a feature branch
+      BRANCH: ${{ needs.decide.outputs.branch }}
+      BASE: ${{ needs.decide.outputs.base }}
     steps:
       - uses: actions/checkout@v4
         with: { ref: "${{ vars.BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
@@ -161,7 +170,6 @@ jobs:
         run: bash "$CTL/task.sh"
         env:
           GH_TOKEN: ${{ secrets.AGENT_TOKEN }}
-          OWNER_LOGIN: ${{ vars.OWNER_LOGIN }}
           APP_LOGIN: ${{ vars.APP_LOGIN }}
           CI_WORKFLOW: ${{ inputs.ci_workflow }}
       - uses: ./_preset

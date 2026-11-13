@@ -1,8 +1,8 @@
 # scripts/after.sh
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
-B="agent/issue-$ISSUE"
-BASE="${BASE_BRANCH:-main}"
+B="${BRANCH:-agent/issue-$ISSUE}"
+BASE="${BASE:-${BASE_BRANCH:-main}}"
 
 # Time budget: add this run's working minutes to the issue counter
 used=$(GH_TOKEN="$APP_TOKEN" marker_get "$ISSUE" minutes)
@@ -126,6 +126,10 @@ if [ "$ACTION" = start ]; then
     if [ "$BASE" != "$(gh api "repos/$REPO" --jq .default_branch)" ]; then
       body="Issue #$ISSUE. The workflow closes it when this pull request is merged into \`$BASE\`."
     fi
+    # Which issue the pull request belongs to, whatever its branch is called
+    body="$body
+
+<!-- peppec:issue=$ISSUE -->"
     # What the issue leaves out goes into the pull request: the reviewer sees only the pull
     # request, and would otherwise ask for work that belongs to another issue of the feature
     out=$(gh issue view "$ISSUE" -R "$REPO" --json body --jq '.body // ""' | out_of_scope)

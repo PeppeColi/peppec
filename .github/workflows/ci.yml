@@ -26,8 +26,17 @@ jobs:
           path: _ctl
           persist-credentials: false
       # Agent branches are checked with the configuration of the base branch, so the agent
-      # cannot weaken its own checks; any other branch uses its own configuration
-      - if: startsWith(github.head_ref, 'agent/')
+      # cannot weaken its own checks; any other branch uses its own configuration. Their names
+      # follow PEPPEC_BRANCHES: the same rule as the workflow that merges them
+      - id: who
+        if: github.head_ref != ''
+        run: |
+          source _ctl/scripts/lib.sh
+          if is_agent_branch "$HEAD_REF"; then echo "agent=true" >> "$GITHUB_OUTPUT"; fi
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PEPPEC_BRANCHES: ${{ vars.PEPPEC_BRANCHES }}
+      - if: steps.who.outputs.agent == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.base_ref }}
@@ -37,7 +46,7 @@ jobs:
       - id: cfg
         run: bash _ctl/scripts/config.sh
         env:
-          PEPPEC_CONFIG: ${{ startsWith(github.head_ref, 'agent/') && '_base/.github/peppec.yml' || '.github/peppec.yml' }}
+          PEPPEC_CONFIG: ${{ steps.who.outputs.agent == 'true' && '_base/.github/peppec.yml' || '.github/peppec.yml' }}
       - uses: ./_preset
         with:
           options: ${{ steps.cfg.outputs.options }}

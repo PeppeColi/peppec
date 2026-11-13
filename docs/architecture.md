@@ -26,7 +26,7 @@ The bot uses long polling, so it needs no public address and no open ports. Noti
 
 ```mermaid
 flowchart TD
-    A[Oldest ready issue that no open issue blocks] --> B[Agent implements it on agent/issue-N]
+    A[Oldest ready issue that no open issue blocks] --> B[Agent implements it on its own branch]
     B --> Q{Unclear?}
     Q -- yes --> W[Question on Telegram, waits for your reply]
     W --> B
@@ -71,7 +71,7 @@ Two more keys cover what a preset cannot know: `options` passes values to the pr
 
 CI and the agent use the same definition: CI runs the setup and the check commands, and the agent's prompt tells it to run the same commands until they pass.
 
-The configuration is always read from the base branch: `main`, or the branch named by the `BASE_BRANCH` variable. Pull requests from `agent/*` branches are checked with the configuration of the base branch, so the agent cannot weaken its own checks.
+The configuration is always read from the base branch: `main`, or the branch named by the `BASE_BRANCH` variable. Pull requests from the agent's branches (`agent/issue-N`, or the names of `PEPPEC_BRANCHES`) are checked with the configuration of the branch they go into, so the agent cannot weaken its own checks.
 
 ## Model selection
 
@@ -127,7 +127,7 @@ Pull requests are merged into the base branch: `main`, or the branch named by th
 
 If the base branch does not exist, the whole queue stops: no issue is started, continued or blocked. You get one Telegram message with the command that creates the branch again, and the control panel gets the `base missing` label. At the first run that finds the branch, the label goes, you are told, and the queue goes on from where it was. A pull request that was open when the branch disappeared was closed by GitHub: the agent's branch is still there, and the workflow opens a new pull request from it.
 
-The workflow merges only the pull requests of its own `agent/issue-*` branches, and removes such a branch once its pull request is merged: right after an automatic merge, and at the run started by a merge done by hand. GitHub's own "Automatically delete head branches" stays off, because it would also delete the base branch each time it is brought to `main`; no other branch is ever deleted by the workflow. With a base branch other than `main`, the merge of the base branch into `main` is never automatic, whatever the mode: it is the owner's statement that the whole feature passed its end-to-end test (see [Planning a feature](planning.md)). Who or what runs that test is not defined yet; until it is, the gate is a person.
+The workflow merges only the pull requests of its own branches (`agent/issue-N`, or the work, hotfix, sync and single names of [`PEPPEC_BRANCHES`](setup.md#feature-branches)), and removes such a branch once its pull request is merged: right after an automatic merge, and at the run started by a merge done by hand. GitHub's own "Automatically delete head branches" stays off, because it would also delete the base branch each time it is brought to `main`; the only other branch the workflow deletes is a feature branch, once you have merged it into the base branch. A feature branch is never merged by the workflow. With a base branch other than `main`, the merge of the base branch into `main` is never automatic, whatever the mode: it is the owner's statement that the whole feature passed its end-to-end test (see [Planning a feature](planning.md)). Who or what runs that test is not defined yet; until it is, the gate is a person.
 
 ## Telegram bot
 

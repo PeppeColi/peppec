@@ -209,6 +209,7 @@ gh variable set AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal tok
 | `LARGE_FROM_ROUND` | Review round from which the model of size L takes over |
 | `SUMMARY_HOUR` | Hour of the daily summary, in `TZ_NAME` |
 | `BASE_BRANCH` | Optional: the branch the agent starts from and its pull requests are merged into. `main` when not set. See [A base branch other than `main`](#a-base-branch-other-than-main) |
+| `PEPPEC_BRANCHES` | Optional: the names of the agent's branches, and a feature branch for each specification. See [Feature branches](#feature-branches) |
 | `CLAUDE_TOKEN_EXPIRES`, `AGENT_TOKEN_EXPIRES` | The summary warns you during the 30 days before each date. The second is optional: leave it out for a token that never expires |
 
 ## Phase 5 — Workflows and configuration
@@ -271,6 +272,34 @@ What changes:
 - **The workflow files must be the same on both branches.** GitHub runs the scheduled and manual runs from the copy on `main`, and the runs started by a pull request (review submitted, pull request closed) from the copy on `dev`. A change to them, such as an [upgrade](#upgrading), goes to `main` first and is then merged into `dev`. `peppec doctor` reports a difference as a problem.
 - **Bringing `dev` to `main` is yours to do**, with a pull request merged with a merge commit. A squash would leave the two branches with different histories, and the next pull request between them would conflict. A fix made directly on `main` must be merged back into `dev`. `dev` stays after the merge: GitHub does not delete merged branches here (Phase 1), on any plan. Do not press "Delete branch" on that pull request. The second ruleset makes the button fail; the first one does not, because admins bypass it. Where rulesets are not available and `dev` was deleted by mistake, "Restore branch" on the same pull request brings it back.
 - **Without `dev` the queue stops.** If the branch is missing, nothing is started and you get one Telegram message; the queue goes on by itself when the branch is back (see [Merge modes](architecture.md#merge-modes)).
+
+### Feature branches
+
+By default every issue gets a branch `agent/issue-N`, based on the base branch. Set `PEPPEC_BRANCHES` to name the branches your way and to give each specification its own integration branch:
+
+```bash
+gh variable set PEPPEC_BRANCHES -R "$R" -b 'feature=feature/{spec}/dev'
+```
+
+The variable holds one `kind=template` per line; a kind left out takes its default:
+
+| Kind | Default | Based on | What |
+| --- | --- | --- | --- |
+| `feature` | `feature/{spec}/dev` | the base branch | The integration branch of a specification |
+| `work` | `feature/{spec}/parte-{n}` | its feature branch | A work unit of the specification |
+| `hotfix` | `feature/{spec}/hotfix-{n}` | its feature branch | A problem reported with Report a problem |
+| `sync` | `feature/{spec}/sync-{n}` | its feature branch | Reserved: bringing the base branch into the feature branch |
+| `single` | `fix/{n}-{slug}` | the base branch | An issue without a specification |
+
+`{spec}` is the number of the specification and its title in lowercase words joined by dashes (`78-stats`), `{n}` the number of the issue, `{slug}` its title the same way. Every template but `feature` must contain `{n}`; `feature` must contain `{spec}`. Never create a branch named like the beginning of a feature branch (`feature/78-stats` next to `feature/78-stats/dev`): git cannot hold both.
+
+How it works:
+
+- **The feature branch is created by the workflow** from the base branch, when the first work unit of the specification starts. The work units are merged into it, as they would be into the base branch.
+- **Names are kept.** Each issue remembers its branch when it starts: renaming the issue or the specification, or changing the variable, never moves work already under way. Issues started before the variable keep `agent/issue-N`.
+- **One feature is built at a time.** The work units of a feature already started come first; a finished feature waits for you while the agent starts the next one.
+- **When the last work unit is merged** the workflow opens a pull request from the feature branch into the base branch and sends the "ready to be tried" message with its link. Try the feature on its branch, then merge that pull request yourself: the workflow never merges it. The merge closes the specification and removes the feature branch.
+- **A variable, not `.github/peppec.yml`:** a feature branch carries the configuration of the day it was created.
 
 ## Phase 6 — Telegram bot
 

@@ -151,8 +151,15 @@ class Repo:
         return [i for i in self.issues("ready") if not not_work_unit(i)]
 
     def agent_pr(self, n):
+        """The open pull request of issue n, from the branch the workflow remembered on the issue
+        when it started (branch_of in scripts/lib.sh); agent/issue-n for issues started before."""
+        branch = f"agent/issue-{n}"
+        for c in self.gh("GET", f"/issues/{n}/comments", params={"per_page": 100}):
+            m = re.match(r"<!-- peppec:branch=([^ :]+):", c["body"])
+            if m:
+                branch = m.group(1)
         owner = self.name.split("/")[0]
-        prs = self.gh("GET", "/pulls", params={"head": f"{owner}:agent/issue-{n}", "state": "open"})
+        prs = self.gh("GET", "/pulls", params={"head": f"{owner}:{branch}", "state": "open"})
         return prs[0]["number"] if prs else None
 
     def active(self):
@@ -255,7 +262,9 @@ class Repo:
         first = text.splitlines()[0].strip()
         title = first if len(first) <= 80 else first[:79].rstrip() + "…"
         body = (f"Found while trying the feature of #{spec} on the base branch, reported from the bot:\n\n"
-                f"{text}\n\nThe specification, with its scenarios, is the parent issue.")
+                f"{text}\n\nThe specification, with its scenarios, is the parent issue.\n\n"
+                # Its branch is a hotfix branch of the feature (kind_of in scripts/lib.sh)
+                "<!-- peppec:kind=hotfix -->")
         issue = self.gh("POST", "/issues", json={"title": title, "body": body})
         self.gh("POST", f"/issues/{spec}/sub_issues", json={"sub_issue_id": issue["id"]})
         self.gh("POST", f"/issues/{issue['number']}/labels", json={"labels": ["ready", "size: S"]})

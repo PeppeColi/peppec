@@ -2,9 +2,9 @@
 # shellcheck disable=SC2034  # outputs are read indirectly by emit()
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
-action=none issue="" pr="" sha="" size="" round="" ci_tries="" reason="" minutes=""
+action=none issue="" pr="" sha="" size="" round="" ci_tries="" reason="" minutes="" branch="" base=""
 emit() {
-  for k in action issue pr sha size round ci_tries reason minutes; do
+  for k in action issue pr sha size round ci_tries reason minutes branch base; do
     echo "$k=${!k}" >> "$GITHUB_OUTPUT"
   done
 }
@@ -28,9 +28,11 @@ size_of() {
 REVIEW_RETRY_MINUTES=20 REVIEW_REQUESTS=3
 budget() { local used; used=$(marker_get "$1" minutes); echo $(( MAX_ISSUE_MINUTES - ${used:-0} )); }
 
-# A pull request of the agent merged by hand: its branch is removed here, even with the queue paused
+# A pull request of the agent merged by hand: its branch is removed here, even with the queue paused.
+# A feature branch you merged: its specification is closed and the branch removed
 if [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ]; then
   delete_agent_branch "$EVENT_HEAD_REF"
+  finish_feature "$EVENT_HEAD_REF"
 fi
 
 ctrl=$(labels_of "$CONTROL_ISSUE")
@@ -54,6 +56,15 @@ if has "$ctrl" "base missing"; then
   notify "The base branch $BASE_BRANCH is back: the queue goes on."
 fi
 
+# True when issue $1 is a work unit of a feature already started (its feature branch exists) whose
+# pull request into the base branch is not open yet: the feature is still being built
+under_construction() {
+  local spec fb
+  spec=$(spec_of "$1"); [ -n "$spec" ] || return 1
+  fb=$(marker_get "$(jq -r .number <<< "$spec")" feature); [ -n "$fb" ] || return 1
+  [ -z "$(gh pr list -R "$REPO" --head "$fb" --state open --json number --jq '.[0].number // empty')" ]
+}
+
 # $1, optional: an issue to leave out
 active_issue() {
   gh issue list -R "$REPO" --state open --label "in progress" --json number,createdAt \
@@ -66,7 +77,8 @@ merged_pr() {
   since=$(gh api --paginate "repos/$REPO/issues/$1/events?per_page=100" \
     --jq '.[] | select(.event == "reopened" or (.event == "labeled" and .label.name == "in progress")) | .created_at' | tail -1)
   [ -n "$since" ] || return 0
-  gh pr list -R "$REPO" --head "agent/issue-$1" --state merged --json number,mergedAt \
+  local b; b=$(branch_of "$1")
+  gh pr list -R "$REPO" --head "${b%%:*}" --state merged --json number,mergedAt \
     --jq "[.[] | select(.mergedAt >= \"$since\")] | sort_by(.mergedAt) | last | .number // empty"
 }
 
@@ -86,7 +98,7 @@ if [ -n "$active" ]; then
     echo "PR #$done_pr of issue #$active is merged: closing the issue"
     close_merged "$active"
     # Still there when the run that follows the merge was skipped or stopped early
-    delete_agent_branch "agent/issue-$active"
+    b=$(branch_of "$active"); delete_agent_branch "${b%%:*}"
     # Left out by number: right after the close the lists may still show it as open
     closed=$active
     notify_feature_done "$closed"
@@ -95,9 +107,9 @@ if [ -n "$active" ]; then
 fi
 
 # A merge done by hand into the default branch: GitHub has closed the issue by itself
-if [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ] \
-   && [[ "$EVENT_HEAD_REF" =~ ^agent/issue-([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" != "$closed" ]; then
-  notify_feature_done "${BASH_REMATCH[1]}"
+if [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ]; then
+  merged_issue=$(issue_of_branch "$EVENT_HEAD_REF")
+  if [ -n "$merged_issue" ] && [ "$merged_issue" != "$closed" ]; then notify_feature_done "$merged_issue"; fi
 fi
 
 if [ -z "$active" ]; then
@@ -105,7 +117,7 @@ if [ -z "$active" ]; then
   # "always on" on the control panel: new issues start at any hour
   if in_window || has "$ctrl" "always on" || [ "$FORCE" = true ]; then ok=true; fi
   if [ "$mode" = manual ] && [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ] \
-     && [[ "$EVENT_HEAD_REF" == agent/* ]]; then ok=true; fi
+     && is_agent_branch "$EVENT_HEAD_REF"; then ok=true; fi
   [ "$ok" = true ] || { echo "Outside the work window"; exit 0; }
   # The oldest ready issue that no open issue blocks
   open_ready=$(gh api --paginate "repos/$REPO/issues?state=open&labels=ready&per_page=100" \
@@ -120,12 +132,20 @@ if [ -z "$active" ]; then
     notify "#$n has the ready label but is not a work unit (it has sub-issues, or a wayfinder label): the queue skips it. Remove ready from it, and put it on its sub-issues instead. https://github.com/$REPO/issues/$n"
   done
   ready=$(jq -r '.[] | select('"$NOT_WORK_UNIT"' | not) | .number' <<< "$open_ready")
+  first=""
   for n in $ready; do
     blockers=$(open_blockers "$n" "$closed")
-    if [ -z "$blockers" ]; then issue=$n; break; fi
-    echo "Issue #$n waits for $blockers"
+    if [ -n "$blockers" ]; then echo "Issue #$n waits for $blockers"; continue; fi
+    [ -n "$first" ] || first=$n
+    # With feature branches, one feature is built at a time: the work units of a feature already
+    # started and not yet finished come first. Finished features wait for you meanwhile
+    [ -n "$(template feature)" ] || break
+    if under_construction "$n"; then issue=$n; break; fi
   done
+  issue=${issue:-$first}
   [ -n "$issue" ] || { echo "No ready issues to start"; exit 0; }
+  if ! plan_branch "$issue"; then action=stop; reason=$plan_error; exit 0; fi
+  echo "Issue #$issue on $branch, based on $base"
   size=$(size_of "$(labels_of "$issue")")
   action=start; round=1; minutes=$(( $(budget "$issue") + 10 )); exit 0
 fi
@@ -145,13 +165,17 @@ if has "$il" "awaiting quota"; then
   rm_label "$issue" "awaiting quota"
 fi
 
-base=$(size_of "$il")
-# Only the agent's own branch: the base branch -> main merge is the owner's end-to-end sign-off, never automatic
-pr=$(gh pr list -R "$REPO" --head "agent/issue-$issue" --state open --json number --jq '.[0].number // empty')
+isize=$(size_of "$il")
+# Only the agent's own branch: the merges of a feature branch into the base branch and of the base
+# branch into main are the owner's end-to-end sign-off, never automatic
+# An issue already in progress keeps the branch it started on (agent/issue-N if it started before
+# branch names were remembered)
+bb=$(branch_of "$issue"); branch=${bb%%:*} base=${bb#*:}
+pr=$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
 left=$(budget "$issue")
 if [ "$left" -le 0 ]; then action=stop; reason="time budget of $MAX_ISSUE_MINUTES minutes used up"; exit 0; fi
 minutes=$(( left + 10 ))
-if [ -z "$pr" ]; then action=start; size=$base; round=1; exit 0; fi
+if [ -z "$pr" ]; then action=start; size=$isize; round=1; exit 0; fi
 
 sha=$(gh pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)
 waited=$(age_minutes "$(gh api "repos/$REPO/commits/$sha" --jq .commit.committer.date)")
@@ -159,7 +183,7 @@ pl=$(labels_of "$pr")
 round=$( { grep -oP '^review \K[0-9]+' <<< "$pl" || true; } | sort -n | tail -1); round=${round:-1}
 tries=$( { grep -oP '^ci \K[0-9]+' <<< "$pl" || true; } | sort -n | tail -1); tries=${tries:-0}
 # From this round on the largest model takes over, whatever the size of the issue
-size=$base; [ "$round" -ge "$LARGE_FROM_ROUND" ] && size=l
+size=$isize; [ "$round" -ge "$LARGE_FROM_ROUND" ] && size=l
 
 # CI_CHECK is the name of the check run to wait for ("ci / ci" with the reusable CI workflow)
 ci=$(gh api -X GET "repos/$REPO/commits/$sha/check-runs" -f check_name="$CI_CHECK" \
@@ -255,6 +279,6 @@ case "$state" in
     if [ "$round" -ge "$MAX_REVIEW_ROUNDS" ]; then
       action=stop; reason="review not passed after $round rounds"; exit 0
     fi
-    round=$((round + 1)); size=$base; [ "$round" -ge "$LARGE_FROM_ROUND" ] && size=l
+    round=$((round + 1)); size=$isize; [ "$round" -ge "$LARGE_FROM_ROUND" ] && size=l
     action=fix_review; exit 0;;
 esac
