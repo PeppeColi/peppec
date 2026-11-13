@@ -147,6 +147,7 @@ The commands still work when typed in full:
 | `/schedule [repo] nightly` or `/schedule [repo] always` | Switches between the work window and working at any hour |
 | `/version` | The bot's version |
 | Reply to a "Question on #N" message | Posts the reply on the issue and restarts the work |
+| Accept button under a "Question on #N" message | Posts the answer the agent recommends as yours and restarts the work |
 
 One bot can follow several repositories, as long as they share the app, the Telegram bot and the chat. Every notification starts with the repository it comes from, as in `[owner/name] Question on #12:`, and a reply goes to that repository.
 
@@ -163,7 +164,7 @@ The Resume button only lifts the pause; `/unblock` and the Unblock button also c
 The bot can also serve a web page, meant for a phone: the state of every repository at a glance, and the same actions as the bot. It is off unless `DASHBOARD_PASSWORD` is set in the bot's `.env`.
 
 - The home page only shows: what is waiting for you (blocked issues, open questions, pull requests ready to merge in manual mode), the features ready to be tried (open specifications whose sub-issues are all closed) and one line per repository. Nothing on it acts.
-- Touching a line opens its page, where the buttons are: Unblock and Give a hint on a blocked issue, the answer to a question, Report a problem on a feature ready to be tried, the merge mode, the schedule and the pause of a repository.
+- Touching a line opens its page, where the buttons are: Unblock and Give a hint on a blocked issue, the answer to a question (Accept for the recommended answer, or your own), Report a problem on a feature ready to be tried, the merge mode, the schedule and the pause of a repository.
 - Every action taken from the dashboard is also reported in the Telegram chat.
 
 - Optionally, the home page also shows the usage of your Claude subscription: the current session, the weekly limit and any limit per model, each with when it resets. It is read from Anthropic when the page opens and when you press "Refresh usage", never on a timer. A reading less than a minute old is shown again instead of asking Anthropic, and when Anthropic answers `429 Too Many Requests` the bot asks nothing more until its `Retry-After` has passed (a minute without one), showing the last reading with a note. It needs Claude Code logged in inside the bot's container (see [setup](setup.md)); without that login the section is hidden. The usage comes from the endpoint behind Claude Code's `/usage`, which Anthropic does not document: if it changes, the section shows an error and the rest of the page keeps working. The token from `claude setup-token` cannot read it, so this is a separate login. When its access token has expired, the bot runs `claude -p ok --model haiku` once to renew it, which costs a tiny Haiku request. The limits are those of your whole account, your own sessions included.

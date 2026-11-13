@@ -22,6 +22,9 @@ notify() {
 notify_blocked() {
   notify "$1" "{\"inline_keyboard\":[[{\"text\":\"Unblock #$ISSUE\",\"callback_data\":\"unblock|$ISSUE|\"},{\"text\":\"Hint #$ISSUE\",\"callback_data\":\"hint|$ISSUE|\"}]]}"
 }
+# Separates the agent's question from the answer it recommends, in the comment that asks it.
+# Same text as RECOMMENDED in bot/bot.py
+RECOMMENDED_MARK='<!-- peppec:recommended -->'
 add_label() { gh api -X POST "repos/$REPO/issues/$1/labels" -f "labels[]=$2" > /dev/null; }
 rm_label() { gh api -X DELETE "repos/$REPO/issues/$1/labels/$(jq -rn --arg l "$2" '$l|@uri')" > /dev/null 2>&1 || true; }
 labels_of() { gh api "repos/$REPO/issues/$1/labels" --jq '.[].name'; }

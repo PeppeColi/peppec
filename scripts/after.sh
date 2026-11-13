@@ -25,12 +25,32 @@ if [ "$OUTCOME" != success ]; then
 fi
 
 if [ -s .agent/question.md ]; then
-  gh issue comment "$ISSUE" -R "$REPO" --body-file .agent/question.md
+  # The answer the agent recommends goes in the same comment, after a marker: the bot's
+  # Accept button reads it back from there (accept in bot/bot.py)
+  recommended=""
+  if [ -s .agent/answer.md ]; then recommended=$(cat .agent/answer.md); fi
+  if [ -n "$recommended" ]; then
+    printf '%s\n\n%s\n**Recommended answer**\n\n%s\n' "$(cat .agent/question.md)" "$RECOMMENDED_MARK" "$recommended" \
+      | gh issue comment "$ISSUE" -R "$REPO" --body-file -
+  else
+    gh issue comment "$ISSUE" -R "$REPO" --body-file .agent/question.md
+  fi
   add_label "$ISSUE" "question open"
-  notify "Question on #$ISSUE:
+  if [ -n "$recommended" ]; then
+    notify "Question on #$ISSUE:
+$(cat .agent/question.md)
+
+Recommended answer:
+$recommended
+
+Press Accept to send it, or reply to this message with your own answer." \
+      "{\"inline_keyboard\":[[{\"text\":\"Accept #$ISSUE\",\"callback_data\":\"accept|$ISSUE|\"}]]}"
+  else
+    notify "Question on #$ISSUE:
 $(cat .agent/question.md)
 
 Reply to this message to unblock it."
+  fi
   exit 0
 fi
 

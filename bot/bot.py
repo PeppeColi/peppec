@@ -24,6 +24,9 @@ BLOCKS = ["needs human", "question open", "awaiting quota"]
 # Notifications start with the repository they come from: "[owner/name] text"
 PREFIX = re.compile(r"^\[([\w.-]+/[\w.-]+)\] ")
 QUESTION = re.compile(r"^(?:\[\S+\] )?Question on #(\d+):")
+# Separates the agent's question from the answer it recommends, in the comment that asks it.
+# Same text as RECOMMENDED_MARK in scripts/lib.sh
+RECOMMENDED = "<!-- peppec:recommended -->"
 # The message a "Hint" button asks to reply to
 HINT = re.compile(r"^Hint for ([\w.-]+/[\w.-]+)#(\d+):")
 # The message a "Report a problem" button asks to reply to; the number is the specification's
@@ -96,6 +99,33 @@ class Repo:
             return None  # label or comment already gone
         r.raise_for_status()
         return r.json() if r.content else None
+
+    def pages(self, path):
+        """Every item of a list of the API, 100 at a time, oldest first."""
+        items, page = [], 1
+        while True:
+            got = self.gh("GET", path, params={"per_page": 100, "page": page})
+            items += got
+            if len(got) < 100:
+                return items
+            page += 1
+
+    def question(self, n):
+        """The open question on issue n and the answer the agent recommends ("" when none).
+        Read only from a comment by whoever labelled the issue "question open", and not a later
+        one: the workflow does both with the owner's token, so a comment by someone else can
+        never be shown as the question, nor sent as an accepted answer."""
+        asked = next((e for e in reversed(self.pages(f"/issues/{n}/events")) if e["event"] == "labeled"
+                      and (e.get("label") or {}).get("name") == "question open"), None)
+        if not asked or not asked.get("actor"):
+            return "", ""
+        said = next((c["body"] for c in reversed(self.pages(f"/issues/{n}/comments"))
+                     if c["user"]["login"] == asked["actor"]["login"]
+                     and c["created_at"] <= asked["created_at"]
+                     and not c["body"].startswith("<!-- peppec:")), "")
+        question, _, recommended = said.partition(RECOMMENDED)
+        recommended = re.sub(r"^\s*\*\*Recommended answer\*\*", "", recommended)
+        return question.strip(), recommended.strip()
 
     def labels(self, n):
         return [x["name"] for x in self.gh("GET", f"/issues/{n}/labels")]
@@ -188,20 +218,18 @@ class Repo:
         if active:
             issue = active[0]
             n, labels = issue["number"], [x["name"] for x in issue["labels"]]
-            minutes, said = 0, ""
+            minutes = 0
             for comment in self.gh("GET", f"/issues/{n}/comments", params={"per_page": 100}):
                 m = re.match(r"<!-- peppec:minutes=(\d+)", comment["body"])
                 if m:
                     minutes = int(m.group(1))
-                elif not comment["body"].startswith("<!-- peppec:"):
-                    said = comment["body"]
+            question, recommended = self.question(n) if "question open" in labels else ("", "")
             pr = self.agent_pr(n)
             out["active"] = {
                 "number": n, "title": issue["title"], "url": f"{out['url']}/issues/{n}",
                 "size": size_of(labels), "minutes": minutes,
                 "block": next((b for b in BLOCKS if b in labels), None),
-                # The question is the last comment: after.sh posts it right before the label
-                "question": said if "question open" in labels else "",
+                "question": question, "recommended": recommended,
                 "pr": {"number": pr, "labels": self.labels(pr), "url": f"{out['url']}/pull/{pr}"} if pr else None}
         out["queue"] = [{"number": i["number"], "title": i["title"], "size": size_of([x["name"] for x in i["labels"]])}
                         for i in self.queue() if not any(x["name"] == "in progress" for x in i["labels"])]
@@ -249,6 +277,8 @@ class Repo:
             return self.set_schedule(value)
         if action == "unblock" and value.isdigit():
             return self.restart(int(value))
+        if action == "accept" and value.isdigit():
+            return self.accept(int(value))
         raise UserError("I do not know this action.")
 
     def answer(self, n, text):
@@ -256,6 +286,17 @@ class Repo:
         self.rm(n, "question open")
         self.dispatch()
         return f"Answer posted on {self.name}#{n}, restarting."
+
+    def accept(self, n):
+        """Sends the answer the agent recommends as yours. Pressed twice, the second finds the
+        question already answered and does nothing."""
+        if "question open" not in self.labels(n):
+            raise UserError(f"{self.name}#{n} has no open question.")
+        _, recommended = self.question(n)
+        if not recommended:
+            raise UserError(f"The question on {self.name}#{n} has no recommended answer: reply with yours.")
+        self.answer(n, f"Accepted the recommended answer:\n\n{recommended}")
+        return f"Recommended answer accepted on {self.name}#{n}, restarting."
 
     def set_mode(self, value):
         if value == "automatic":
@@ -473,7 +514,7 @@ def handle(msg):
              "/status shows buttons for all of them: nothing else to type.\n"
              "Without a repository, /status and /pause apply to all of them. The other commands need it "
              "when there is more than one, unless you send them as a reply to a notification.\n"
-             "To answer a question, reply to its message.\n"
+             "To answer a question, reply to its message, or press Accept to send the answer the agent recommends.\n"
              "When a feature is ready to be tried, its message has a \"Report a problem\" button.\n"
              f"Repositories: {names()}.")
     return None

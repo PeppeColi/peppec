@@ -330,7 +330,7 @@ Test during the day, with dummy issues and the work window overridden.
 - [ ] Start it ignoring the window: `gh workflow run agent.yml -R <USER>/<REPO> -f force=true`
 - [ ] An `agent/issue-N` branch and a pull request labelled `review 1` appear; CI runs; a "@coderabbitai review" comment appears when CI is green
 - [ ] In manual mode you get "ready to merge": merge and check that the next issue starts right away
-- [ ] Create a deliberately vague issue: a "Question on #N" reaches you on Telegram. Reply to it and check that the work resumes
+- [ ] Create a deliberately vague issue: a "Question on #N" reaches you on Telegram. It shows the answer the agent recommends with an Accept button. Press Accept, or reply, and check that the work resumes
 - [ ] Create an issue that asks to change a protected file: you get a question, or the queue stops with the list of files
 - [ ] Try `/pause`, `/unblock`, `/hint` and `/mode automatic`, then go back to `/mode manual`
 - [ ] Run `summary.yml` manually from the Actions tab and check the message
