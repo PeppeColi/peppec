@@ -108,8 +108,18 @@ if [ -z "$active" ]; then
      && [[ "$EVENT_HEAD_REF" == agent/* ]]; then ok=true; fi
   [ "$ok" = true ] || { echo "Outside the work window"; exit 0; }
   # The oldest ready issue that no open issue blocks
-  ready=$(gh issue list -R "$REPO" --state open --label ready --limit 200 --json number,createdAt,labels \
-    --jq '[.[] | select([.labels[].name] | index("needs human") | not)] | sort_by(.createdAt) | .[].number')
+  open_ready=$(gh api --paginate "repos/$REPO/issues?state=open&labels=ready&per_page=100" \
+    | jq -s '[add // [] | .[] | select(.pull_request | not)
+              | select([.labels[].name] | index("needs human") | not)] | sort_by(.created_at)')
+  # Not a slice: a specification (it has sub-issues) or a wayfinder map or ticket, labelled
+  # ready by mistake. Built in one run it would skip the slicing; told once per issue
+  for n in $(jq -r '.[] | select('"$NOT_SLICE"') | .number' <<< "$open_ready"); do
+    echo "Issue #$n is not a slice: skipped"
+    [ -z "$(marker_get "$n" notslice)" ] || continue
+    marker_set "$n" notslice 1
+    notify "#$n has the ready label but is not a slice (it has sub-issues, or a wayfinder label): the queue skips it. Remove ready from it, and put it on its sub-issues instead. https://github.com/$REPO/issues/$n"
+  done
+  ready=$(jq -r '.[] | select('"$NOT_SLICE"' | not) | .number' <<< "$open_ready")
   for n in $ready; do
     blockers=$(open_blockers "$n" "$closed")
     if [ -z "$blockers" ]; then issue=$n; break; fi

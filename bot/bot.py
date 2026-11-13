@@ -116,6 +116,10 @@ class Repo:
         params = {"state": "open", "labels": label, "per_page": 100, "sort": "created", "direction": "asc"}
         return [i for i in self.gh("GET", "/issues", params=params) if "pull_request" not in i]
 
+    def queue(self):
+        """The ready issues the agent will build: not the ones decide.sh skips as not slices."""
+        return [i for i in self.issues("ready") if not not_slice(i)]
+
     def agent_pr(self, n):
         owner = self.name.split("/")[0]
         prs = self.gh("GET", "/pulls", params={"head": f"{owner}:agent/issue-{n}", "state": "open"})
@@ -167,7 +171,7 @@ class Repo:
                 out.append(f"PR #{pr}: {', '.join(self.labels(pr))}")
         else:
             out.append("No issue in progress")
-        out.append(f"In queue: {len(self.issues('ready'))}")
+        out.append(f"In queue: {len(self.queue())}")
         if n:
             rows.append([self.button(f"Unblock #{n}", "unblock", n), self.button(f"Hint #{n}", "hint", n)])
         rows.append([self.button("Refresh", "refresh")])
@@ -200,16 +204,18 @@ class Repo:
                 "question": said if "question open" in labels else "",
                 "pr": {"number": pr, "labels": self.labels(pr), "url": f"{out['url']}/pull/{pr}"} if pr else None}
         out["queue"] = [{"number": i["number"], "title": i["title"], "size": size_of([x["name"] for x in i["labels"]])}
-                        for i in self.issues("ready") if not any(x["name"] == "in progress" for x in i["labels"])]
+                        for i in self.queue() if not any(x["name"] == "in progress" for x in i["labels"])]
         out["trying"] = [{"number": i["number"], "title": i["title"], "url": f"{out['url']}/issues/{i['number']}",
                           "total": i["sub_issues_summary"]["total"]} for i in self.features_done()]
         return out
 
     def features_done(self):
-        """The open specifications whose sub-issues are all closed: features ready to be tried."""
+        """The open specifications whose sub-issues are all closed: features ready to be tried.
+        A cleared wayfinder map is left out: its destination is a specification still to write."""
         params = {"state": "open", "per_page": 100, "sort": "created", "direction": "asc"}
         return [i for i in self.gh("GET", "/issues", params=params) if "pull_request" not in i
-                and (s := i.get("sub_issues_summary") or {}).get("total") and s["completed"] == s["total"]]
+                and (s := i.get("sub_issues_summary") or {}).get("total") and s["completed"] == s["total"]
+                and not any(x["name"] == "wayfinder:map" for x in i["labels"])]
 
     def report(self, spec, text):
         """A problem found while trying a feature: a new sub-issue of its specification, size S,
@@ -281,6 +287,13 @@ class Repo:
         self.rm(self.control, "paused")
         self.dispatch()
         return f"Hint added to {self.name}#{n}, restarting."
+
+
+def not_slice(issue):
+    """A specification (it has sub-issues) or a wayfinder map or ticket: never built by the agent.
+    Same rule as NOT_SLICE in scripts/lib.sh."""
+    return bool((issue.get("sub_issues_summary") or {}).get("total")) \
+        or any(x["name"].startswith("wayfinder:") for x in issue["labels"])
 
 
 def size_of(labels):
