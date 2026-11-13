@@ -44,7 +44,29 @@ flowchart TD
 
 The queue is the open issues labelled `ready`, oldest first. An issue that another open issue blocks (GitHub's "blocked by" relationship, in the sidebar of the issue or with `gh issue edit <N> --add-blocked-by <M>`) is skipped until the blocking issue is closed, so a group of issues can be queued at once and still be built in order. An issue that is not a work unit is skipped for good, with one Telegram message: a specification (it has sub-issues) or a wayfinder map or ticket (a `wayfinder:` label), labelled `ready` by mistake. The daily summary says how many issues are waiting this way: a blocking issue that is not labelled `ready` holds them indefinitely.
 
-An issue can be a sub-issue of a larger one that holds the specification of a whole feature. The agent then receives the body of the parent too, in `.agent/spec.md`, as background: it builds only what its own issue asks. The "Out of scope" section of the issue, when there is one, is copied into the pull request, so that the reviewer does not ask for work that belongs to another issue. When the last sub-issue of a parent is closed you get a Telegram message: the whole feature is merged and can be tried. Its Report a problem button turns one sentence of yours into a new sub-issue of the parent, `ready` and `size: S`; the bot adds the labels only after linking it, so the agent never starts it without the specification.
+An issue can be a sub-issue of a larger one that holds the specification of a whole feature. The agent then receives the body of the parent too, in `.agent/spec.md`, as background: it builds only what its own issue asks. The "Out of scope" section of the issue, when there is one, is copied into the pull request, so that the reviewer does not ask for work that belongs to another issue. When the last sub-issue of a parent is closed you get a Telegram message: the whole feature is merged and can be tried. With [feature branches](#feature-branches) that message comes at the end of a few more steps, described below. Its Report a problem button turns one sentence of yours into a new sub-issue of the parent, `ready` and `size: S`; the bot adds the labels only after linking it, so the agent never starts it without the specification.
+
+### Feature branches
+
+With `PEPPEC_BRANCHES` set, each specification gets its own branch, created from the base branch when its first work unit starts. Its work units are merged into it; the base branch gets the feature only through a pull request you merge.
+
+```mermaid
+flowchart TD
+    U[Last work unit merged into the feature branch] --> O[Workflow opens the pull request feature to base branch]
+    O --> S{Base branch merges in cleanly?}
+    S -- no --> Y[Sync work unit: the agent resolves the conflict markers]
+    Y --> S
+    S -- yes --> E{End-to-end tests of the feature pass?}
+    E -- no --> H[Hotfix work unit, size L, with the log]
+    H --> S
+    E -- yes --> T[Ready to be tried: Telegram and dashboard]
+    T --> M[You merge the pull request: the specification is closed, the branch removed]
+```
+
+- **One feature is built at a time.** Work units of a feature already started come first, and a sync work unit before anything else. A finished feature waits for you while the next one is built.
+- **Names are remembered.** Each issue keeps the branch it started on (a hidden marker on the issue); the feature branch is remembered on the specification. The engine recognises its own branches by the templates of `PEPPEC_BRANCHES`, which must name the issue number: a template that does not is refused.
+- **The base branch comes in only at the end.** GitHub's merge API brings it into the feature branch. On a conflict the workflow opens a sync work unit, makes the merge itself with the conflict markers in place, and the agent resolves them; markers left behind are never pushed, and the pull request is merged with a merge commit. If the base branch moves while a finished feature waits, it is brought in again.
+- **End-to-end tests run on the feature's pull request.** CI runs `PEPPEC_E2E_FEATURE` (`ci / e2e_feature`) and `PEPPEC_E2E_ALL` (`ci / e2e_all`) only there; elsewhere both succeed without running. A failing `e2e_feature` opens a hotfix work unit of size L; after two of them you are told instead. `e2e_all` is meant to be required on the base branch, so a red suite blocks your merge.
 
 A single workflow wakes up every 15 minutes and on every relevant event: CI finished, review submitted, pull request closed, bot command. Each time it reads the state back from GitHub and picks exactly one move, so it can restart at any point. Only one run executes at a time.
 
@@ -127,7 +149,7 @@ Pull requests are merged into the base branch: `main`, or the branch named by th
 
 If the base branch does not exist, the whole queue stops: no issue is started, continued or blocked. You get one Telegram message with the command that creates the branch again, and the control panel gets the `base missing` label. At the first run that finds the branch, the label goes, you are told, and the queue goes on from where it was. A pull request that was open when the branch disappeared was closed by GitHub: the agent's branch is still there, and the workflow opens a new pull request from it.
 
-The workflow merges only the pull requests of its own branches (`agent/issue-N`, or the work, hotfix, sync and single names of [`PEPPEC_BRANCHES`](setup.md#feature-branches)), and removes such a branch once its pull request is merged: right after an automatic merge, and at the run started by a merge done by hand. GitHub's own "Automatically delete head branches" stays off, because it would also delete the base branch each time it is brought to `main`; the only other branch the workflow deletes is a feature branch, once you have merged it into the base branch. A feature branch is never merged by the workflow. With a base branch other than `main`, the merge of the base branch into `main` is never automatic, whatever the mode: it is the owner's statement that the whole feature passed its end-to-end test (see [Planning a feature](planning.md)). Who or what runs that test is not defined yet; until it is, the gate is a person.
+The workflow merges only the pull requests of its own branches (`agent/issue-N`, or the work, hotfix, sync and single names of [`PEPPEC_BRANCHES`](setup.md#feature-branches)), and removes such a branch once its pull request is merged: right after an automatic merge, and at the run started by a merge done by hand. GitHub's own "Automatically delete head branches" stays off, because it would also delete the base branch each time it is brought to `main`; the only other branch the workflow deletes is a feature branch, once you have merged it into the base branch. A feature branch is never merged by the workflow. With a base branch other than `main`, the merge of the base branch into `main` is never automatic, whatever the mode: it is the owner's statement that the whole feature passed its end-to-end test (see [Planning a feature](planning.md)). With feature branches the machine runs the end-to-end tests first ([Feature branches](#feature-branches)); the last word is still yours, through the merge of each feature and of the base branch.
 
 ## Telegram bot
 
