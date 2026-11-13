@@ -23,9 +23,9 @@ concurrency:
   group: agent
   cancel-in-progress: false
 
+# Read only: the jobs that write use the app's token and AGENT_TOKEN
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   agent:

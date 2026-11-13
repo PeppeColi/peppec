@@ -9,6 +9,23 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.29.2] - 2026-11-14
+
+### Security
+
+- The third-party actions of the engine's workflows are pinned to a commit, and Dependabot
+  proposes their updates. The CI no longer keeps the checkout's token in the workspace.
+- The bot obeys only you: in a private chat its owner, in a group chat the users listed in
+  `TELEGRAM_USER_IDS`; a member of the chat can no longer command it.
+- `peppec init` and `peppec doctor` explain what a private repository without branch protection
+  means, and `doctor` warns when automatic merge is on there. The example `agent.yml` no longer
+  asks for `id-token: write`, which nothing used.
+
+### Added
+
+- A "Security notes" section in docs/setup.md: public run logs, where your code goes, private
+  repositories on a free plan.
+
 ## [1.29.1] - 2026-11-13
 
 ### Fixed
@@ -375,7 +392,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.29.1...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.29.2...HEAD
+[1.29.2]: https://github.com/PeppeColi/peppec/compare/v1.29.1...v1.29.2
 [1.29.1]: https://github.com/PeppeColi/peppec/compare/v1.29.0...v1.29.1
 [1.29.0]: https://github.com/PeppeColi/peppec/compare/v1.28.1...v1.29.0
 [1.28.1]: https://github.com/PeppeColi/peppec/compare/v1.28.0...v1.28.1

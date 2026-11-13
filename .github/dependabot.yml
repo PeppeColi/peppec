@@ -1,0 +1,8 @@
+# Third-party actions are pinned to a commit: Dependabot proposes the new commit when a release
+# comes out, as a pull request to read before merging
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/presets/rust-v1", "/presets/php-v1"]
+    schedule:
+      interval: weekly
