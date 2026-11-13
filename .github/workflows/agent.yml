@@ -71,7 +71,7 @@ jobs:
       branch: ${{ steps.d.outputs.branch }}
       base: ${{ steps.d.outputs.base }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -79,7 +79,7 @@ jobs:
           sparse-checkout: scripts
           persist-credentials: false
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -117,7 +117,7 @@ jobs:
     if: contains(fromJSON('["stop","merge","notify_ready","rerequest"]'), needs.decide.outputs.action)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -125,7 +125,7 @@ jobs:
           sparse-checkout: scripts
           persist-credentials: false
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -160,7 +160,7 @@ jobs:
       PR: ${{ needs.decide.outputs.pr }}
       BRANCH: ${{ needs.decide.outputs.branch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -168,7 +168,7 @@ jobs:
           sparse-checkout: scripts
           persist-credentials: false
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -177,7 +177,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           CI_WORKFLOW: ${{ inputs.ci_workflow }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: task
           path: .agent/
@@ -205,9 +205,9 @@ jobs:
       # Removes the tokens from the environment of the commands Claude runs
       CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { ref: "${{ vars.BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -219,7 +219,7 @@ jobs:
         run: bash "$CTL/config.sh"
         env:
           SIZE: ${{ needs.decide.outputs.size }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: task
           path: .agent
@@ -255,7 +255,7 @@ jobs:
         run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
       - id: claude
         continue-on-error: true
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Read only: the agent never pushes, the publish job does
@@ -275,7 +275,7 @@ jobs:
           OUTCOME: ${{ steps.claude.outcome }}
           EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
           NEVER_COMMIT: ${{ steps.cfg.outputs.never_commit }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: result
           path: ${{ runner.temp }}/result/
@@ -294,9 +294,9 @@ jobs:
       BRANCH: ${{ needs.decide.outputs.branch }}
       BASE: ${{ needs.decide.outputs.base }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { ref: "${{ vars.BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -304,16 +304,16 @@ jobs:
           sparse-checkout: scripts
           persist-credentials: false
       # Outside the workspace: the two folders never mix with the repository's files
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: task
           path: ${{ runner.temp }}/task
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: result
           path: ${{ runner.temp }}/result
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -345,7 +345,7 @@ jobs:
       || always() && contains(fromJSON('["cancelled","failure"]'), needs.publish.result)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -353,7 +353,7 @@ jobs:
           sparse-checkout: scripts
           persist-credentials: false
       - id: app
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}

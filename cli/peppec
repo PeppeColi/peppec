@@ -827,12 +827,22 @@ init_keep_base() {
   fi
 }
 
+# Private repositories of a free plan have no rulesets: what that means for the queue
+explain_unprotected() {
+  note "Without a ruleset, $1 accept direct pushes, force pushes and deletion from anyone with write"
+  note "access and from any of their tokens, and GitHub does not require green CI before a merge."
+  note "PEPPEC itself merges only after green CI and CodeRabbit's approval, but nothing enforces it."
+  note "Safer: keep the merge mode manual (no 'auto mode' label on the control panel), or use"
+  note "GitHub Pro, or make the repository public."
+}
+
 init_ruleset() {
   step "Branch protection"
   local existing branches=main
   [ "$BASE_BRANCH" = main ] || branches="main and $BASE_BRANCH"
   if ! existing=$(api "repos/$REPO/rulesets" --jq '.[] | select(.target == "branch") | .id'); then
     warn "$branches not protected: rulesets are not available here (private repositories need a paid plan)"
+    explain_unprotected "$branches"
     return
   fi
   if [ -n "$existing" ]; then
@@ -1127,12 +1137,13 @@ cmd_doctor() {
   else warn "no hook checks the planning skills when a session starts (peppec init adds it to .claude/settings.json)"; fi
 
   step "Branch protection"
-  local checks branch branches="$default_branch"
+  local checks branch branches="$default_branch" unprotected=""
   [ "$BASE_BRANCH" = "$default_branch" ] || branches="$default_branch $BASE_BRANCH"
   for branch in $branches; do
     if ! checks=$(api "repos/$REPO/rules/branches/$branch" \
         --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | join(", ")'); then
       warn "$branch is not protected: rulesets are not available here (private repositories need a paid plan)"
+      unprotected="$unprotected $branch"
     elif [ -z "$checks" ]; then warn "$branch requires no status check: add 'ci / ci' to an active ruleset"
     elif grep -q 'ci / ci' <<< "$checks"; then ok "$branch requires: $checks"
     else bad "$branch requires '$checks', but the engine's CI check is named 'ci / ci'"; fi
@@ -1149,6 +1160,13 @@ cmd_doctor() {
       warn "$branch does not require 'ci / e2e_all': a red end-to-end suite would not block your merge of a feature"
     fi
   done
+  if [ -n "$unprotected" ]; then
+    unprotected=$(sed 's/^ //; s/ / and /g' <<< "$unprotected")
+    case "${state:-}" in
+      *"auto mode"*) warn "automatic merge is on, but $unprotected not protected: nothing on GitHub guards the merges";;
+    esac
+    explain_unprotected "$unprotected"
+  fi
   # Bringing the base branch to $default_branch makes it the head of a merged pull request, which GitHub deletes
   # when "Automatically delete head branches" is on. A deletion rule stops that only in a ruleset nobody can
   # bypass: the one who merges is usually an admin.

@@ -347,7 +347,7 @@ gh variable set PEPPEC_E2E_ALL -R "$R" -b 'npx playwright test'
 
 ## Phase 6 — Telegram bot
 
-The bot is a container that keeps asking Telegram for new messages. It answers only your chat and acts on GitHub as the app, with one-hour tokens it generates from the app's private key.
+The bot is a container that keeps asking Telegram for new messages. It answers only your chat, and only you in it: in a private chat that is automatic; in a group chat set `TELEGRAM_USER_IDS` in `.env` to the Telegram user ids allowed to command it, comma separated, or it obeys nobody. It acts on GitHub as the app, with one-hour tokens it generates from the app's private key.
 
 1. On the bot's machine create the folder, then copy the key into it from your computer and protect it:
 
@@ -418,6 +418,14 @@ The engine version is the ref after `@` in the three workflows, repeated in `eng
 The bot follows the same versions: `docker compose pull && docker compose up -d`, then `/version`.
 
 From 1.6 the notifications start with the repository name, and a bot older than 1.6 does not accept replies to them: upgrade the bot together with the engine. A bot configured with `REPO` and `CONTROL_ISSUE` keeps working; `REPOS` replaces both.
+
+## Security notes
+
+What the engine does about security is in [architecture.md](architecture.md#security). Three things depend on your choices:
+
+- **Public repository: the run logs are public.** Anyone can read what the jobs print: the agent's questions, the test output, the names of the checks. Secrets are masked only when they appear exactly. Write issues and answers as if they were public, because they are.
+- **Your code goes to two services.** The agent sends the code it reads to Anthropic, and CodeRabbit reads every pull request it reviews. On a private repository check that both fit your rules on where the code may go (CodeRabbit's plan and data settings).
+- **Private repository on a free plan: no branch protection.** GitHub offers rulesets there only with a paid plan, so `main` and the base branch accept direct pushes, force pushes and deletion, and nothing on GitHub requires green CI before a merge. `peppec init` and `peppec doctor` warn about it. Keep the merge mode manual there, or use GitHub Pro, or make the repository public.
 
 ## Maintenance
 

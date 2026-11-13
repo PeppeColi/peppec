@@ -16,6 +16,11 @@ import requests
 
 TG = f"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}"
 CHAT = int(os.environ["TELEGRAM_CHAT_ID"])
+# Who may command the bot: the Telegram user ids in TELEGRAM_USER_IDS (comma separated), by
+# default the owner of the private chat, whose id is the chat's. In a group chat (negative id)
+# set TELEGRAM_USER_IDS, or nobody may: being a member of the group is not enough
+USERS = {int(x) for x in os.environ.get("TELEGRAM_USER_IDS", "").replace(" ", "").split(",") if x} \
+    or ({CHAT} if CHAT > 0 else set())
 STATE = Path(os.environ.get("STATE_FILE", "/data/offset"))
 APP_ID = os.environ["APP_ID"]
 APP_KEY = Path(os.environ.get("APP_KEY_FILE", "/data/app.pem")).read_text()
@@ -823,6 +828,8 @@ def save_offset(offset):
 
 def main():
     print(f"peppec-bot {VERSION}, repositories: {names()}", flush=True)
+    if not USERS:
+        print("TELEGRAM_CHAT_ID is a group: set TELEGRAM_USER_IDS, or the bot obeys nobody", flush=True)
     start_dashboard()
     tg("setMyCommands", commands=[{"command": c, "description": d} for c, d in COMMANDS])
     offset = load_offset()
@@ -834,10 +841,11 @@ def main():
                 offset = u["update_id"] + 1
                 save_offset(offset)  # saved before handling: an update is never processed twice
                 msg = u.get("message")
-                if msg and msg["chat"]["id"] == CHAT:
+                if msg and msg["chat"]["id"] == CHAT and (msg.get("from") or {}).get("id") in USERS:
                     safe_handle(msg)
                 query = u.get("callback_query")
-                if query and (query.get("message") or {}).get("chat", {}).get("id") == CHAT:
+                if query and (query.get("message") or {}).get("chat", {}).get("id") == CHAT \
+                        and (query.get("from") or {}).get("id") in USERS:
                     safe_press(query)
         except requests.RequestException as e:
             print("network error:", e, flush=True)
