@@ -316,11 +316,17 @@ function issuePage(repo, number) {
       issue.pr && el("div", {class: "muted"}, "Pull request #" + issue.pr.number + ": " + (issue.pr.labels.join(", ") || "no labels"))));
   if (issue.block === "question open") {
     const box = el("textarea", {id: "text", placeholder: "Write your answer"});
-    parts.push(
-      el("div", {class: "card pad"}, el("div", {class: "label"}, "The agent asks"), markdown(issue.question)),
-      el("div", {class: "group"}, el("label", {for: "text"}, "Your answer"), box),
+    const rec = issue.recommended;
+    parts.push(el("div", {class: "card pad"}, el("div", {class: "label"}, "The agent asks"), markdown(issue.question)));
+    if (rec) parts.push(
+      el("div", {class: "card pad"}, el("div", {class: "label"}, "The agent recommends"), markdown(rec)),
       el("div", {class: "group"},
-        el("button", {type: "button", disabled: busy, on: () => box.value.trim() && act(repo, "answer", issue.number, box.value)}, busy ? "Sending…" : "Send answer"),
+        el("button", {type: "button", disabled: busy, on: () => act(repo, "accept", issue.number)}, busy ? "Sending…" : "Accept"),
+        el("div", {class: "small center"}, "Sends the recommended answer as yours and restarts the work.")));
+    parts.push(
+      el("div", {class: "group" + (rec ? " gap" : "")}, el("label", {for: "text"}, rec ? "Or write your own answer" : "Your answer"), box),
+      el("div", {class: "group"},
+        el("button", {type: "button", class: rec ? "plain" : null, disabled: busy, on: () => box.value.trim() && act(repo, "answer", issue.number, box.value)}, busy ? "Sending…" : "Send answer"),
         el("div", {class: "small center"}, "Posts your answer on the issue and restarts the work.")));
   } else if (issue.block && hinting) {
     const box = el("textarea", {id: "text", placeholder: "Write a hint for the agent"});

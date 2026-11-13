@@ -19,7 +19,7 @@ fi
 if [ "$ACTION" = start ]; then
   add_label "$ISSUE" "in progress"; rm_label "$ISSUE" "ready"
 fi
-mkdir -p .agent; rm -rf .agent/question.md .agent/spec.md .agent/replies .agent/review-id
+mkdir -p .agent; rm -rf .agent/question.md .agent/answer.md .agent/spec.md .agent/replies .agent/review-id
 # The issue this one is a sub-issue of, when you wrote it: the specification of the larger
 # piece of work, given to the agent as background in a file of its own
 if parent=$(gh api "repos/$REPO/issues/$ISSUE/parent" 2> /dev/null) \
