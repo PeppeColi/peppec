@@ -21,14 +21,19 @@ PDIR="$ROOT/presets/$preset"
 [ -f "$PDIR/action.yml" ] && [ -f "$PDIR/preset.yml" ] || die "Unknown preset: $preset"
 
 # Repository values replace the preset defaults; protected paths are added together,
-# on top of the ones the engine always protects, and so are the paths never committed
-cfg=$(jq -n --argjson p "$(yq -o=json '.' "$PDIR/preset.yml")" --argjson c "$conf" '
+# on top of the ones the engine always protects, and so are the paths never committed.
+# Always protected: the workflows and the files that steer the agent (instructions,
+# Claude Code settings and skills, architecture decisions), because an agent PR can be
+# merged automatically without anyone reading it. Git pathspecs: "CLAUDE.md" is the
+# root file, "**/CLAUDE.md" the ones in subdirectories.
+always='[".github", ".claude", "CLAUDE.md", "**/CLAUDE.md", "AGENTS.md", "**/AGENTS.md", "docs/agents", "docs/adr"]'
+cfg=$(jq -n --argjson always "$always" --argjson p "$(yq -o=json '.' "$PDIR/preset.yml")" --argjson c "$conf" '
   def mapping(f): if f == null then {} elif (f | type) == "object" then f else null end;
   ($p + ($c | del(.preset)))
   | .models = (if mapping($p.models) != null and mapping($c.models) != null
                then {s: "haiku", m: "sonnet", l: "opus"} + mapping($p.models) + mapping($c.models)
                else "invalid" end)
-  | .protected_paths = ([".github"] + ($p.protected_paths // []) + ($c.protected_paths // []) | unique)
+  | .protected_paths = ($always + ($p.protected_paths // []) + ($c.protected_paths // []) | unique)
   | .never_commit = (($p.never_commit // []) + ($c.never_commit // []) | unique)
   | .notes //= [] | .allowed_tools //= [] | .disallowed_tools //= []
   | .options //= {} | .extra_setup //= ""')
