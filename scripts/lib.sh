@@ -127,7 +127,29 @@ is_feature_branch() {
 # already under way. Issues started before the marker existed keep agent/issue-N
 branch_of() {
   local s; s=$(marker_get "$1" branch)
+  if [ -n "$s" ] && ! saved_branch_ok "$1" "$s"; then
+    echo "Ignored the saved branch '$s' of #$1: not a branch of the agent for this issue" >&2; s=""
+  fi
   echo "${s:-agent/issue-$1:${BASE_BRANCH:-main}}"
+}
+# A remembered "branch:base" is used only when the branch is the agent's branch of issue $1 and the
+# base is the base branch or a feature branch: never main, the base branch or another issue's branch
+saved_branch_ok() {
+  local b=${2%%:*} base=${2#*:}
+  valid_branch "$b" && is_agent_branch "$b" && [ "$(issue_of_branch "$b")" = "$1" ] \
+    && { [ "$base" = "${BASE_BRANCH:-main}" ] || is_feature_branch "$base"; } && [ "$b" != "$base" ]
+}
+# The feature branch remembered on specification $1, when it is a name of PEPPEC_BRANCHES
+feature_of() {
+  local fb; fb=$(marker_get "$1" feature)
+  if [ -n "$fb" ] && valid_branch "$fb" && is_feature_branch "$fb"; then echo "$fb"; fi
+}
+# The open pull request from branch $1, only from a branch of this repository: a fork can name
+# its branch like the agent's. Extra arguments go to gh pr list (for example --base)
+pr_from() {
+  local b=$1; shift
+  gh pr list -R "$REPO" --head "$b" --state open "$@" --json number,isCrossRepository \
+    --jq '[.[] | select(.isCrossRepository | not)][0].number // empty'
 }
 # The specification of an issue: its parent, when you wrote it in this repository and it is not
 # a wayfinder map. The parent as JSON, or nothing
@@ -153,6 +175,9 @@ valid_branch() { [ -n "$1" ] && git check-ref-format --branch "$1" > /dev/null 2
 plan_branch() {
   local n=$1 saved spec sn sname ft kind fb title
   saved=$(marker_get "$n" branch)
+  if [ -n "$saved" ] && ! saved_branch_ok "$n" "$saved"; then
+    plan_error="the saved branch of #$n is not a branch of the agent for it: '$saved'"; return 1
+  fi
   if [ -n "$saved" ]; then branch=${saved%%:*} base=${saved#*:}; ensure_feature_branch "$base"; return; fi
   base=${BASE_BRANCH:-main} kind=single sname=""
   spec=$(spec_of "$n")
@@ -166,7 +191,7 @@ plan_branch() {
     fi
     if [ -n "$ft" ]; then
       kind=$(kind_of "$n")
-      fb=$(marker_get "$sn" feature)
+      fb=$(feature_of "$sn")
       if [ -z "$fb" ]; then
         fb=$(fill "$ft" "$sname" "$sn" "")
         if ! valid_branch "$fb" || ! is_feature_branch "$fb" || [ "$fb" = "$base" ]; then
@@ -202,7 +227,7 @@ ensure_feature_branch() {
 # one that still has an open pull request
 delete_agent_branch() {
   is_agent_branch "$1" || return 0
-  [ -z "$(gh pr list -R "$REPO" --head "$1" --state open --json number --jq '.[0].number // empty')" ] || return 0
+  [ -z "$(pr_from "$1")" ] || return 0
   if gh api -X DELETE "repos/$REPO/git/refs/heads/$1" > /dev/null 2>&1; then
     echo "Deleted the merged branch $1"
   else
@@ -215,13 +240,13 @@ delete_agent_branch() {
 finish_feature() {
   local branch=$1 spec
   is_feature_branch "$branch" || return 0
-  spec=$(gh pr list -R "$REPO" --head "$branch" --state merged --json body --jq '.[0].body // ""' \
+  spec=$(gh pr list -R "$REPO" --head "$branch" --state merged --json body,isCrossRepository --jq '[.[] | select(.isCrossRepository | not)][0].body // ""' \
     | sed -nE 's/.*<!-- peppec:feature=([0-9]+) -->.*/\1/p' | head -1)
   if [ -n "$spec" ] && [ "$(gh api "repos/$REPO/issues/$spec" --jq .state)" = open ]; then
     gh api -X PATCH "repos/$REPO/issues/$spec" -f state=closed -f state_reason=completed > /dev/null
     echo "Closed specification #$spec: its feature branch is merged"
   fi
-  [ -z "$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')" ] || return 0
+  [ -z "$(pr_from "$branch")" ] || return 0
   [ -z "$(gh pr list -R "$REPO" --base "$branch" --state open --json number --jq '.[0].number // empty')" ] || return 0
   if gh api -X DELETE "repos/$REPO/git/refs/heads/$branch" > /dev/null 2>&1; then
     echo "Deleted the merged feature branch $branch"
@@ -236,16 +261,20 @@ base_branch_missing() {
 }
 has() { grep -qxF -- "$2" <<< "$1"; }
 age_minutes() { echo $(( ($(date +%s) - $(date -d "$1" +%s)) / 60 )); }
-# Hidden marker comments on an issue or PR: <!-- peppec:KEY=VALUE -->
-marker_get() {
+# Hidden marker comments on an issue or PR: <!-- peppec:KEY=VALUE -->. The workflow writes them
+# with the app's token, and only the app's are read: on a public repository anyone can comment,
+# and a marker written by someone else could, for example, name the branch the agent pushes to
+app_markers() {
   gh api --paginate "repos/$REPO/issues/$1/comments?per_page=100" \
-    --jq ".[] | select(.body | contains(\"<!-- peppec:$2=\")) | .body" \
-    | { grep -oP "peppec:$2=\K[^ ]+" || true; } | tail -1
+    | jq -r --arg app "${APP_LOGIN:-}" --arg m "<!-- peppec:$2=" --arg f "$3" \
+      '.[] | select($app != "" and .user.login == $app and (.body | contains($m))) | .[$f] | tostring'
+}
+marker_get() {
+  app_markers "$1" "$2" body | { grep -oP "peppec:$2=\K[^ ]+" || true; } | tail -1
 }
 marker_set() {
   local id
-  id=$(gh api --paginate "repos/$REPO/issues/$1/comments?per_page=100" \
-    --jq ".[] | select(.body | contains(\"<!-- peppec:$2=\")) | .id" | tail -1)
+  id=$(app_markers "$1" "$2" id | tail -1)
   if [ -n "$id" ]; then
     gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="<!-- peppec:$2=$3 -->" > /dev/null
   else
@@ -275,7 +304,7 @@ notify_feature_done() {
   local where="${BASE_BRANCH:-main}" link="https://github.com/$REPO/issues/$pn" fb pr synced
   # With a feature branch, the pull request that brings it into the base branch: opened here,
   # merged only by you, after trying the feature. Its merge closes the specification (finish_feature)
-  fb=$(marker_get "$pn" feature)
+  fb=$(feature_of "$pn")
   if [ -n "$fb" ]; then
     where=$fb
     pr=$(feature_pr "$pn" "$fb" "$(jq -r .title <<< "$parent")")
@@ -314,10 +343,12 @@ E2E_CHECK="${CI_CHECK:-ci / ci}"; E2E_CHECK="${E2E_CHECK% / *} / e2e_feature"; E
 judge_features() {
   [ -n "${PEPPEC_E2E_FEATURE:-}" ] && [ -n "$(template feature)" ] || return 0
   local prs head sha pn spec total check fails log url
-  prs=$(gh pr list -R "$REPO" --base "${BASE_BRANCH:-main}" --state open --json url,headRefName,headRefOid,body \
-    --jq '.[] | select(.body | contains("<!-- peppec:feature=")) | "\(.headRefName) \(.headRefOid) \(.url) \(.body | capture("<!-- peppec:feature=(?<n>[0-9]+) -->").n)"')
+  prs=$(gh pr list -R "$REPO" --base "${BASE_BRANCH:-main}" --state open --json url,headRefName,headRefOid,body,isCrossRepository \
+    --jq '.[] | select(.isCrossRepository | not) | select(.body | contains("<!-- peppec:feature=")) | "\(.headRefName) \(.headRefOid) \(.url) \(.body | capture("<!-- peppec:feature=(?<n>[0-9]+) -->").n)"')
   while read -r head sha url pn; do
     [ -n "$pn" ] && is_feature_branch "$head" || continue
+    # Only the pull request of the feature branch remembered on the specification
+    [ "$(feature_of "$pn")" = "$head" ] || continue
     spec=$(gh api "repos/$REPO/issues/$pn")
     total=$(jq '.sub_issues_summary.total // 0' <<< "$spec")
     [ "$(jq '.sub_issues_summary.completed // 0' <<< "$spec")" -eq "$total" ] || continue
@@ -382,7 +413,7 @@ ${log:-(not available)}
 # The open pull request of a feature branch into the base branch, opened when missing. Its URL
 feature_pr() {
   local pn=$1 fb=$2 title=$3 pr
-  pr=$(gh pr list -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --state open --json url --jq '.[0].url // empty')
+  pr=$(gh pr list -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --state open --json url,isCrossRepository --jq '[.[] | select(.isCrossRepository | not)][0].url // empty')
   if [ -z "$pr" ]; then
     pr=$(gh pr create -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --title "$title (#$pn)" \
       --body "Feature of specification #$pn. Try it on \`$fb\`, then merge this pull request: the workflow closes the specification and removes the branch. Never merged automatically.
@@ -446,10 +477,11 @@ ${log:-- (not available)}
 resync_features() {
   local prs pn head ahead synced
   [ -n "$(template feature)" ] || return 0
-  prs=$(gh pr list -R "$REPO" --base "${BASE_BRANCH:-main}" --state open --json headRefName,body \
-    --jq '.[] | select(.body | contains("<!-- peppec:feature=")) | "\(.headRefName) \(.body | capture("<!-- peppec:feature=(?<n>[0-9]+) -->").n)"')
+  prs=$(gh pr list -R "$REPO" --base "${BASE_BRANCH:-main}" --state open --json headRefName,body,isCrossRepository \
+    --jq '.[] | select(.isCrossRepository | not) | select(.body | contains("<!-- peppec:feature=")) | "\(.headRefName) \(.body | capture("<!-- peppec:feature=(?<n>[0-9]+) -->").n)"')
   while read -r head pn; do
     [ -n "$pn" ] && is_feature_branch "$head" || continue
+    [ "$(feature_of "$pn")" = "$head" ] || continue
     [ "$(gh api "repos/$REPO/issues/$pn" --jq '(.sub_issues_summary.total // 0) - (.sub_issues_summary.completed // 0)')" -eq 0 ] || continue
     ahead=$(gh api "repos/$REPO/compare/$head...${BASE_BRANCH:-main}" --jq .ahead_by 2> /dev/null || echo 0)
     [ "${ahead:-0}" -gt 0 ] || continue

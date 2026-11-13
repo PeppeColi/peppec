@@ -16,7 +16,8 @@ case "$ACTION" in
     head=$(gh pr view "$PR" -R "$REPO" --json headRefName --jq .headRefName)
     # A sync work unit keeps the base branch as a parent: a squash would lose it (task.sh)
     method=--squash; [ "$(kind_of "$ISSUE")" != sync ] || method=--merge
-    gh pr merge "$PR" -R "$REPO" "$method"
+    # Only the commit decide.sh judged: a push in between leaves the pull request unmerged
+    gh pr merge "$PR" -R "$REPO" "$method" --match-head-commit "$SHA"
     delete_agent_branch "$head"
     close_merged "$ISSUE"
     notify "Merged PR #$PR (issue #$ISSUE)."

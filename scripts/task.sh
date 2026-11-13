@@ -10,8 +10,8 @@ BASE="${BASE:-${BASE_BRANCH:-main}}"
 # The checkout keeps no credentials, and a private repository answers nothing without them
 REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
 tip=$(git ls-remote --heads "$REMOTE" "$B" | cut -f1)
-if [ -n "$tip" ] && [ -n "$(gh pr list -R "$REPO" --head "$B" --state merged --json headRefOid \
-     --jq "[.[] | select(.headRefOid == \"$tip\")] | .[0].headRefOid // empty")" ]; then
+if [ -n "$tip" ] && [ -n "$(gh pr list -R "$REPO" --head "$B" --state merged --json headRefOid,isCrossRepository \
+     --jq "[.[] | select((.isCrossRepository | not) and .headRefOid == \"$tip\")] | .[0].headRefOid // empty")" ]; then
   delete_agent_branch "$B"
 fi
 # The workspace is on BASE_BRANCH, where the configuration was read. The issue's base may be a

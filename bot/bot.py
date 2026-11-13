@@ -27,6 +27,12 @@ QUESTION = re.compile(r"^(?:\[\S+\] )?Question on #(\d+):")
 # Separates the agent's question from the answer it recommends, in the comment that asks it.
 # Same text as RECOMMENDED_MARK in scripts/lib.sh
 RECOMMENDED = "<!-- peppec:recommended -->"
+
+
+def from_app(comment):
+    """True for a comment the app wrote. The workflow's hidden markers are read only from these:
+    on a public repository anyone can comment (marker_get in scripts/lib.sh)."""
+    return str((comment.get("performed_via_github_app") or {}).get("id")) == APP_ID
 # The message a "Hint" button asks to reply to
 HINT = re.compile(r"^Hint for ([\w.-]+/[\w.-]+)#(\d+):")
 # The message a "Report a problem" button asks to reply to; the number is the specification's
@@ -156,7 +162,7 @@ class Repo:
         branch = f"agent/issue-{n}"
         for c in self.gh("GET", f"/issues/{n}/comments", params={"per_page": 100}):
             m = re.match(r"<!-- peppec:branch=([^ :]+):", c["body"])
-            if m:
+            if m and from_app(c):
                 branch = m.group(1)
         owner = self.name.split("/")[0]
         prs = self.gh("GET", "/pulls", params={"head": f"{owner}:{branch}", "state": "open"})
@@ -168,7 +174,7 @@ class Repo:
 
     def reset_minutes(self, n):
         for c in self.gh("GET", f"/issues/{n}/comments", params={"per_page": 100}):
-            if c["body"].startswith("<!-- peppec:minutes="):
+            if c["body"].startswith("<!-- peppec:minutes=") and from_app(c):
                 self.gh("DELETE", f"/issues/comments/{c['id']}")
 
     def unblock(self, n):
@@ -231,7 +237,7 @@ class Repo:
             minutes = 0
             for comment in self.gh("GET", f"/issues/{n}/comments", params={"per_page": 100}):
                 m = re.match(r"<!-- peppec:minutes=(\d+)", comment["body"])
-                if m:
+                if m and from_app(comment):
                     minutes = int(m.group(1))
             question, recommended = self.question(n) if "question open" in labels else ("", "")
             pr = self.agent_pr(n)
@@ -252,7 +258,8 @@ class Repo:
         prs = {}
         for pr in self.gh("GET", "/pulls", params={"state": "open", "per_page": 100}):
             m = re.search(r"<!-- peppec:feature=(\d+) -->", pr.get("body") or "")
-            if m:
+            # Not from a fork: only a branch of this repository is a feature branch
+            if m and ((pr["head"].get("repo") or {}).get("full_name") or "").lower() == self.name.lower():
                 prs[int(m.group(1))] = {"number": pr["number"], "url": pr["html_url"], "branch": pr["head"]["ref"]}
         return prs
 
@@ -266,7 +273,7 @@ class Repo:
         if pr:
             for c in self.gh("GET", f"/issues/{n}/comments", params={"per_page": 100}):
                 m = re.match(r"<!-- peppec:done=(\d+)", c["body"])
-                if m:
+                if m and from_app(c):
                     done = int(m.group(1))
         return {"number": n, "title": issue["title"], "url": f"https://github.com/{self.name}/issues/{n}",
                 "total": total, "pr": pr, "checking": bool(pr) and done != total}

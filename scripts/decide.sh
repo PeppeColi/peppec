@@ -66,8 +66,8 @@ judge_features
 under_construction() {
   local spec fb
   spec=$(spec_of "$1"); [ -n "$spec" ] || return 1
-  fb=$(marker_get "$(jq -r .number <<< "$spec")" feature); [ -n "$fb" ] || return 1
-  [ -z "$(gh pr list -R "$REPO" --head "$fb" --state open --json number --jq '.[0].number // empty')" ]
+  fb=$(feature_of "$(jq -r .number <<< "$spec")"); [ -n "$fb" ] || return 1
+  [ -z "$(pr_from "$fb")" ]
 }
 
 # $1, optional: an issue to leave out
@@ -83,8 +83,8 @@ merged_pr() {
     --jq '.[] | select(.event == "reopened" or (.event == "labeled" and .label.name == "in progress")) | .created_at' | tail -1)
   [ -n "$since" ] || return 0
   local b; b=$(branch_of "$1")
-  gh pr list -R "$REPO" --head "${b%%:*}" --state merged --json number,mergedAt \
-    --jq "[.[] | select(.mergedAt >= \"$since\")] | sort_by(.mergedAt) | last | .number // empty"
+  gh pr list -R "$REPO" --head "${b%%:*}" --state merged --json number,mergedAt,isCrossRepository \
+    --jq "[.[] | select((.isCrossRepository | not) and .mergedAt >= \"$since\")] | sort_by(.mergedAt) | last | .number // empty"
 }
 
 # The open issues that block an issue (GitHub's "blocked by" relationship), on one line.
@@ -199,7 +199,7 @@ isize=$(size_of "$il")
 # An issue already in progress keeps the branch it started on (agent/issue-N if it started before
 # branch names were remembered)
 bb=$(branch_of "$issue"); branch=${bb%%:*} base=${bb#*:}
-pr=$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
+pr=$(pr_from "$branch")
 left=$(budget "$issue")
 if [ "$left" -le 0 ]; then action=stop; reason="time budget of $MAX_ISSUE_MINUTES minutes used up"; exit 0; fi
 minutes=$(( left + 10 ))
@@ -249,8 +249,8 @@ carried_approval() {
     all(.[]; .commit_id != $sha)
     and (([.[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")] | last | .state) == "APPROVED")' \
     <<< "$reviews" > /dev/null || return 1
-  jq -e --arg sha "$sha" '
-    (map(select(.body | contains("<!-- peppec:rerequest=" + $sha + " -->"))) | last | .created_at) as $asked
+  jq -e --arg sha "$sha" --arg o "${OWNER_LOGIN:-}" '
+    (map(select(.login == $o and (.body | contains("<!-- peppec:rerequest=" + $sha + " -->")))) | last | .created_at) as $asked
     | $asked != null
       and any(.[]; .login == "coderabbitai[bot]" and .created_at >= $asked
                    and (.body | test("Review finished|Path filters excluded [0-9]+ files? from this review"; "i")))' \
@@ -267,8 +267,8 @@ case "$state" in
     # every request with a comment within a minute or two: a request with no answer at all
     # was lost (CodeRabbit not installed yet, or down), so it is repeated, up to
     # REVIEW_REQUESTS times per commit.
-    asks=$(jq -r --arg sha "$sha" '
-      map(select(.body | contains("<!-- peppec:rerequest=" + $sha + " -->"))) as $asks
+    asks=$(jq -r --arg sha "$sha" --arg o "${OWNER_LOGIN:-}" '
+      map(select(.login == $o and (.body | contains("<!-- peppec:rerequest=" + $sha + " -->")))) as $asks
       | ($asks | last | .created_at) as $asked
       | "\($asks | length) \($asked // "-") \($asked != null and any(.[]; .login == "coderabbitai[bot]" and .created_at >= $asked))"' \
       <<< "$comments")
@@ -298,9 +298,9 @@ case "$state" in
     # REVIEW_RETRY_MINUTES the next round starts, and the agent reads CodeRabbit's replies
     rid=$(jq -r --arg sha "$sha" '[.[] | select(.commit_id == $sha and .state == "CHANGES_REQUESTED")] | last | .id' <<< "$reviews")
     replied_at=$( {
-      gh api --paginate "repos/$REPO/pulls/$pr/comments?per_page=100" --jq '.[] | {body, created_at}'
-      gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" --jq '.[] | {body, created_at}'
-    } | jq -rs --arg m "<!-- peppec:reply=$rid -->" 'map(select(.body | contains($m)) | .created_at) | sort | last // empty')
+      gh api --paginate "repos/$REPO/pulls/$pr/comments?per_page=100" --jq '.[] | {login: .user.login, body, created_at}'
+      gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" --jq '.[] | {login: .user.login, body, created_at}'
+    } | jq -rs --arg m "<!-- peppec:reply=$rid -->" --arg o "${OWNER_LOGIN:-}" 'map(select(.login == $o and (.body | contains($m))) | .created_at) | sort | last // empty')
     if [ -n "$replied_at" ] && [ "$(age_minutes "$replied_at")" -lt "$REVIEW_RETRY_MINUTES" ]; then
       echo "Waiting for CodeRabbit to weigh the agent's reply ($(age_minutes "$replied_at") min)"; exit 0
     fi

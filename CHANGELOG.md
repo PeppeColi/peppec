@@ -9,6 +9,16 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Security
+
+- The hidden markers that hold the queue's state (branch, time used, feature branch, review
+  requests) are read only from comments written by the app, or by you for the review requests:
+  on a public repository anyone can comment, and a marker written by someone else could send the
+  agent's work straight to `main`. A remembered branch is used only when it is the agent's branch
+  of that issue. Pull requests from forks are never taken for the agent's or a feature's, even
+  with the same branch name, and the automatic merge happens only if the pull request still ends
+  at the commit that was checked.
+
 ## [1.28.0] - 2026-11-13
 
 ### Added
