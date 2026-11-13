@@ -11,12 +11,17 @@ notify() {
   # $2, optional: the buttons under the message, as the reply_markup of the Telegram API
   # Telegram's refusal (wrong chat, bot blocked, bad markup) is only in its answer: log it
   local answer
+  # NOTIFY_SILENT=1 (see notify_info): delivered without sound or vibration
   answer=$(curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     -d chat_id="$TELEGRAM_CHAT_ID" --data-urlencode text="$text" \
+    ${NOTIFY_SILENT:+-d disable_notification=true} \
     ${2:+--data-urlencode "reply_markup=$2"}) || true
   jq -e .ok <<< "$answer" > /dev/null 2>&1 \
     || echo "notify: Telegram did not deliver it: $(jq -r '.description // empty' <<< "$answer" 2> /dev/null || echo "$answer")"
 }
+# A notification that asks nothing of you (a merge, a retry, a hotfix opened by the queue): it
+# arrives silently, so only the messages that need your action make the phone ring
+notify_info() { NOTIFY_SILENT=1 notify "$@"; }
 # A notification about a blocked issue, with the buttons the bot acts on: "action|value|",
 # the repository being the one the message starts with (see press in bot/bot.py)
 notify_blocked() {
@@ -422,7 +427,7 @@ ${log:-(not available)}
   gh api -X POST "repos/$REPO/issues/$pn/sub_issues" -F sub_issue_id="$(jq -r .id <<< "$issue")" > /dev/null
   n=$(jq -r .number <<< "$issue")
   add_label "$n" ready; add_label "$n" "size: L"
-  notify "The end-to-end tests of #$pn failed: #$n will fix them. https://github.com/$REPO/issues/$n"
+  notify_info "The end-to-end tests of #$pn failed: #$n will fix them. https://github.com/$REPO/issues/$n"
 }
 
 # The open pull request of a feature branch into the base branch, opened when missing. Its URL
@@ -483,7 +488,7 @@ ${log:-- (not available)}
   gh api -X POST "repos/$REPO/issues/$pn/sub_issues" -F sub_issue_id="$(jq -r .id <<< "$issue")" > /dev/null
   n=$(jq -r .number <<< "$issue")
   add_label "$n" ready
-  notify "${BASE_BRANCH:-main} and the feature of #$pn conflict: #$n will resolve it. https://github.com/$REPO/issues/$n"
+  notify_info "${BASE_BRANCH:-main} and the feature of #$pn conflict: #$n will resolve it. https://github.com/$REPO/issues/$n"
 }
 
 # The base branch went on (another feature merged, a single issue) while a finished feature waits
@@ -502,7 +507,7 @@ resync_features() {
     [ "${ahead:-0}" -gt 0 ] || continue
     synced=$(sync_feature "$pn" "$head") || continue
     if [ "$synced" = merged ]; then
-      notify "${BASE_BRANCH:-main} changed, and it is now merged into the feature of #$pn: try its latest version on $head. https://github.com/$REPO/issues/$pn"
+      notify_info "${BASE_BRANCH:-main} changed, and it is now merged into the feature of #$pn: try its latest version on $head. https://github.com/$REPO/issues/$pn"
     fi
   done <<< "$prs"
 }

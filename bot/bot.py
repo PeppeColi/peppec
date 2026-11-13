@@ -419,9 +419,12 @@ def tg(method, **payload):
         print(f"telegram {method}: {r.status_code} {r.text[:300]}", flush=True)
 
 
-def send(text, markup=None):
+def send(text, markup=None, silent=False):
     # Telegram shows plain text: a backtick from Markdown (titles, questions) is only noise
-    tg("sendMessage", chat_id=CHAT, text=text.replace("`", "")[:4000], **({"reply_markup": markup} if markup else {}))
+    extra = {"reply_markup": markup} if markup else {}
+    if silent:
+        extra["disable_notification"] = True  # delivered without sound or vibration
+    tg("sendMessage", chat_id=CHAT, text=text.replace("`", "")[:4000], **extra)
 
 
 def send_panels(repos):
@@ -658,7 +661,8 @@ def dashboard_action(req):
         else:
             done = repo.apply(action, value)
         CACHE.pop(repo.key, None)  # only this repository is read again
-        send(f"Dashboard: {done}")  # what the dashboard does leaves a trace in the chat
+        # What the dashboard does leaves a trace in the chat, silently: you did it yourself
+        send(f"Dashboard: {done}", silent=True)
     return done
 
 
