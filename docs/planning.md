@@ -8,7 +8,8 @@ PEPPEC builds one issue at a time. This page explains how to prepare a whole fea
 - **A size.** `size: S` for a small, mechanical change, `size: L` for one that crosses several parts of the code or needs design judgement; no label means M. The size picks the model.
 - **To stand on its own.** The agent sees the issue, your comments and, for a sub-issue, the body of its parent. It cannot open other issues or links. Write what the issue needs in the issue.
 - **Behaviour, not files.** Describe what must work and the names or shapes that matter. Paths and line numbers are out of date after the first merge.
-- **Acceptance criteria a check can fail.** The agent does not run the program: "done" means the check commands pass. A criterion nobody can turn into a test is not verified by anyone.
+- **Acceptance criteria a check can fail.** The agent does not run the program: "done" means the check commands pass. A criterion nobody can turn into a test is not verified by anyone. The agent writes a failing test for each criterion before the code.
+- **Where to test, when it matters.** Name the interface the tests should go through (a command, a public function, an HTTP endpoint), in the issue or in a "Testing decisions" section of the specification. Without it the agent tests through the public interface of the code it changes. If the repository has a `GLOSSARY.md`, the agent uses its terms.
 - **What is out of scope**, under a heading named "Out of scope", so the agent does not build the neighbouring issue too. That section is copied into the pull request, so the reviewer does not ask for it either.
 
 A good work unit, the issue the agent builds in one pull request, is the smallest change you could show working by itself. Smaller than that, the fixed cost of every issue (pull request, checks, review rounds) outweighs the work.
