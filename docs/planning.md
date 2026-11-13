@@ -11,12 +11,12 @@ PEPPEC builds one issue at a time. This page explains how to prepare a whole fea
 - **Acceptance criteria a check can fail.** The agent does not run the program: "done" means the check commands pass. A criterion nobody can turn into a test is not verified by anyone.
 - **What is out of scope**, under a heading named "Out of scope", so the agent does not build the neighbouring issue too. That section is copied into the pull request, so the reviewer does not ask for it either.
 
-A good slice is the smallest change you could show working by itself. Smaller than that, the fixed cost of every issue (pull request, checks, review rounds) outweighs the work.
+A good work unit, the issue the agent builds in one pull request, is the smallest change you could show working by itself. Smaller than that, the fixed cost of every issue (pull request, checks, review rounds) outweighs the work.
 
 ## A feature as a group of issues
 
-1. **The specification is the parent issue.** Write it yourself: the problem, the solution, the decisions already taken, what is out of scope. It does not get the `ready` label. If it gets it by mistake once it has sub-issues, the queue skips it and tells you once on Telegram; a specification without sub-issues yet cannot be told apart from a slice, and would be built in one run.
-2. **Each slice is a sub-issue** of the specification, labelled `ready` and with its size. The agent receives the specification as background and builds only its own slice.
+1. **The specification is the parent issue.** Write it yourself: the problem, the solution, the decisions already taken, what is out of scope. It does not get the `ready` label. If it gets it by mistake once it has sub-issues, the queue skips it and tells you once on Telegram; a specification without sub-issues yet cannot be told apart from a work unit, and would be built in one run.
+2. **Each work unit is a sub-issue** of the specification, labelled `ready` and with its size. The agent receives the specification as background and builds only its own work unit.
 3. **Order comes from "blocked by".** Mark each issue as blocked by the ones it needs: an issue starts only when its blockers are closed. Create them all at once; the queue sorts itself out.
 
 ```bash
@@ -24,7 +24,7 @@ gh issue create --parent <SPEC> --label ready --label "size: S" --title "..." --
 gh issue edit <ISSUE> --add-blocked-by <BLOCKER>
 ```
 
-4. **Collect the feature on a base branch.** With [a base branch other than `main`](setup.md#a-base-branch-other-than-main) the slices are merged into it, and `main` gets the feature only when it is complete.
+4. **Collect the feature on a base branch.** With [a base branch other than `main`](setup.md#a-base-branch-other-than-main) the work units are merged into it, and `main` gets the feature only when it is complete.
 5. **Try it when you are told.** When the last sub-issue is closed you get a Telegram message. Try the feature on the base branch; what does not work becomes a new sub-issue of the same specification, and you get the message again when those are closed too. The message has a **Report a problem** button (the dashboard has the same, under "Ready to try"): write what does not work in one sentence and the bot opens that sub-issue for you, labelled `ready` and `size: S`. The agent receives the specification with it, so it sees your scenarios. For another size, change the label on GitHub before the issue starts.
 6. **Bring it to `main`** with a pull request merged with a merge commit, and close the specification. This merge is yours, always, in either merge mode: merging the base branch into `main` is how you declare that the feature passed its end-to-end test. PEPPEC never opens or merges that pull request.
 
@@ -40,7 +40,7 @@ Any way of creating issues works. One that fits well is the set of skills in [ma
 | --- | --- | --- |
 | Decide | `/grill-with-docs`, or `/wayfinder` when the work does not fit in one session | The decisions, taken with you |
 | Write down | `/to-spec` | The specification, as an issue |
-| Slice | `/to-tickets` | The sub-issues, with their "blocked by" links |
+| Split into work units | `/to-tickets` | The sub-issues, with their "blocked by" links |
 | Build | PEPPEC, in place of `/implement` | One pull request per issue |
 
 Two things make them produce issues PEPPEC accepts, and `peppec init` sets up both. Run their setup skill (`/setup-matt-pocock-skills`) first, then `init`; `peppec doctor` tells you when either is missing or out of date.

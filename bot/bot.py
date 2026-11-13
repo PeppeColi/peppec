@@ -117,8 +117,8 @@ class Repo:
         return [i for i in self.gh("GET", "/issues", params=params) if "pull_request" not in i]
 
     def queue(self):
-        """The ready issues the agent will build: not the ones decide.sh skips as not slices."""
-        return [i for i in self.issues("ready") if not not_slice(i)]
+        """The ready issues the agent will build: not the ones decide.sh skips as not work units."""
+        return [i for i in self.issues("ready") if not not_work_unit(i)]
 
     def agent_pr(self, n):
         owner = self.name.split("/")[0]
@@ -289,9 +289,9 @@ class Repo:
         return f"Hint added to {self.name}#{n}, restarting."
 
 
-def not_slice(issue):
+def not_work_unit(issue):
     """A specification (it has sub-issues) or a wayfinder map or ticket: never built by the agent.
-    Same rule as NOT_SLICE in scripts/lib.sh."""
+    Same rule as NOT_WORK_UNIT in scripts/lib.sh."""
     return bool((issue.get("sub_issues_summary") or {}).get("total")) \
         or any(x["name"].startswith("wayfinder:") for x in issue["labels"])
 
