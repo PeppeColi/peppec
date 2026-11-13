@@ -22,14 +22,14 @@ the map reads them:
 ### Specifications
 
 - Include the scenarios, in given/when/then form, under a heading named "Scenarios".
-- Never label the specification itself `ready`: only its sub-issues get it.
+- Never label the specification itself `ready`: only its work units get it.
 
-### Issues for the agent
+### Work units
 
-When you create an issue labelled `ready`:
+A work unit is an issue the agent builds in one pull request: a sub-issue of a specification,
+labelled `ready`. When you create one:
 
-- Make it a sub-issue of the specification and set its blockers with the native "blocked by"
-  relationship, never as text in the body.
+- Set its blockers with the native "blocked by" relationship, never as text in the body.
 - Give it a size label: `size: S` for a small, mechanical change, `size: L` for one that crosses
   several parts of the code or needs design judgement, no size label otherwise.
 - Write it so that it stands on its own: do not point to other issues, files of this session or

@@ -71,9 +71,9 @@ marker_set() {
     gh api -X POST "repos/$REPO/issues/$1/comments" -f body="<!-- peppec:$2=$3 -->" > /dev/null
   fi
 }
-# jq test on an issue from the REST API: true when it is not a slice the agent can build, that
+# jq test on an issue from the REST API: true when it is not a work unit the agent can build, that
 # is a specification (it has sub-issues) or a wayfinder map or ticket. Same rule in bot/bot.py
-NOT_SLICE='((.sub_issues_summary.total // 0) > 0 or any(.labels[].name; startswith("wayfinder:")))'
+NOT_WORK_UNIT='((.sub_issues_summary.total // 0) > 0 or any(.labels[].name; startswith("wayfinder:")))'
 
 # Tells you when the last sub-issue of a parent issue is closed: the whole feature is merged
 # and can be tried. $1 is the sub-issue just closed, counted as closed even if the API still
