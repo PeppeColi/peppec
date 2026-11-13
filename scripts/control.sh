@@ -14,7 +14,9 @@ case "$ACTION" in
     notify_blocked "Queue stopped on #$ISSUE: $REASON. $RUN_URL";;
   merge)
     head=$(gh pr view "$PR" -R "$REPO" --json headRefName --jq .headRefName)
-    gh pr merge "$PR" -R "$REPO" --squash
+    # A sync work unit keeps the base branch as a parent: a squash would lose it (task.sh)
+    method=--squash; [ "$(kind_of "$ISSUE")" != sync ] || method=--merge
+    gh pr merge "$PR" -R "$REPO" "$method"
     delete_agent_branch "$head"
     close_merged "$ISSUE"
     notify "Merged PR #$PR (issue #$ISSUE)."

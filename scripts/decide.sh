@@ -56,6 +56,9 @@ if has "$ctrl" "base missing"; then
   notify "The base branch $BASE_BRANCH is back: the queue goes on."
 fi
 
+# Finished features waiting for you get the base branch again when it went on (resync_features)
+resync_features
+
 # True when issue $1 is a work unit of a feature already started (its feature branch exists) whose
 # pull request into the base branch is not open yet: the feature is still being built
 under_construction() {
@@ -140,7 +143,8 @@ if [ -z "$active" ]; then
     # With feature branches, one feature is built at a time: the work units of a feature already
     # started and not yet finished come first. Finished features wait for you meanwhile
     [ -n "$(template feature)" ] || break
-    if under_construction "$n"; then issue=$n; break; fi
+    # A sync work unit first of all: a finished feature waits for it
+    if [ "$(kind_of "$n")" = sync ] || under_construction "$n"; then issue=$n; break; fi
   done
   issue=${issue:-$first}
   [ -n "$issue" ] || { echo "No ready issues to start"; exit 0; }
