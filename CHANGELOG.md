@@ -9,6 +9,14 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.29.1] - 2026-11-13
+
+### Fixed
+
+- The agent can run commands again (checks, tests): 1.29.0 turned on the sandbox of Claude Code
+  for the agent's commands, but the runner lacked bubblewrap and socat, so every command was
+  refused. The agent job now installs them before Claude runs.
+
 ## [1.29.0] - 2026-11-13
 
 ### Security
@@ -367,7 +375,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.29.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.29.1...HEAD
+[1.29.1]: https://github.com/PeppeColi/peppec/compare/v1.29.0...v1.29.1
 [1.29.0]: https://github.com/PeppeColi/peppec/compare/v1.28.1...v1.29.0
 [1.28.1]: https://github.com/PeppeColi/peppec/compare/v1.28.0...v1.28.1
 [1.28.0]: https://github.com/PeppeColi/peppec/compare/v1.27.1...v1.28.0
