@@ -14,7 +14,15 @@ Follow the phases in order: each one assumes the previous ones are done. Replace
 
 `peppec init` automates Phases 1, 4 and 5 and the storing of the secrets of Phase 2. It is safe to run again: it keeps what is already set and only asks for what is missing.
 
-Install the script once, outside your projects, so it serves every repository and never ends up in a commit:
+The simplest way to get it is the gh extension:
+
+```bash
+gh extension install PeppeColi/gh-peppec
+```
+
+Then type `gh peppec` wherever this guide says `peppec`. Each run downloads the command line of the engine version it installs (`v1`, or the one given with `--ref`), so there is nothing to update.
+
+Or install the script once, outside your projects, so it serves every repository and never ends up in a commit:
 
 ```bash
 mkdir -p ~/.local/bin
