@@ -209,6 +209,9 @@ class Repo:
         else:
             out.append("No issue in progress")
         out.append(f"In queue: {len(self.queue())}")
+        trying = self.features_done()
+        if trying:
+            out.append("Ready to try: " + ", ".join(f"#{i['number']}" for i in trying))
         if n:
             rows.append([self.button(f"Unblock #{n}", "unblock", n), self.button(f"Hint #{n}", "hint", n)])
         rows.append([self.button("Refresh", "refresh")])
@@ -240,9 +243,33 @@ class Repo:
                 "pr": {"number": pr, "labels": self.labels(pr), "url": f"{out['url']}/pull/{pr}"} if pr else None}
         out["queue"] = [{"number": i["number"], "title": i["title"], "size": size_of([x["name"] for x in i["labels"]])}
                         for i in self.queue() if not any(x["name"] == "in progress" for x in i["labels"])]
-        out["trying"] = [{"number": i["number"], "title": i["title"], "url": f"{out['url']}/issues/{i['number']}",
-                          "total": i["sub_issues_summary"]["total"]} for i in self.features_done()]
+        out["trying"] = [self.trying(i, prs) for prs in [self.feature_prs()] for i in self.features_done()]
         return out
+
+    def feature_prs(self):
+        """The open pull requests of feature branches, by specification: the workflow marks their
+        body with <!-- peppec:feature=N --> (feature_pr in scripts/lib.sh)."""
+        prs = {}
+        for pr in self.gh("GET", "/pulls", params={"state": "open", "per_page": 100}):
+            m = re.search(r"<!-- peppec:feature=(\d+) -->", pr.get("body") or "")
+            if m:
+                prs[int(m.group(1))] = {"number": pr["number"], "url": pr["html_url"], "branch": pr["head"]["ref"]}
+        return prs
+
+    def trying(self, issue, prs):
+        """A finished feature. With a feature branch it may still be checked (the base branch being
+        brought in, its end-to-end tests): it is ready once the workflow has sent "ready to be tried",
+        which it remembers on the specification as <!-- peppec:done=N --> with N its sub-issues."""
+        n, total = issue["number"], issue["sub_issues_summary"]["total"]
+        pr = prs.get(n)
+        done = None
+        if pr:
+            for c in self.gh("GET", f"/issues/{n}/comments", params={"per_page": 100}):
+                m = re.match(r"<!-- peppec:done=(\d+)", c["body"])
+                if m:
+                    done = int(m.group(1))
+        return {"number": n, "title": issue["title"], "url": f"https://github.com/{self.name}/issues/{n}",
+                "total": total, "pr": pr, "checking": bool(pr) and done != total}
 
     def features_done(self):
         """The open specifications whose sub-issues are all closed: features ready to be tried.
