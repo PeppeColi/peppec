@@ -71,6 +71,10 @@ marker_set() {
     gh api -X POST "repos/$REPO/issues/$1/comments" -f body="<!-- peppec:$2=$3 -->" > /dev/null
   fi
 }
+# jq test on an issue from the REST API: true when it is not a slice the agent can build, that
+# is a specification (it has sub-issues) or a wayfinder map or ticket. Same rule in bot/bot.py
+NOT_SLICE='((.sub_issues_summary.total // 0) > 0 or any(.labels[].name; startswith("wayfinder:")))'
+
 # Tells you when the last sub-issue of a parent issue is closed: the whole feature is merged
 # and can be tried. $1 is the sub-issue just closed, counted as closed even if the API still
 # lists it as open. The number of sub-issues is remembered on the parent, so the message is
@@ -80,6 +84,8 @@ notify_feature_done() {
   parent=$(gh api "repos/$REPO/issues/$1/parent" 2> /dev/null) || return 0
   [ "$(jq -r .repository_url <<< "$parent")" = "https://api.github.com/repos/$REPO" ] || return 0
   pn=$(jq -r .number <<< "$parent")
+  # A cleared wayfinder map is not a feature: its destination is a specification still to write
+  jq -e 'any(.labels[].name; . == "wayfinder:map")' <<< "$parent" > /dev/null && return 0
   subs=$(gh api --paginate "repos/$REPO/issues/$pn/sub_issues?per_page=100" | jq -s 'add // []')
   total=$(jq length <<< "$subs")
   open=$(jq --argjson n "$1" '[.[] | select(.state == "open" and .number != $n)] | length' <<< "$subs")

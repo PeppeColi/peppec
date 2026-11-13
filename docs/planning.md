@@ -15,7 +15,7 @@ A good slice is the smallest change you could show working by itself. Smaller th
 
 ## A feature as a group of issues
 
-1. **The specification is the parent issue.** Write it yourself: the problem, the solution, the decisions already taken, what is out of scope. It does not get the `ready` label.
+1. **The specification is the parent issue.** Write it yourself: the problem, the solution, the decisions already taken, what is out of scope. It does not get the `ready` label. If it gets it by mistake once it has sub-issues, the queue skips it and tells you once on Telegram; a specification without sub-issues yet cannot be told apart from a slice, and would be built in one run.
 2. **Each slice is a sub-issue** of the specification, labelled `ready` and with its size. The agent receives the specification as background and builds only its own slice.
 3. **Order comes from "blocked by".** Mark each issue as blocked by the ones it needs: an issue starts only when its blockers are closed. Create them all at once; the queue sorts itself out.
 
@@ -45,7 +45,7 @@ Any way of creating issues works. One that fits well is the set of skills in [ma
 
 Two things make them produce issues PEPPEC accepts, and `peppec init` sets up both. Run their setup skill (`/setup-matt-pocock-skills`) first, then `init`; `peppec doctor` tells you when either is missing or out of date.
 
-**A PEPPEC section in `CLAUDE.md`.** Every session on your computer reads `CLAUDE.md`, so the rules reach the planning skills without you repeating them: what an issue for the agent needs, scenarios in every specification, no `ready` label on the specification. It also tells `/wayfinder` what to write in the Notes of every map it charts: the map plans and never writes production code, its destination is a specification with given/when/then scenarios, every behaviour it decides must be checkable by a test, none of its issues gets `ready`. Without those Notes a map can drift into building the feature itself, and PEPPEC would then build it a second time.
+**A PEPPEC section in `CLAUDE.md`.** Every session on your computer reads `CLAUDE.md`, so the rules reach the planning skills without you repeating them: what an issue for the agent needs, scenarios in every specification, no `ready` label on the specification. It also tells `/wayfinder` what to write in the Notes of every map it charts: the map plans and never writes production code, its destination is a specification with given/when/then scenarios, every behaviour it decides must be checkable by a test, none of its issues gets `ready`. The queue skips any issue with a `wayfinder:` label even if it has `ready`, and a cleared map never shows under "Ready to try". Without those Notes a map can drift into building the feature itself, and PEPPEC would then build it a second time.
 
 The section sits between a `<!-- peppec:start` line and a `<!-- peppec:end -->` line, outside the "Agent skills" block the setup skill rewrites, so running that skill again does not remove it. `init` adds it at the end of the file, creates the file if there is none (importing `AGENTS.md` when that is the file you have), and replaces the section when the engine's version changes, leaving the rest of the file alone. Do not edit it: your next `init` puts the engine's text back. To set it up by hand, copy [`examples/claude-md-section.md`](../examples/claude-md-section.md), without its first line, at the end of your `CLAUDE.md`.
 
