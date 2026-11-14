@@ -23,20 +23,20 @@ concurrency:
   group: agent
   cancel-in-progress: false
 
-# Read only: the jobs that write use the app's token and AGENT_TOKEN
+# Read only: the jobs that write use the app's token and PEPPEC_AGENT_TOKEN
 permissions:
   contents: read
 
 jobs:
   agent:
     if: github.event.pull_request.head.repo.fork != true
-    uses: PeppeColi/peppec/.github/workflows/agent.yml@v1
+    uses: PeppeColi/peppec/.github/workflows/agent.yml@v2
     with:
-      engine_ref: v1
+      engine_ref: v2
       force: ${{ inputs.force || false }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      PEPPEC_AGENT_TOKEN: ${{ secrets.PEPPEC_AGENT_TOKEN }}
+      PEPPEC_APP_PRIVATE_KEY: ${{ secrets.PEPPEC_APP_PRIVATE_KEY }}
+      PEPPEC_TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
+      PEPPEC_TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}

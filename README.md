@@ -71,7 +71,7 @@ With it, type `gh peppec` wherever this page says `peppec`. Or install the scrip
 
 ```bash
 mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v1/cli/peppec -o ~/.local/bin/peppec
+curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec -o ~/.local/bin/peppec
 chmod +x ~/.local/bin/peppec
 ```
 
@@ -101,9 +101,9 @@ preset: rust-v1
 # .github/workflows/ci.yml
 jobs:
   ci:
-    uses: PeppeColi/peppec/.github/workflows/ci.yml@v1
+    uses: PeppeColi/peppec/.github/workflows/ci.yml@v2
     with:
-      engine_ref: v1
+      engine_ref: v2
 ```
 
 ## Presets

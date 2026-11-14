@@ -28,29 +28,29 @@ on:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: false
-      AGENT_TOKEN:
+      PEPPEC_AGENT_TOKEN:
         required: false
-      APP_PRIVATE_KEY:
+      PEPPEC_APP_PRIVATE_KEY:
         required: false
-      TELEGRAM_BOT_TOKEN:
+      PEPPEC_TELEGRAM_BOT_TOKEN:
         required: false
-      TELEGRAM_CHAT_ID:
+      PEPPEC_TELEGRAM_CHAT_ID:
         required: false
 
 env:
   REPO: ${{ github.repository }}
-  TZ_NAME: ${{ vars.TZ_NAME }}
-  CONTROL_ISSUE: ${{ vars.CONTROL_ISSUE }}
+  TZ_NAME: ${{ vars.PEPPEC_TZ_NAME }}
+  CONTROL_ISSUE: ${{ vars.PEPPEC_CONTROL_ISSUE }}
   # The branch the agent starts from and its pull requests are merged into
-  BASE_BRANCH: ${{ vars.BASE_BRANCH || 'main' }}
+  BASE_BRANCH: ${{ vars.PEPPEC_BASE_BRANCH || 'main' }}
   # Names of the agent's branches and of the feature branches (see template in scripts/lib.sh)
   PEPPEC_BRANCHES: ${{ vars.PEPPEC_BRANCHES }}
   # End-to-end tests of a feature, run by CI on its pull request into the base branch
   PEPPEC_E2E_FEATURE: ${{ vars.PEPPEC_E2E_FEATURE }}
   # Only the specifications you wrote get a feature branch (spec_of in scripts/lib.sh)
-  OWNER_LOGIN: ${{ vars.OWNER_LOGIN }}
+  OWNER_LOGIN: ${{ vars.PEPPEC_OWNER_LOGIN }}
   # With OWNER_LOGIN, the only authors whose ready issues the queue builds
-  APP_LOGIN: ${{ vars.APP_LOGIN }}
+  APP_LOGIN: ${{ vars.PEPPEC_APP_LOGIN }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   CTL: _ctl/scripts
 
@@ -81,36 +81,36 @@ jobs:
       - id: app
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ vars.PEPPEC_APP_ID }}
+          private-key: ${{ secrets.PEPPEC_APP_PRIVATE_KEY }}
       - id: d
         run: bash "$CTL/decide.sh"
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          WORK_START_HOUR: ${{ vars.WORK_START_HOUR }}
-          WORK_END_HOUR: ${{ vars.WORK_END_HOUR }}
-          MAX_REVIEW_ROUNDS: ${{ vars.MAX_REVIEW_ROUNDS }}
-          LARGE_FROM_ROUND: ${{ vars.LARGE_FROM_ROUND }}
-          MAX_CI_ATTEMPTS: ${{ vars.MAX_CI_ATTEMPTS }}
-          MAX_ISSUE_MINUTES: ${{ vars.MAX_ISSUE_MINUTES }}
-          STALL_MINUTES: ${{ vars.STALL_MINUTES }}
-          QUOTA_RETRY_MINUTES: ${{ vars.QUOTA_RETRY_MINUTES }}
+          WORK_START_HOUR: ${{ vars.PEPPEC_WORK_START_HOUR }}
+          WORK_END_HOUR: ${{ vars.PEPPEC_WORK_END_HOUR }}
+          MAX_REVIEW_ROUNDS: ${{ vars.PEPPEC_MAX_REVIEW_ROUNDS }}
+          LARGE_FROM_ROUND: ${{ vars.PEPPEC_LARGE_FROM_ROUND }}
+          MAX_CI_ATTEMPTS: ${{ vars.PEPPEC_MAX_CI_ATTEMPTS }}
+          MAX_ISSUE_MINUTES: ${{ vars.PEPPEC_MAX_ISSUE_MINUTES }}
+          STALL_MINUTES: ${{ vars.PEPPEC_STALL_MINUTES }}
+          QUOTA_RETRY_MINUTES: ${{ vars.PEPPEC_QUOTA_RETRY_MINUTES }}
           CI_CHECK: ${{ inputs.ci_check }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_MERGED: ${{ github.event.pull_request.merged }}
           EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           FORCE: ${{ inputs.force }}
           # For the message sent when the last sub-issue of a feature is closed
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}
       - if: failure()
         run: |
           [ "$GITHUB_EVENT_NAME" != schedule ] || [ "$(date +%-M)" -lt 15 ] || exit 0
           source "$CTL/lib.sh"
           notify "The decide step failed: $RUN_URL"
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}
 
   control:
     needs: decide
@@ -127,18 +127,18 @@ jobs:
       - id: app
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ vars.PEPPEC_APP_ID }}
+          private-key: ${{ secrets.PEPPEC_APP_PRIVATE_KEY }}
       - run: bash "$CTL/control.sh"
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}
           ACTION: ${{ needs.decide.outputs.action }}
           ISSUE: ${{ needs.decide.outputs.issue }}
           PR: ${{ needs.decide.outputs.pr }}
           SHA: ${{ needs.decide.outputs.sha }}
-          AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
+          AGENT_TOKEN: ${{ secrets.PEPPEC_AGENT_TOKEN }}
           REASON: ${{ needs.decide.outputs.reason }}
 
   # The agent's work is split in three jobs, so the code the agent runs (tests, build scripts,
@@ -170,8 +170,8 @@ jobs:
       - id: app
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ vars.PEPPEC_APP_ID }}
+          private-key: ${{ secrets.PEPPEC_APP_PRIVATE_KEY }}
       - id: task
         run: bash "$CTL/task.sh"
         env:
@@ -206,7 +206,7 @@ jobs:
       CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: 1
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { ref: "${{ vars.BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
+        with: { ref: "${{ vars.PEPPEC_BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ inputs.engine_repository }}
@@ -229,8 +229,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           KIND: ${{ needs.prepare.outputs.kind }}
           # A sync work unit starts with a merge made by the workflow
-          GIT_NAME: ${{ vars.AGENT_GIT_NAME }}
-          GIT_EMAIL: ${{ vars.AGENT_GIT_EMAIL }}
+          GIT_NAME: ${{ vars.PEPPEC_AGENT_GIT_NAME }}
+          GIT_EMAIL: ${{ vars.PEPPEC_AGENT_GIT_EMAIL }}
       - uses: ./_preset
         with:
           options: ${{ steps.cfg.outputs.options }}
@@ -295,7 +295,7 @@ jobs:
       BASE: ${{ needs.decide.outputs.base }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { ref: "${{ vars.BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
+        with: { ref: "${{ vars.PEPPEC_BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ inputs.engine_repository }}
@@ -315,17 +315,17 @@ jobs:
       - id: app
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ vars.PEPPEC_APP_ID }}
+          private-key: ${{ secrets.PEPPEC_APP_PRIVATE_KEY }}
       - run: bash "$CTL/after.sh"
         env:
-          GH_TOKEN: ${{ secrets.AGENT_TOKEN }}
-          AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
+          GH_TOKEN: ${{ secrets.PEPPEC_AGENT_TOKEN }}
+          AGENT_TOKEN: ${{ secrets.PEPPEC_AGENT_TOKEN }}
           APP_TOKEN: ${{ steps.app.outputs.token }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          GIT_NAME: ${{ vars.AGENT_GIT_NAME }}
-          GIT_EMAIL: ${{ vars.AGENT_GIT_EMAIL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}
+          GIT_NAME: ${{ vars.PEPPEC_AGENT_GIT_NAME }}
+          GIT_EMAIL: ${{ vars.PEPPEC_AGENT_GIT_EMAIL }}
           TASK_DIR: ${{ runner.temp }}/task
           RESULT: ${{ runner.temp }}/result
           START: ${{ needs.agent.outputs.start }}
@@ -355,13 +355,13 @@ jobs:
       - id: app
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ vars.PEPPEC_APP_ID }}
+          private-key: ${{ secrets.PEPPEC_APP_PRIVATE_KEY }}
       - run: bash "$CTL/control.sh"
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}
           ACTION: stop
           ISSUE: ${{ needs.decide.outputs.issue }}
           PR: ${{ needs.decide.outputs.pr }}

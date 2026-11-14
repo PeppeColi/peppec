@@ -79,7 +79,7 @@ jobs:
           COMMAND: ${{ vars.PEPPEC_E2E_FEATURE }}
           HEAD_REF: ${{ github.head_ref }}
           BASE_REF: ${{ github.base_ref }}
-          BASE_BRANCH: ${{ vars.BASE_BRANCH || 'main' }}
+          BASE_BRANCH: ${{ vars.PEPPEC_BASE_BRANCH || 'main' }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PEPPEC_BRANCHES: ${{ vars.PEPPEC_BRANCHES }}
       # A feature branch is not the agent's: it is checked with its own configuration, like CI
@@ -114,7 +114,7 @@ jobs:
           COMMAND: ${{ vars.PEPPEC_E2E_ALL }}
           HEAD_REF: ${{ github.head_ref }}
           BASE_REF: ${{ github.base_ref }}
-          BASE_BRANCH: ${{ vars.BASE_BRANCH || 'main' }}
+          BASE_BRANCH: ${{ vars.PEPPEC_BASE_BRANCH || 'main' }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PEPPEC_BRANCHES: ${{ vars.PEPPEC_BRANCHES }}
       # A feature branch is not the agent's: it is checked with its own configuration, like CI

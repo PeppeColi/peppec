@@ -95,7 +95,7 @@ Two more keys cover what a preset cannot know: `options` passes values to the pr
 
 CI and the agent use the same definition: CI runs the setup and the check commands, and the agent's prompt tells it to run the same commands until they pass.
 
-The configuration is always read from the base branch: `main`, or the branch named by the `BASE_BRANCH` variable. Pull requests from the agent's branches (`agent/issue-N`, or the names of `PEPPEC_BRANCHES`) are checked with the configuration of the branch they go into, so the agent cannot weaken its own checks.
+The configuration is always read from the base branch: `main`, or the branch named by the `PEPPEC_BASE_BRANCH` variable. Pull requests from the agent's branches (`agent/issue-N`, or the names of `PEPPEC_BRANCHES`) are checked with the configuration of the branch they go into, so the agent cannot weaken its own checks.
 
 ## Model selection
 
@@ -114,7 +114,7 @@ These are the defaults. A value is a model alias or a full model ID; you can set
 - **size: M**, or no size label → the `m` model.
 - **size: L** → the `l` model from the start.
 
-If the review still fails, the `l` model takes over from the round set in `LARGE_FROM_ROUND`, whatever the size.
+If the review still fails, the `l` model takes over from the round set in `PEPPEC_LARGE_FROM_ROUND`, whatever the size.
 
 ## Checks, review and limits
 
@@ -124,21 +124,21 @@ The agent does not have to agree with every finding. When it leaves one unchange
 
 | Limit | Variable | Past the limit |
 | --- | --- | --- |
-| Attempts to make the checks pass, per review round | `MAX_CI_ATTEMPTS` | Queue stops, Telegram notification |
-| Review rounds, tracked with the `review N` labels | `MAX_REVIEW_ROUNDS` | `needs human` label, queue stops, Telegram notification |
-| Agent working time per issue, summed over all runs | `MAX_ISSUE_MINUTES` | Queue stops, Telegram notification |
-| Wait for a CI result, from the latest commit | `STALL_MINUTES` | Queue stops |
-| Wait for a CodeRabbit review, from the latest commit | twice `STALL_MINUTES` | Queue stops |
+| Attempts to make the checks pass, per review round | `PEPPEC_MAX_CI_ATTEMPTS` | Queue stops, Telegram notification |
+| Review rounds, tracked with the `review N` labels | `PEPPEC_MAX_REVIEW_ROUNDS` | `needs human` label, queue stops, Telegram notification |
+| Agent working time per issue, summed over all runs | `PEPPEC_MAX_ISSUE_MINUTES` | Queue stops, Telegram notification |
+| Wait for a CI result, from the latest commit | `PEPPEC_STALL_MINUTES` | Queue stops |
+| Wait for a CodeRabbit review, from the latest commit | twice `PEPPEC_STALL_MINUTES` | Queue stops |
 
 Waits for quota, CI and CodeRabbit do not count as working time. Counters move only after a successful push or a reply to the review: if a run is interrupted, the same move is repeated without spending a round.
 
 ## Schedule and quota
 
-Agents start new issues only inside the work window (`WORK_START_HOUR`–`WORK_END_HOUR`). An issue already in progress is always finished. In manual mode, merging a pull request starts the next issue right away, at any hour.
+Agents start new issues only inside the work window (`PEPPEC_WORK_START_HOUR`–`PEPPEC_WORK_END_HOUR`). An issue already in progress is always finished. In manual mode, merging a pull request starts the next issue right away, at any hour.
 
 The schedule is `nightly` by default. With `/schedule always` (the `always on` label on the control panel) new issues start at any hour and the work window is ignored. During the day the agents draw on the same Claude quota you use yourself: that is why nightly is the default. Pausing works in both schedules.
 
-When the Claude quota runs out, the issue gets the `awaiting quota` label, you get a notification, and the workflow retries after `QUOTA_RETRY_MINUTES`.
+When the Claude quota runs out, the issue gets the `awaiting quota` label, you get a notification, and the workflow retries after `PEPPEC_QUOTA_RETRY_MINUTES`.
 
 ## Merge modes
 
@@ -147,7 +147,7 @@ When the Claude quota runs out, the issue gets the `awaiting quota` label, you g
 | Manual (default) | You, with the Merge button | The queue waits for your merge |
 | Automatic | The workflow, as the app, as soon as the review passes | The queue runs on its own through the work window |
 
-Pull requests are merged into the base branch: `main`, or the branch named by the `BASE_BRANCH` variable. GitHub closes an issue by itself only when its pull request reaches the default branch, so with another base branch the workflow closes it: right after an automatic merge, and at its next run after a merge done by hand. An issue you reopen after a merge is worked on again.
+Pull requests are merged into the base branch: `main`, or the branch named by the `PEPPEC_BASE_BRANCH` variable. GitHub closes an issue by itself only when its pull request reaches the default branch, so with another base branch the workflow closes it: right after an automatic merge, and at its next run after a merge done by hand. An issue you reopen after a merge is worked on again.
 
 If the base branch does not exist, the whole queue stops: no issue is started, continued or blocked. You get one Telegram message with the command that creates the branch again, and the control panel gets the `base missing` label. At the first run that finds the branch, the label goes, you are told, and the queue goes on from where it was. A pull request that was open when the branch disappeared was closed by GitHub: the agent's branch is still there, and the workflow opens a new pull request from it.
 

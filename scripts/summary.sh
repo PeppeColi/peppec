@@ -29,9 +29,9 @@ Warning: $2 expires in $days days. $3"
   fi
 }
 expires_soon "${CLAUDE_TOKEN_EXPIRES:-}" "the Claude token" \
-  "Run 'claude setup-token' and update CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_TOKEN_EXPIRES."
-expires_soon "${AGENT_TOKEN_EXPIRES:-}" "your personal token (AGENT_TOKEN)" \
-  "Regenerate it on GitHub and update AGENT_TOKEN and AGENT_TOKEN_EXPIRES: when it expires the queue stops."
+  "Run 'claude setup-token' and update CLAUDE_CODE_OAUTH_TOKEN and PEPPEC_CLAUDE_TOKEN_EXPIRES."
+expires_soon "${AGENT_TOKEN_EXPIRES:-}" "your personal token (PEPPEC_AGENT_TOKEN)" \
+  "Regenerate it on GitHub and update PEPPEC_AGENT_TOKEN and PEPPEC_AGENT_TOKEN_EXPIRES: when it expires the queue stops."
 # Nothing happened and nothing waits: no message. Otherwise it arrives silently, unless a token
 # is about to expire, which needs your action
 if [ -z "$merged$blocked$questions$expiry" ] && [ -z "$ready" ]; then

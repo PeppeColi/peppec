@@ -3,11 +3,27 @@
 All notable changes to the PEPPEC engine are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the engine
-follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Hosts call the moving tag `v1`,
-which always points to the latest 1.x release. Versions up to 1.25.0 were rebuilt from the git
+follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Hosts call the moving tag of their major
+version (`v2`), which always points to its latest release. Versions up to 1.25.0 were rebuilt from the git
 history when this file was created.
 
 ## [Unreleased]
+
+## [2.0.0] - 2026-11-14
+
+### Changed
+
+- **Breaking.** Every repository variable and secret used only by PEPPEC starts with `PEPPEC_`,
+  so it cannot clash with those of other tools or of an organization: for example `AGENT_TOKEN`
+  is now `PEPPEC_AGENT_TOKEN`, `BASE_BRANCH` is `PEPPEC_BASE_BRANCH`, `TELEGRAM_CHAT_ID` is
+  `PEPPEC_TELEGRAM_CHAT_ID`. `CLAUDE_CODE_OAUTH_TOKEN` keeps its standard name. The secrets the
+  reusable workflows take have the new names too.
+- `peppec init` reads the new names from the environment (`PEPPEC_AGENT_TOKEN`,
+  `PEPPEC_TELEGRAM_BOT_TOKEN`, `PEPPEC_TELEGRAM_CHAT_ID`), and so does `peppec bot`.
+- The moving tag is `v2`: the workflows, `peppec`, its default `--ref` and the bot image `:2`.
+  The bot's `.env` keeps its names.
+- A 1.x installation does not move by itself: run `peppec init` of 2.0 on it, which asks again for
+  the secrets and stores the new names, then delete the old variables and secrets.
 
 ## [1.32.0] - 2026-11-14
 
