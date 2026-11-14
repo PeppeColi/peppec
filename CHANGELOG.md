@@ -9,6 +9,14 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-11-14
+
+### Changed
+
+- The workflows use the new major versions of the GitHub actions: `actions/checkout` v7,
+  `actions/upload-artifact` v7, `actions/download-artifact` v8 (a download whose hash does not match
+  now fails) and `actions/create-github-app-token` v3. They run on Node 24. Hosts change nothing.
+
 ## [2.3.0] - 2026-11-14
 
 ### Fixed
@@ -495,7 +503,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.3.1...HEAD
+[2.3.1]: https://github.com/PeppeColi/peppec/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/PeppeColi/peppec/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/PeppeColi/peppec/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/PeppeColi/peppec/compare/v2.0.0...v2.1.0
