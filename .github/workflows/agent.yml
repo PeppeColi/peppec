@@ -71,7 +71,7 @@ jobs:
       branch: ${{ steps.d.outputs.branch }}
       base: ${{ steps.d.outputs.base }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -117,7 +117,7 @@ jobs:
     if: contains(fromJSON('["stop","merge","notify_ready","rerequest"]'), needs.decide.outputs.action)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -160,7 +160,7 @@ jobs:
       PR: ${{ needs.decide.outputs.pr }}
       BRANCH: ${{ needs.decide.outputs.branch }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -205,9 +205,9 @@ jobs:
       # Removes the tokens from the environment of the commands Claude runs
       CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: 1
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ vars.PEPPEC_BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -294,9 +294,9 @@ jobs:
       BRANCH: ${{ needs.decide.outputs.branch }}
       BASE: ${{ needs.decide.outputs.base }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ vars.PEPPEC_BASE_BRANCH || 'main' }}", fetch-depth: 0, persist-credentials: false }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
@@ -345,7 +345,7 @@ jobs:
       || always() && contains(fromJSON('["cancelled","failure"]'), needs.publish.result)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.engine_repository }}
           ref: ${{ inputs.engine_ref }}
