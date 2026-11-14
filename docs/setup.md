@@ -42,13 +42,13 @@ What stays manual, because it needs your login or a secret only you can generate
 
 1. Before `init`: create the Telegram bot (Phase 2, step 6).
 2. During `init`: confirm the GitHub App in the browser and install it on the repository (Phase 2, steps 1–3: `init` opens the pages); paste the Claude token, your personal token and the bot token when asked. The values are read without echo and sent straight to GitHub.
-3. After `init`: commit the files it wrote and push them to `main` and `dev` together (`init` prints the command), install CodeRabbit (Phase 3), then run `peppec bot` and copy the folder it prepares to the bot's machine (Phase 6).
+3. After `init`: commit the files it wrote and push them to `main` and `dev` together (`init` prints the command; on an empty repository it pushes a starting commit first, see [Empty repository](#empty-repository)), install CodeRabbit (Phase 3), then run `peppec bot` and copy the folder it prepares to the bot's machine (Phase 6).
 
 `init` also creates `CHANGELOG.md` when the repository has none, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format: the agent adds one line under "Unreleased" in each pull request, and turning those lines into a version is yours. An existing changelog is left alone; it needs a `## [Unreleased]` heading.
 
 `init` also writes the PEPPEC section of `CLAUDE.md`, which tells the planning sessions on your computer how to write issues PEPPEC can build: see [Planning work for the agents](planning.md#producing-the-issues-with-a-planning-session).
 
-`peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, `CHANGELOG.md`, the PEPPEC section of `CLAUDE.md`, the planning skills on your computer, branch protection, the speed of CI, the expiry of the Claude token. With `--key <app.pem>` it also checks that the app is installed on the repository.
+`peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, `CHANGELOG.md`, the PEPPEC section of `CLAUDE.md`, the planning skills on your computer, branch protection, workflows that never start from an event, the speed of CI, the expiry of the Claude token. With `--key <app.pem>` it also checks that the app is installed on the repository.
 
 For unattended use, `peppec init --yes` never asks: it keeps what is set, takes the defaults and reads the secrets from the environment.
 
@@ -279,10 +279,10 @@ The agent's pull requests are collected on a branch of their own, `dev`, and you
 
 ```bash
 git add .github .coderabbit.yaml .gitignore CHANGELOG.md CLAUDE.md && git commit -m 'chore: install PEPPEC'
-git push --atomic origin HEAD:main HEAD:dev     # one push, both branches; in an empty repository it creates them
+git push --atomic origin HEAD:main HEAD:dev     # one push, both branches
 ```
 
-By hand, create `dev` before the install commit (`git push origin main:dev`, or with the first push above in an empty repository) and set the variable:
+By hand, create `dev` before the install commit (`git push origin main:dev`; in an empty repository, with the starting commit described in [Empty repository](#empty-repository)) and set the variable:
 
 ```bash
 gh variable set PEPPEC_BASE_BRANCH -R "$R" -b dev
@@ -300,6 +300,26 @@ What changes:
 - **CI runs on every push to `dev`**, as on `main`: each merge is checked where it lands, so a `dev` broken by two merges together, or by a push of yours, shows up at once instead of in the agent's next pull request. It also keeps a fresh build cache for the pull requests into `dev`. The cost is one more CI run per merge. `init` writes both branches in `ci.yml`; `peppec doctor` warns when `dev` is missing there.
 - **Bringing `dev` to `main` is yours to do**, with a pull request merged with a merge commit. A squash would leave the two branches with different histories, and the next pull request between them would conflict. A fix made directly on `main` must be merged back into `dev`. `dev` stays after the merge: GitHub does not delete merged branches here (Phase 1), on any plan. Do not press "Delete branch" on that pull request. The second ruleset makes the button fail; the first one does not, because admins bypass it. Where rulesets are not available and `dev` was deleted by mistake, "Restore branch" on the same pull request brings it back.
 - **Without `dev` the queue stops.** If the branch is missing, nothing is started and you get one Telegram message; the queue goes on by itself when the branch is back (see [Merge modes](architecture.md#merge-modes)).
+
+### Empty repository
+
+In an empty repository, GitHub does not start the workflows that arrive with the very first push from any event: no CI on pushes and pull requests, no runs of the agent's schedule. They look active, and only a manual start works. Nothing warns you, and the queue never moves.
+
+So the first push must not carry the workflows. On an empty repository `peppec init` offers to push a starting commit first, to `main` and `dev` together: an empty commit, or the commits already in your clone when they hold no `.github/workflows`. The install commit then goes as the second push. By hand:
+
+```bash
+git commit --allow-empty -m 'chore: start'
+git push --atomic origin HEAD:main HEAD:dev     # dev from day one, born with main
+```
+
+If it already happened, push to `main` and `dev` a commit that adds a new workflow file, then remove it with a second push: the workflows wake up and stay awake. Changing an existing workflow file, or disabling and enabling the workflows, is not enough (tried on 2026-11-14).
+
+```bash
+printf 'name: wake\non: push\njobs:\n  w:\n    runs-on: ubuntu-latest\n    steps:\n      - run: "true"\n' > .github/workflows/wake.yml
+git add .github/workflows/wake.yml && git commit -m 'chore: wake the workflows' && git push --atomic origin HEAD:main HEAD:dev
+git rm .github/workflows/wake.yml && git commit -m 'chore: remove wake.yml' && git push --atomic origin HEAD:main HEAD:dev
+```
+ `peppec doctor` reports the case as a problem when no workflow has started from an event within half an hour of the last push to `main`.
 
 ### Feature branches
 
