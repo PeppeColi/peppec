@@ -51,7 +51,10 @@ fi
   # agent writes the specification's scenarios so that the command picks them
   if [ -n "${PEPPEC_E2E_FEATURE:-}" ] && [ -s .agent/spec.md ]; then
     sn=$(head -1 .agent/spec.md | sed -nE 's/.*\(#([0-9]+)\)$/\1/p')
-    if [ -n "$sn" ]; then
+    if [ -n "$sn" ] && [ "$(e2e_decision "$(cat .agent/spec.md)")" = none ]; then
+      echo; echo "## End-to-end tests"
+      echo "The specification decided that this feature needs no new end-to-end tests: write none."
+    elif [ -n "$sn" ]; then
       echo; echo "## End-to-end tests"
       echo "This repository runs the end-to-end tests of this feature with:"
       echo; echo "    ${PEPPEC_E2E_FEATURE//\{spec\}/$sn}"

@@ -33,6 +33,8 @@ These options need `gh` 2.94 or later.
 
 To have the feature checked end to end by the machine as well, write the scenarios in the specification while planning, in given/when/then form, and make the last sub-issue "automate these scenarios", blocked by all the others. The agent then translates scenarios you wrote instead of inventing its own exam, and they run with the checks from then on.
 
+With end-to-end tests per feature ([End-to-end tests](setup.md#end-to-end-tests)), the specification also decides whether the feature needs new ones, in a section named "End-to-end": `None: unit tests cover it.` with the reason, or the scenarios to cover. With scenarios, `/to-tickets` adds the work unit that writes them, `size: L`, blocked by the others. Without the section they are required. `docs/agents/e2e.md` says how this repository writes and runs them.
+
 Keep a feature to a handful of issues, and plan the next one after seeing the first built: issues written long before they run describe code that no longer exists.
 
 ## Working on an existing codebase

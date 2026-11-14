@@ -74,7 +74,7 @@ jobs:
           path: _ctl
           persist-credentials: false
       - id: f
-        run: bash _ctl/scripts/e2e.sh plan
+        run: bash _ctl/scripts/e2e.sh plan feature
         env:
           COMMAND: ${{ vars.PEPPEC_E2E_FEATURE }}
           HEAD_REF: ${{ github.head_ref }}
@@ -109,7 +109,7 @@ jobs:
           path: _ctl
           persist-credentials: false
       - id: f
-        run: bash _ctl/scripts/e2e.sh plan
+        run: bash _ctl/scripts/e2e.sh plan all
         env:
           COMMAND: ${{ vars.PEPPEC_E2E_ALL }}
           HEAD_REF: ${{ github.head_ref }}
