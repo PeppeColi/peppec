@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.30.1] - 2026-11-14
+
+### Added
+
+- The README lists every Telegram notification, what to do about it and whether it rings.
+
 ## [1.30.0] - 2026-11-14
 
 ### Changed
@@ -402,7 +408,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.30.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.30.1...HEAD
+[1.30.1]: https://github.com/PeppeColi/peppec/compare/v1.30.0...v1.30.1
 [1.30.0]: https://github.com/PeppeColi/peppec/compare/v1.29.2...v1.30.0
 [1.29.2]: https://github.com/PeppeColi/peppec/compare/v1.29.1...v1.29.2
 [1.29.1]: https://github.com/PeppeColi/peppec/compare/v1.29.0...v1.29.1

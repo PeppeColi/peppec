@@ -22,7 +22,7 @@ Two repositories are involved:
 
 The bot uses long polling, so it needs no public address and no open ports. Notifications are sent from GitHub Actions, so they arrive even if the bot is down.
 
-Only the notifications that need your action make the phone ring: a stopped queue or a blocked issue, a question, a pull request ready to merge (manual mode), a feature ready to be tried, a missing base branch, a wrong label, end-to-end tests the hotfixes could not fix, a token about to expire. The others arrive silently, without sound or vibration: a merge in automatic mode, a quota retry, a hotfix or sync work unit opened by the queue, the base branch back, the agent answering CodeRabbit, the trace of a dashboard action. The daily summary is silent too, unless a token is about to expire, and it is not sent on a day with nothing merged, blocked, asked or in queue.
+Only the notifications that need your action make the phone ring: a stopped queue or a blocked issue, a question, a pull request ready to merge (manual mode), a feature ready to be tried, a missing base branch, a wrong label, end-to-end tests the hotfixes could not fix, a token about to expire. The others arrive silently, without sound or vibration: a merge in automatic mode, a quota retry, a hotfix or sync work unit opened by the queue, the base branch back, the agent answering CodeRabbit, the trace of a dashboard action. The daily summary is silent too, unless a token is about to expire, and it is not sent on a day with nothing merged, blocked, asked or in queue. The full list is in the [README](../README.md#notifications).
 
 ## Issue flow
 
