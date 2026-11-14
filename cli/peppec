@@ -1096,7 +1096,7 @@ cmd_doctor() {
     local push_on
     push_on=$(host_file .github/workflows/ci.yml | sed -n '/^  push:/,/^ \{0,2\}[^ ]/p' || true)
     if [ -z "$push_on" ] || { grep -q 'branches' <<< "$push_on" \
-         && ! grep -qE "[[ ,]$BASE_BRANCH[], ]|^ *- *$BASE_BRANCH *\$" <<< "$push_on"; }; then
+         && ! grep -qE "[[ ,]${BASE_BRANCH}[], ]|^ *- *${BASE_BRANCH} *\$" <<< "$push_on"; }; then
       warn "ci.yml does not run on the pushes to $BASE_BRANCH: add it next to main under 'push: branches', so each merge is checked where it lands"
     fi
   fi
