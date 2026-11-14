@@ -76,7 +76,7 @@ PEPPEC can be installed on a project that already has code, history and habits. 
 - [ ] **No open issue labelled `ready` that you do not want built.** The first run takes the oldest one. On a new installation `init` lists them and offers to remove the label; it also warns when `ready` already existed with another description. If `ready` means something else to you, rename your label first.
 - [ ] **A `dev` branch, if you already have one.** `init` proposes `dev` as the base branch and uses it as it is. If it has commits `main` lacks, `init` tells you to bring `main` into it with a pull request after the install commit, so both branches run the same workflow files.
 - [ ] **Existing branch protection.** `init` leaves an existing branch ruleset alone and only tells you what it should require; check that it requires `ci / ci`. `peppec doctor` warns when the base branch requires approving reviews or a code owner review: the workflow merges with the app, so automatic merges can be refused.
-- [ ] **CI fast enough, and green.** `peppec doctor` warns when the last CI run on `main` failed, and when CI has taken longer than `PEPPEC_STALL_MINUTES` (120 by default): issues would stop waiting for it.
+- [ ] **CI fast enough, and green.** `peppec doctor` warns when the last CI run on the base branch failed, and when CI has taken longer than `PEPPEC_STALL_MINUTES` (120 by default): issues would stop waiting for it.
 
 Two planning sessions are worth doing before the first feature: see [Working on an existing codebase](planning.md#working-on-an-existing-codebase).
 
@@ -244,7 +244,7 @@ curl -fsSL "$base/peppec.yml" -o .github/peppec.yml
 
 2. In `.github/peppec.yml` choose the [preset](../presets) for your project. Each preset's README lists what it installs and checks; any default can be overridden.
 3. If the tests need something the preset does not install, add your own setup action as described below.
-4. In `summary.yml`, adjust the cron hours to your time zone as explained in the file.
+4. In `summary.yml`, adjust the cron hours to your time zone as explained in the file. In `ci.yml`, the `push` branches are `main` and the base branch: with `main` as base branch, remove `dev`.
 5. Commit, and push the same commit to `main` and to the base branch from your account (`git push --atomic origin HEAD:main HEAD:dev`, see [the base branch](#the-base-branch-dev)). Check that the `ci` workflow passes.
 6. Go back to the ruleset of Phase 1 and add **`ci / ci`** to "Require status checks to pass".
 
@@ -297,6 +297,7 @@ What changes:
 - **Issues are closed by the workflow.** GitHub closes an issue by itself only when its pull request reaches the default branch. A closed issue therefore means "merged into `dev`", not "on `main`".
 - **The configuration is read from `dev`.** `.github/peppec.yml` and your setup action travel with the code they check, and reach `main` together with it. `peppec doctor` warns when the configuration differs between the two branches.
 - **The workflow files must be the same on both branches.** GitHub runs the scheduled and manual runs from the copy on `main`, and the runs started by a pull request (review submitted, pull request closed) from the copy on `dev`. A change to them, such as an [upgrade](#upgrading), goes to `main` first and is then merged into `dev`. `peppec doctor` reports a difference as a problem.
+- **CI runs on every push to `dev`**, as on `main`: each merge is checked where it lands, so a `dev` broken by two merges together, or by a push of yours, shows up at once instead of in the agent's next pull request. It also keeps a fresh build cache for the pull requests into `dev`. The cost is one more CI run per merge. `init` writes both branches in `ci.yml`; `peppec doctor` warns when `dev` is missing there.
 - **Bringing `dev` to `main` is yours to do**, with a pull request merged with a merge commit. A squash would leave the two branches with different histories, and the next pull request between them would conflict. A fix made directly on `main` must be merged back into `dev`. `dev` stays after the merge: GitHub does not delete merged branches here (Phase 1), on any plan. Do not press "Delete branch" on that pull request. The second ruleset makes the button fail; the first one does not, because admins bypass it. Where rulesets are not available and `dev` was deleted by mistake, "Restore branch" on the same pull request brings it back.
 - **Without `dev` the queue stops.** If the branch is missing, nothing is started and you get one Telegram message; the queue goes on by itself when the branch is back (see [Merge modes](architecture.md#merge-modes)).
 
