@@ -16,7 +16,7 @@ jobs:
     outputs:
       presets: ${{ steps.list.outputs.presets }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: bash scripts/lint-presets.sh
       # Syntax of the scripts and of the command line, which must also run on the bash 3.2 of macOS
       - run: |
@@ -35,7 +35,7 @@ jobs:
         preset: ${{ fromJSON(needs.lint.outputs.presets) }}
     steps:
       # Same layout as a host repository: the project at the root, the engine in _ctl
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { path: _ctl }
       - id: cfg
         run: |
