@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-11-14
+
 ### Added
 
 - The preset `none`, for a project whose language is not chosen yet: it installs nothing and its
@@ -525,7 +527,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/PeppeColi/peppec/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/PeppeColi/peppec/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/PeppeColi/peppec/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/PeppeColi/peppec/compare/v2.2.0...v2.3.0
