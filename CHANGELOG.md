@@ -9,6 +9,14 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- The workflows give `actions/create-github-app-token` the app's Client ID (`client-id`) in place of
+  the deprecated `app-id`, read from the new variable `PEPPEC_APP_CLIENT_ID`. `peppec init` reads it
+  from the app (when it creates the app or has its key) or asks for it; `peppec doctor` reports it
+  missing and, with `--key`, checks it against the app. Hosts without the variable keep working: the
+  workflows fall back to `PEPPEC_APP_ID`. `PEPPEC_APP_ID` stays, the Telegram bot still needs it.
+
 ## [2.3.1] - 2026-11-14
 
 ### Changed
