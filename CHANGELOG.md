@@ -9,6 +9,15 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Added
+
+- A specification decides whether its feature needs new end-to-end tests, in a section named
+  "End-to-end": `None` skips `ci / e2e_feature` (and its hotfixes) for that feature, a list of
+  scenarios gets a work unit of size L that writes them; without the section they stay required.
+  `ci / e2e_all` still runs on every feature pull request.
+- `peppec init` creates a placeholder `docs/agents/e2e.md` (how the repository writes and runs its
+  end-to-end tests); `peppec doctor` notes when it is missing.
+
 ## [1.31.0] - 2026-11-14
 
 ### Changed

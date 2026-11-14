@@ -321,20 +321,22 @@ notify_feature_done() {
   open=$(jq --argjson n "$1" '[.[] | select(.state == "open" and .number != $n)] | length' <<< "$subs")
   [ "$open" -eq 0 ] || return 0
   [ "$(marker_get "$pn" done)" != "$total" ] || return 0
-  local where="${BASE_BRANCH:-main}" link="https://github.com/$REPO/issues/$pn" fb pr synced
+  local where="${BASE_BRANCH:-main}" link="https://github.com/$REPO/issues/$pn" fb pr synced decision
   # With a feature branch, the pull request that brings it into the base branch: opened here,
   # merged only by you, after trying the feature. Its merge closes the specification (finish_feature)
   fb=$(feature_of "$pn")
   if [ -n "$fb" ]; then
     where=$fb
-    pr=$(feature_pr "$pn" "$fb" "$(jq -r .title <<< "$parent")")
+    decision=$(e2e_decision "$(jq -r '.body // ""' <<< "$parent")")
+    pr=$(feature_pr "$pn" "$fb" "$(jq -r .title <<< "$parent")" "$decision")
     [ -z "$pr" ] || link=$pr
     # The base branch went on while the feature was built: it is brought in first, so what you try
     # is what the merge will give. A conflict becomes a work unit, and this message waits for it
     synced=$(sync_feature "$pn" "$fb") || return 0
     [ "$synced" != conflict ] || return 0
-    # With end-to-end tests the message waits for their result on the pull request (judge_features)
-    if [ -n "${PEPPEC_E2E_FEATURE:-}" ]; then
+    # With end-to-end tests the message waits for their result on the pull request (judge_features),
+    # unless the specification decided it needs none
+    if [ -n "${PEPPEC_E2E_FEATURE:-}" ] && [ "$decision" != none ]; then
       echo "Feature of #$pn finished: waiting for its end-to-end tests on $link"
       return 0
     fi
@@ -373,8 +375,13 @@ judge_features() {
     total=$(jq '.sub_issues_summary.total // 0' <<< "$spec")
     [ "$(jq '.sub_issues_summary.completed // 0' <<< "$spec")" -eq "$total" ] || continue
     [ "$(marker_get "$pn" e2e)" != "$sha" ] || continue
-    check=$(gh api -X GET "repos/$REPO/commits/$sha/check-runs" -f check_name="$E2E_CHECK" \
-      --jq '.check_runs[0] | if . == null then "pending" elif .status != "completed" then "pending" else "\(.conclusion) \(.id)" end')
+    # Read from the specification itself, which may have changed after CI ran on this commit
+    if [ "$(e2e_decision "$(jq -r '.body // ""' <<< "$spec")")" = none ]; then
+      check=none
+    else
+      check=$(gh api -X GET "repos/$REPO/commits/$sha/check-runs" -f check_name="$E2E_CHECK" \
+        --jq '.check_runs[0] | if . == null then "pending" elif .status != "completed" then "pending" else "\(.conclusion) \(.id)" end')
+    fi
     case "$check" in
       pending)
         if [ "$(age_minutes "$(gh api "repos/$REPO/commits/$sha" --jq .commit.committer.date)")" -ge "${STALL_MINUTES:-30}" ] \
@@ -384,9 +391,10 @@ judge_features() {
         else
           echo "Waiting for the end-to-end tests of #$pn"
         fi;;
-      success*|skipped*|neutral*)
+      none|success*|skipped*|neutral*)
         marker_set "$pn" e2e "$sha"; marker_set "$pn" e2efail 0
-        echo "End-to-end tests of #$pn passed on $sha"
+        if [ "$check" = none ]; then echo "Specification #$pn needs no new end-to-end tests"
+        else echo "End-to-end tests of #$pn passed on $sha"; fi
         if [ "$(marker_get "$pn" done)" != "$total" ]; then
           ready_to_try "$pn" "$total" "$(jq -r .title <<< "$spec")" "$head" "$url"
         fi;;
@@ -432,15 +440,44 @@ ${log:-(not available)}
 
 # The open pull request of a feature branch into the base branch, opened when missing. Its URL
 feature_pr() {
-  local pn=$1 fb=$2 title=$3 pr
-  pr=$(gh pr list -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --state open --json url,isCrossRepository --jq '[.[] | select(.isCrossRepository | not)][0].url // empty')
-  if [ -z "$pr" ]; then
-    pr=$(gh pr create -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --title "$title (#$pn)" \
-      --body "Feature of specification #$pn. Try it on \`$fb\`, then merge this pull request: the workflow closes the specification and removes the branch. Never merged automatically.
-
-<!-- peppec:feature=$pn -->") || pr=""
+  local pn=$1 fb=$2 title=$3 decision=${4:-missing} pr body old
+  # The end-to-end decision of the specification travels in the body, for the CI job e2e_feature
+  # (scripts/e2e.sh), which cannot read issues. Kept current when the feature is finished again
+  body="Feature of specification #$pn. Try it on \`$fb\`, then merge this pull request: the workflow closes the specification and removes the branch. Never merged automatically."
+  [ "$decision" != none ] || body+=$'\n\n'"The specification needs no new end-to-end tests: \`e2e_feature\` does not run them."
+  body+=$'\n\n'"<!-- peppec:feature=$pn -->"
+  [ "$decision" != none ] || body+=$'\n'"$E2E_NONE"
+  old=$(gh pr list -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --state open --json url,body,isCrossRepository \
+    --jq '[.[] | select(.isCrossRepository | not)][0] // empty')
+  if [ -z "$old" ]; then
+    pr=$(gh pr create -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --title "$title (#$pn)" --body "$body") || pr=""
+  else
+    pr=$(jq -r .url <<< "$old")
+    [ "$(jq -r '.body // ""' <<< "$old")" = "$body" ] \
+      || gh api -X PATCH "repos/$REPO/pulls/${pr##*/}" -f body="$body" > /dev/null || true
   fi
   echo "$pr"
+}
+
+# The end-to-end decision of a specification, from its body ($1): the section "End-to-end" that
+# planning sessions write (examples/claude-md-section.md). Prints "none" when its first line
+# starts with "None", "tests" when it lists anything, "missing" without the section. Only "none"
+# skips the feature's end-to-end tests: a missing decision keeps them required
+E2E_NONE='<!-- peppec:e2e=none -->'
+e2e_decision() {
+  tr -d '\r' <<< "$1" | awk '
+    /^#+[ \t]/ {
+      if (s) exit
+      h = tolower($0); sub(/^#+[ \t]+/, "", h); sub(/[ \t#]+$/, "", h)
+      if (h ~ /^(end[- ]to[- ]end|e2e)( tests)?$/) { s = 1; found = 1 }
+      next
+    }
+    s && NF {
+      l = tolower($0); sub(/^[ \t]*([-*+][ \t]+)?/, "", l)
+      d = (l ~ /^none/) ? "none" : "tests"
+      exit
+    }
+    END { print (d != "") ? d : (found ? "tests" : "missing") }'
 }
 
 # Brings the base branch into feature branch $2 of specification $1, with a merge commit made by

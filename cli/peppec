@@ -224,6 +224,7 @@ put_secret() { printf '%s' "$2" | gh secret set "$1" -R "$REPO" > /dev/null; ok 
 # The PEPPEC section of CLAUDE.md, read by the planning sessions on the owner's computer (wayfinder,
 # /to-spec, /to-tickets). It lives between two markers, outside the block the skills' setup rewrites
 TRIAGE_FILE=docs/agents/triage-labels.md
+E2E_FILE=docs/agents/e2e.md
 claude_section() { engine_file examples/claude-md-section.md | sed '/^<!-- Copy /d'; }
 # The section found in a CLAUDE.md on stdin; empty when there is none
 section_of() { sed -n '/^<!-- peppec:start/,/^<!-- peppec:end -->/p'; }
@@ -765,6 +766,12 @@ init_planning() {
     fi
   fi
 
+  # Read by planning sessions when a specification decides its end-to-end tests: a placeholder,
+  # yours to fill in; an existing file is never touched
+  if [ -f "$E2E_FILE" ]; then ok "$E2E_FILE (kept)"; else
+    write_file "$E2E_FILE" "$(engine_file examples/e2e.md | sed -e '/^<!-- Copy to /d')"
+  fi
+
   # Written by the setup skill of mattpocock/skills: /to-tickets applies the label of this row
   [ -f "$TRIAGE_FILE" ] || return 0
   case "$(triage_state < "$TRIAGE_FILE")" in
@@ -919,6 +926,7 @@ cmd_init() {
   [ -f CLAUDE.md ] && paths="$paths CLAUDE.md"
   [ -f .claude/settings.json ] && paths="$paths .claude/settings.json"
   [ -f "$TRIAGE_FILE" ] && paths="$paths $TRIAGE_FILE"
+  [ -f "$E2E_FILE" ] && paths="$paths $E2E_FILE"
   local n=2
   if [ "$BASE_BRANCH" = main ]; then
     note "1. Review the files, then commit and push them to main:"
@@ -1132,6 +1140,8 @@ cmd_doctor() {
       *) warn "$TRIAGE_FILE does not map ready-for-agent to ready: issues from /to-tickets will not be built (peppec init fixes it)";;
     esac
   fi
+  if host_file "$E2E_FILE" > /dev/null 2>&1; then ok "$E2E_FILE describes the end-to-end tests"
+  else note "no $E2E_FILE: planning sessions do not know how this repository writes end-to-end tests (peppec init creates it)"; fi
   HOOK=false cmd_skills
   if [ -n "$(host_file .claude/settings.json | hook_of)" ]; then ok ".claude/settings.json checks the planning skills when a session starts"
   else warn "no hook checks the planning skills when a session starts (peppec init adds it to .claude/settings.json)"; fi
