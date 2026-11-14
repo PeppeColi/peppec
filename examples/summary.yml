@@ -13,10 +13,10 @@ permissions:
 
 jobs:
   summary:
-    uses: PeppeColi/peppec/.github/workflows/summary.yml@v1
+    uses: PeppeColi/peppec/.github/workflows/summary.yml@v2
     with:
-      engine_ref: v1
+      engine_ref: v2
     secrets:
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      PEPPEC_APP_PRIVATE_KEY: ${{ secrets.PEPPEC_APP_PRIVATE_KEY }}
+      PEPPEC_TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
+      PEPPEC_TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}

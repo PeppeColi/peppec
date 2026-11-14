@@ -20,17 +20,17 @@ The simplest way to get it is the gh extension:
 gh extension install PeppeColi/gh-peppec
 ```
 
-Then type `gh peppec` wherever this guide says `peppec`. Each run downloads the command line of the engine version it installs (`v1`, or the one given with `--ref`), so there is nothing to update.
+Then type `gh peppec` wherever this guide says `peppec`. Each run downloads the command line of the engine version it installs (`v2`, or the one given with `--ref`), so there is nothing to update.
 
 Or install the script once, outside your projects, so it serves every repository and never ends up in a commit:
 
 ```bash
 mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v1/cli/peppec -o ~/.local/bin/peppec
+curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec -o ~/.local/bin/peppec
 chmod +x ~/.local/bin/peppec
 ```
 
-If `~/.local/bin` is not in your `PATH`, call the script with its full path. `peppec update` replaces it with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update. To try it without installing anything: `bash <(curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v1/cli/peppec) init`.
+If `~/.local/bin` is not in your `PATH`, call the script with its full path. `peppec update` replaces it with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update. To try it without installing anything: `bash <(curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec) init`.
 
 Then, inside a clone of your repository:
 
@@ -76,7 +76,7 @@ PEPPEC can be installed on a project that already has code, history and habits. 
 - [ ] **No open issue labelled `ready` that you do not want built.** The first run takes the oldest one. On a new installation `init` lists them and offers to remove the label; it also warns when `ready` already existed with another description. If `ready` means something else to you, rename your label first.
 - [ ] **A `dev` branch, if you already have one.** `init` proposes `dev` as the base branch and uses it as it is. If it has commits `main` lacks, `init` tells you to bring `main` into it with a pull request after the install commit, so both branches run the same workflow files.
 - [ ] **Existing branch protection.** `init` leaves an existing branch ruleset alone and only tells you what it should require; check that it requires `ci / ci`. `peppec doctor` warns when the base branch requires approving reviews or a code owner review: the workflow merges with the app, so automatic merges can be refused.
-- [ ] **CI fast enough, and green.** `peppec doctor` warns when the last CI run on `main` failed, and when CI has taken longer than `STALL_MINUTES` (120 by default): issues would stop waiting for it.
+- [ ] **CI fast enough, and green.** `peppec doctor` warns when the last CI run on `main` failed, and when CI has taken longer than `PEPPEC_STALL_MINUTES` (120 by default): issues would stop waiting for it.
 
 Two planning sessions are worth doing before the first feature: see [Working on an existing codebase](planning.md#working-on-an-existing-codebase).
 
@@ -129,10 +129,10 @@ Labels, merges, counters and the Telegram bot act through a GitHub App of yours,
 | Secret | Source | Permissions |
 | --- | --- | --- |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` | Uses your subscription's quota |
-| `AGENT_TOKEN` | Fine-grained token of your account, `<REPO>` only | Contents, Issues, Pull requests: read and write; Actions: read. **No** Workflows |
-| `APP_PRIVATE_KEY` | The app's private key (`.pem` file) | Those of the app, below |
-| `TELEGRAM_BOT_TOKEN` | BotFather | — |
-| `TELEGRAM_CHAT_ID` | Telegram API | — |
+| `PEPPEC_AGENT_TOKEN` | Fine-grained token of your account, `<REPO>` only | Contents, Issues, Pull requests: read and write; Actions: read. **No** Workflows |
+| `PEPPEC_APP_PRIVATE_KEY` | The app's private key (`.pem` file) | Those of the app, below |
+| `PEPPEC_TELEGRAM_BOT_TOKEN` | BotFather | — |
+| `PEPPEC_TELEGRAM_CHAT_ID` | Telegram API | — |
 
 Never write these values in a file of the repository, in an issue or in a note.
 
@@ -162,10 +162,10 @@ curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates" | jq '.result[0].messag
 
 ```bash
 R=<USER>/<REPO>
-for s in CLAUDE_CODE_OAUTH_TOKEN AGENT_TOKEN TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+for s in CLAUDE_CODE_OAUTH_TOKEN PEPPEC_AGENT_TOKEN PEPPEC_TELEGRAM_BOT_TOKEN PEPPEC_TELEGRAM_CHAT_ID; do
   gh secret set "$s" -R "$R"
 done
-gh secret set APP_PRIVATE_KEY -R "$R" < ~/Downloads/<downloaded-file>.pem
+gh secret set PEPPEC_APP_PRIVATE_KEY -R "$R" < ~/Downloads/<downloaded-file>.pem
 ```
 
 Keep the `.pem` file until Phase 6, where the bot needs it, then delete it from your computer.
@@ -199,44 +199,44 @@ gh api user --jq '.name, "\(.id)+\(.login)@users.noreply.github.com"'
 3. Set the variables:
 
 ```bash
-gh variable set CONTROL_ISSUE -R "$R" -b "<N_CONTROL>"
-gh variable set OWNER_LOGIN -R "$R" -b "<USER>"
-gh variable set APP_ID -R "$R" -b "<APP_ID>"
-gh variable set APP_LOGIN -R "$R" -b "<APP_SLUG>[bot]"
-gh variable set AGENT_GIT_NAME -R "$R" -b "<your name>"
-gh variable set AGENT_GIT_EMAIL -R "$R" -b "<noreply email>"
-gh variable set TZ_NAME -R "$R" -b "<your time zone, for example Europe/Rome>"
-gh variable set WORK_START_HOUR -R "$R" -b 22
-gh variable set WORK_END_HOUR -R "$R" -b 9
-gh variable set MAX_REVIEW_ROUNDS -R "$R" -b 3
-gh variable set LARGE_FROM_ROUND -R "$R" -b 3
-gh variable set MAX_CI_ATTEMPTS -R "$R" -b 5
-gh variable set MAX_ISSUE_MINUTES -R "$R" -b 120
-gh variable set STALL_MINUTES -R "$R" -b 120
-gh variable set QUOTA_RETRY_MINUTES -R "$R" -b 60
-gh variable set SUMMARY_HOUR -R "$R" -b 9
-gh variable set CLAUDE_TOKEN_EXPIRES -R "$R" -b "<one year after claude setup-token, YYYY-MM-DD>"
-gh variable set AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal token, YYYY-MM-DD>"
+gh variable set PEPPEC_CONTROL_ISSUE -R "$R" -b "<N_CONTROL>"
+gh variable set PEPPEC_OWNER_LOGIN -R "$R" -b "<USER>"
+gh variable set PEPPEC_APP_ID -R "$R" -b "<APP_ID>"
+gh variable set PEPPEC_APP_LOGIN -R "$R" -b "<APP_SLUG>[bot]"
+gh variable set PEPPEC_AGENT_GIT_NAME -R "$R" -b "<your name>"
+gh variable set PEPPEC_AGENT_GIT_EMAIL -R "$R" -b "<noreply email>"
+gh variable set PEPPEC_TZ_NAME -R "$R" -b "<your time zone, for example Europe/Rome>"
+gh variable set PEPPEC_WORK_START_HOUR -R "$R" -b 22
+gh variable set PEPPEC_WORK_END_HOUR -R "$R" -b 9
+gh variable set PEPPEC_MAX_REVIEW_ROUNDS -R "$R" -b 3
+gh variable set PEPPEC_LARGE_FROM_ROUND -R "$R" -b 3
+gh variable set PEPPEC_MAX_CI_ATTEMPTS -R "$R" -b 5
+gh variable set PEPPEC_MAX_ISSUE_MINUTES -R "$R" -b 120
+gh variable set PEPPEC_STALL_MINUTES -R "$R" -b 120
+gh variable set PEPPEC_QUOTA_RETRY_MINUTES -R "$R" -b 60
+gh variable set PEPPEC_SUMMARY_HOUR -R "$R" -b 9
+gh variable set PEPPEC_CLAUDE_TOKEN_EXPIRES -R "$R" -b "<one year after claude setup-token, YYYY-MM-DD>"
+gh variable set PEPPEC_AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal token, YYYY-MM-DD>"
 ```
 
 | Variable | Meaning |
 | --- | --- |
-| `WORK_START_HOUR`, `WORK_END_HOUR` | Hours between which new issues are started, in `TZ_NAME`. The window may cross midnight. Ignored while the schedule is `always` |
-| `MAX_ISSUE_MINUTES` | The agent's total working time per issue. Waits for quota, CI and CodeRabbit do not count |
-| `STALL_MINUTES` | How long a pull request may wait for a CI result; a review may take twice as long |
-| `LARGE_FROM_ROUND` | Review round from which the model of size L takes over |
-| `SUMMARY_HOUR` | Hour of the daily summary, in `TZ_NAME` |
-| `BASE_BRANCH` | The branch the agent starts from and its pull requests are merged into. `main` when not set; `peppec init` proposes `dev` on a new installation. See [The base branch `dev`](#the-base-branch-dev) |
+| `PEPPEC_WORK_START_HOUR`, `PEPPEC_WORK_END_HOUR` | Hours between which new issues are started, in `PEPPEC_TZ_NAME`. The window may cross midnight. Ignored while the schedule is `always` |
+| `PEPPEC_MAX_ISSUE_MINUTES` | The agent's total working time per issue. Waits for quota, CI and CodeRabbit do not count |
+| `PEPPEC_STALL_MINUTES` | How long a pull request may wait for a CI result; a review may take twice as long |
+| `PEPPEC_LARGE_FROM_ROUND` | Review round from which the model of size L takes over |
+| `PEPPEC_SUMMARY_HOUR` | Hour of the daily summary, in `PEPPEC_TZ_NAME` |
+| `PEPPEC_BASE_BRANCH` | The branch the agent starts from and its pull requests are merged into. `main` when not set; `peppec init` proposes `dev` on a new installation. See [The base branch `dev`](#the-base-branch-dev) |
 | `PEPPEC_BRANCHES` | Optional: the names of the agent's branches, and a feature branch for each specification. See [Feature branches](#feature-branches) |
 | `PEPPEC_E2E_FEATURE`, `PEPPEC_E2E_ALL` | Optional, with feature branches: the end-to-end tests of one feature and of the whole project. See [End-to-end tests](#end-to-end-tests) |
-| `CLAUDE_TOKEN_EXPIRES`, `AGENT_TOKEN_EXPIRES` | The summary warns you during the 30 days before each date. The second is optional: leave it out for a token that never expires |
+| `PEPPEC_CLAUDE_TOKEN_EXPIRES`, `PEPPEC_AGENT_TOKEN_EXPIRES` | The summary warns you during the 30 days before each date. The second is optional: leave it out for a token that never expires |
 
 ## Phase 5 — Workflows and configuration
 
 1. Copy the three workflows and the configuration from [`examples/`](../examples):
 
 ```bash
-base=https://raw.githubusercontent.com/PeppeColi/peppec/v1/examples
+base=https://raw.githubusercontent.com/PeppeColi/peppec/v2/examples
 mkdir -p .github/workflows
 for f in agent ci summary; do curl -fsSL "$base/$f.yml" -o ".github/workflows/$f.yml"; done
 curl -fsSL "$base/peppec.yml" -o .github/peppec.yml
@@ -285,7 +285,7 @@ git push --atomic origin HEAD:main HEAD:dev     # one push, both branches; in an
 By hand, create `dev` before the install commit (`git push origin main:dev`, or with the first push above in an empty repository) and set the variable:
 
 ```bash
-gh variable set BASE_BRANCH -R "$R" -b dev
+gh variable set PEPPEC_BASE_BRANCH -R "$R" -b dev
 ```
 
 Then add `dev` to the target branches of the ruleset of Phase 1, and create a second branch ruleset for `dev` alone, with only "Restrict deletions" and an empty bypass list. `peppec init` creates the second ruleset itself. On a private repository of a free plan rulesets are not available: `dev` works all the same, only without that second guard.
@@ -346,7 +346,7 @@ gh variable set PEPPEC_E2E_ALL -R "$R" -b 'npx playwright test'
 - **`docs/agents/e2e.md`** says how the repository writes and runs its end-to-end tests: planning sessions read it when they decide. `peppec init` creates it as a placeholder when it is missing; fill it in yourself.
 - **`PEPPEC_E2E_ALL`**: the whole suite (CI job `ci / e2e_all`), on the same pull request. Add `ci / e2e_all` to the required checks of the ruleset of the base branch: a red suite then blocks your merge.
 - A variable left out turns its level off. On every other pull request both jobs succeed without running anything, so requiring them blocks nothing else.
-- The tests run after the setup of the preset and your `extra_setup`, with the feature's own configuration: services and browsers go in your setup action. They count towards nothing but their own job: give them the time they need in the workflow, not in `STALL_MINUTES`, which only bounds how long the workflow waits before telling you there is no result.
+- The tests run after the setup of the preset and your `extra_setup`, with the feature's own configuration: services and browsers go in your setup action. They count towards nothing but their own job: give them the time they need in the workflow, not in `PEPPEC_STALL_MINUTES`, which only bounds how long the workflow waits before telling you there is no result.
 
 ## Phase 6 — Telegram bot
 
@@ -367,7 +367,7 @@ cd ~/peppec-bot
 2. Download the compose file and the environment template:
 
 ```bash
-base=https://raw.githubusercontent.com/PeppeColi/peppec/v1/bot
+base=https://raw.githubusercontent.com/PeppeColi/peppec/v2/bot
 curl -fsSL "$base/docker-compose.yml" -o docker-compose.yml
 curl -fsSL "$base/.env.example" -o .env && chmod 600 .env
 ```
@@ -416,9 +416,11 @@ If something gets stuck, look first at the log of the `decide` job: it always sa
 
 ## Upgrading
 
-The engine version is the ref after `@` in the three workflows, repeated in `engine_ref`. To upgrade, change both in each file. With a base branch other than `main`, merge `main` into it afterwards, so both branches run the same version. `v1` follows every compatible release; use a full version or a commit SHA if you prefer to upgrade deliberately.
+The engine version is the ref after `@` in the three workflows, repeated in `engine_ref`. To upgrade, change both in each file. With a base branch other than `main`, merge `main` into it afterwards, so both branches run the same version. `v2` follows every compatible release; use a full version or a commit SHA if you prefer to upgrade deliberately.
 
 The bot follows the same versions: `docker compose pull && docker compose up -d`, then `/version`.
+
+From 2.0 every variable and secret of PEPPEC starts with `PEPPEC_` (`CLAUDE_CODE_OAUTH_TOKEN` excepted). To move a 1.x installation, run `peppec init` of 2.0, which asks again for the secrets and stores the new names and workflows, then delete the old variables and secrets on GitHub. The bot's `.env` keeps its names; change the image tag in `docker-compose.yml` to `:2`.
 
 From 1.6 the notifications start with the repository name, and a bot older than 1.6 does not accept replies to them: upgrade the bot together with the engine. A bot configured with `REPO` and `CONTROL_ISSUE` keeps working; `REPOS` replaces both.
 
@@ -432,7 +434,7 @@ What the engine does about security is in [architecture.md](architecture.md#secu
 
 ## Maintenance
 
-- **Claude token**: it lasts one year. Run `claude setup-token` again, then update the `CLAUDE_CODE_OAUTH_TOKEN` secret and the `CLAUDE_TOKEN_EXPIRES` variable.
-- **Personal token**: regenerate it on GitHub before it expires, then update the `AGENT_TOKEN` secret and the `AGENT_TOKEN_EXPIRES` variable. Running `peppec init` again does both: answer yes when it asks whether to replace the token.
+- **Claude token**: it lasts one year. Run `claude setup-token` again, then update the `CLAUDE_CODE_OAUTH_TOKEN` secret and the `PEPPEC_CLAUDE_TOKEN_EXPIRES` variable.
+- **Personal token**: regenerate it on GitHub before it expires, then update the `PEPPEC_AGENT_TOKEN` secret and the `PEPPEC_AGENT_TOKEN_EXPIRES` variable. Running `peppec init` again does both: answer yes when it asks whether to replace the token.
 - **Scheduled workflows**: on public repositories GitHub disables them after 60 days without activity. Re-enable `agent` and `summary` from the Actions tab.
 - **App permissions**: if a step fails with "Resource not accessible by integration", add the missing permission on the app's page and accept the change in the installation settings.

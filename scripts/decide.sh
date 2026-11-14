@@ -152,7 +152,7 @@ if [ -z "$active" ]; then
   done
   # Written by someone else: its body would reach the agent's prompt, and its author can still
   # edit it after you label it. The label goes, so the bot and the dashboard do not count it
-  [ -n "${OWNER_LOGIN:-}" ] || { echo "OWNER_LOGIN is not set: no issue starts (peppec doctor)"; exit 0; }
+  [ -n "${OWNER_LOGIN:-}" ] || { echo "PEPPEC_OWNER_LOGIN is not set: no issue starts (peppec doctor)"; exit 0; }
   for n in $(jq -r --arg o "$OWNER_LOGIN" --arg a "${APP_LOGIN:-}" \
       '.[] | select(.user.login != $o and .user.login != $a) | .number' <<< "$open_ready"); do
     echo "Issue #$n was not written by $OWNER_LOGIN or the app: ready removed"

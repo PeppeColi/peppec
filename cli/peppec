@@ -9,7 +9,7 @@
 set -euo pipefail
 
 ENGINE="${PEPPEC_ENGINE:-PeppeColi/peppec}"
-REF="${PEPPEC_REF:-v1}"
+REF="${PEPPEC_REF:-v2}"
 YES=false
 HOOK=false
 REPO=""
@@ -18,7 +18,7 @@ KEY_FILE=""
 PRESET=""
 BASE_BRANCH=main
 OUT_DIR="peppec-bot"
-SECRETS="CLAUDE_CODE_OAUTH_TOKEN AGENT_TOKEN APP_PRIVATE_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID"
+SECRETS="CLAUDE_CODE_OAUTH_TOKEN PEPPEC_AGENT_TOKEN PEPPEC_APP_PRIVATE_KEY PEPPEC_TELEGRAM_BOT_TOKEN PEPPEC_TELEGRAM_CHAT_ID"
 WORK_DIRS=".agent/ _ctl/ _preset/ _extra/ _base/"
 
 LABELS='ready|Ready to be picked up by the agents
@@ -44,16 +44,16 @@ always on|New issues start at any hour, not only at night (control panel)
 base missing|The base branch does not exist: queue stopped until it is back (control panel)'
 
 # name|default|question; an empty default means the value is computed or asked without one
-NUMBERS='WORK_START_HOUR|22|Hour at which agents may start new issues (0-23)
-WORK_END_HOUR|9|Hour at which agents stop starting new issues (0-23)
-MAX_REVIEW_ROUNDS|3|Review rounds before the queue stops
-LARGE_FROM_ROUND|3|Review round from which the model of size L takes over
-MAX_CI_ATTEMPTS|5|Attempts to fix the checks, per review round
-MAX_ISSUE_MINUTES|120|Agent working time per issue, in minutes
-STALL_MINUTES|120|Minutes a pull request may wait for a CI result
-QUOTA_RETRY_MINUTES|60|Minutes between retries when the Claude quota is exhausted
-SUMMARY_HOUR|9|Hour of the daily summary (0-23)'
-VARIABLES="CONTROL_ISSUE OWNER_LOGIN APP_ID APP_LOGIN AGENT_GIT_NAME AGENT_GIT_EMAIL TZ_NAME WORK_START_HOUR WORK_END_HOUR MAX_REVIEW_ROUNDS LARGE_FROM_ROUND MAX_CI_ATTEMPTS MAX_ISSUE_MINUTES STALL_MINUTES QUOTA_RETRY_MINUTES SUMMARY_HOUR CLAUDE_TOKEN_EXPIRES"
+NUMBERS='PEPPEC_WORK_START_HOUR|22|Hour at which agents may start new issues (0-23)
+PEPPEC_WORK_END_HOUR|9|Hour at which agents stop starting new issues (0-23)
+PEPPEC_MAX_REVIEW_ROUNDS|3|Review rounds before the queue stops
+PEPPEC_LARGE_FROM_ROUND|3|Review round from which the model of size L takes over
+PEPPEC_MAX_CI_ATTEMPTS|5|Attempts to fix the checks, per review round
+PEPPEC_MAX_ISSUE_MINUTES|120|Agent working time per issue, in minutes
+PEPPEC_STALL_MINUTES|120|Minutes a pull request may wait for a CI result
+PEPPEC_QUOTA_RETRY_MINUTES|60|Minutes between retries when the Claude quota is exhausted
+PEPPEC_SUMMARY_HOUR|9|Hour of the daily summary (0-23)'
+VARIABLES="PEPPEC_CONTROL_ISSUE PEPPEC_OWNER_LOGIN PEPPEC_APP_ID PEPPEC_APP_LOGIN PEPPEC_AGENT_GIT_NAME PEPPEC_AGENT_GIT_EMAIL PEPPEC_TZ_NAME PEPPEC_WORK_START_HOUR PEPPEC_WORK_END_HOUR PEPPEC_MAX_REVIEW_ROUNDS PEPPEC_LARGE_FROM_ROUND PEPPEC_MAX_CI_ATTEMPTS PEPPEC_MAX_ISSUE_MINUTES PEPPEC_STALL_MINUTES PEPPEC_QUOTA_RETRY_MINUTES PEPPEC_SUMMARY_HOUR PEPPEC_CLAUDE_TOKEN_EXPIRES"
 
 # ---------- output ----------
 if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=""; G=""; Y=""; R=""; N=""; fi
@@ -455,7 +455,7 @@ create_app() {
 
 init_app() {
   step "GitHub App"
-  local current; current=$(var_of APP_ID)
+  local current; current=$(var_of PEPPEC_APP_ID)
   note "The app that applies labels and merges, and that the Telegram bot acts as."
   APP_ID=""; APP_SLUG=""
   KEY_FILE="${KEY_FILE:-${PEPPEC_APP_KEY_FILE:-}}"
@@ -467,9 +467,9 @@ init_app() {
     note "To create it by hand follow docs/setup.md, Phase 2."
     ask APP_ID "App ID" "${PEPPEC_APP_ID:-$current}"
   fi
-  is_number "$APP_ID" || { bad "no App ID: set it later with 'gh variable set APP_ID'"; APP_ID=""; return; }
+  is_number "$APP_ID" || { bad "no App ID: set it later with 'gh variable set PEPPEC_APP_ID'"; APP_ID=""; return; }
   local has_key=false
-  grep -qx APP_PRIVATE_KEY <<< "$SECRET_NAMES" && has_key=true
+  grep -qx PEPPEC_APP_PRIVATE_KEY <<< "$SECRET_NAMES" && has_key=true
   if [ -z "$KEY_FILE" ] && [ "$YES" = false ]; then
     if [ "$has_key" = true ]; then
       ask KEY_FILE "Path of the app's private key (.pem), empty to keep the stored one" ""
@@ -483,16 +483,16 @@ init_app() {
   fi
   if [ -n "$KEY_FILE" ]; then
     if check_app "$APP_ID" "$KEY_FILE"; then
-      gh secret set APP_PRIVATE_KEY -R "$REPO" < "$KEY_FILE" > /dev/null
-      ok "APP_PRIVATE_KEY (set)"
+      gh secret set PEPPEC_APP_PRIVATE_KEY -R "$REPO" < "$KEY_FILE" > /dev/null
+      ok "PEPPEC_APP_PRIVATE_KEY (set)"
     fi
   elif [ "$has_key" = true ]; then
-    ok "APP_PRIVATE_KEY (kept)"
+    ok "PEPPEC_APP_PRIVATE_KEY (kept)"
   else
-    bad "APP_PRIVATE_KEY missing: run init again with --key <file>"
+    bad "PEPPEC_APP_PRIVATE_KEY missing: run init again with --key <file>"
   fi
   if [ -z "$APP_SLUG" ]; then
-    current=$(var_of APP_LOGIN)
+    current=$(var_of PEPPEC_APP_LOGIN)
     ask APP_SLUG "App short name, as in its URL" "${current%\[bot\]}"
   fi
 }
@@ -501,25 +501,25 @@ init_variables() {
   step "Variables"
   local me name email value
   me=$(gh api user)
-  set_var CONTROL_ISSUE "$CONTROL"
-  set_var OWNER_LOGIN "$(jq -r .login <<< "$me")"
-  [ -n "$APP_ID" ] && set_var APP_ID "$APP_ID"
-  if [ -n "$APP_SLUG" ]; then set_var APP_LOGIN "${APP_SLUG}[bot]"; else bad "APP_LOGIN not set: the app's short name is unknown"; fi
-  name=$(var_of AGENT_GIT_NAME); email=$(var_of AGENT_GIT_EMAIL)
+  set_var PEPPEC_CONTROL_ISSUE "$CONTROL"
+  set_var PEPPEC_OWNER_LOGIN "$(jq -r .login <<< "$me")"
+  [ -n "$APP_ID" ] && set_var PEPPEC_APP_ID "$APP_ID"
+  if [ -n "$APP_SLUG" ]; then set_var PEPPEC_APP_LOGIN "${APP_SLUG}[bot]"; else bad "PEPPEC_APP_LOGIN not set: the app's short name is unknown"; fi
+  name=$(var_of PEPPEC_AGENT_GIT_NAME); email=$(var_of PEPPEC_AGENT_GIT_EMAIL)
   ask value "Name on the agent's commits" "${name:-$(jq -r '.name // .login' <<< "$me")}"
-  set_var AGENT_GIT_NAME "$value"
+  set_var PEPPEC_AGENT_GIT_NAME "$value"
   ask value "Email on the agent's commits" "${email:-$(jq -r '"\(.id)+\(.login)@users.noreply.github.com"' <<< "$me")}"
-  set_var AGENT_GIT_EMAIL "$value"
-  value=$(var_of TZ_NAME)
+  set_var PEPPEC_AGENT_GIT_EMAIL "$value"
+  value=$(var_of PEPPEC_TZ_NAME)
   ask TZ_NAME "Time zone" "${value:-$(system_tz)}"
   TZ="$TZ_NAME" date > /dev/null 2>&1 || die "unknown time zone: $TZ_NAME"
-  set_var TZ_NAME "$TZ_NAME"
+  set_var PEPPEC_TZ_NAME "$TZ_NAME"
   # A new installation gets dev from day one; an existing one without the variable has been on main
-  value=$(var_of BASE_BRANCH)
+  value=$(var_of PEPPEC_BASE_BRANCH)
   [ -n "$value" ] || { if [ "$FRESH" = true ]; then value=dev; else value=main; fi; }
   ask BASE_BRANCH "Branch the agent starts from and its pull requests are merged into" "$value"
   git check-ref-format --branch "$BASE_BRANCH" > /dev/null 2>&1 || die "not a branch name: $BASE_BRANCH"
-  set_var BASE_BRANCH "$BASE_BRANCH"
+  set_var PEPPEC_BASE_BRANCH "$BASE_BRANCH"
   init_base_branch
   init_feature_variables
   # The list is read on descriptor 3, so the questions can still read the terminal
@@ -528,7 +528,7 @@ init_variables() {
     ask value "$question" "${value:-$default}"
     is_number "$value" || die "$name must be a number"
     set_var "$name" "$value"
-    if [ "$name" = SUMMARY_HOUR ]; then SUMMARY_HOUR="$value"; fi
+    if [ "$name" = PEPPEC_SUMMARY_HOUR ]; then SUMMARY_HOUR="$value"; fi
   done 3<<< "$NUMBERS"
 }
 
@@ -582,9 +582,9 @@ PEPPEC_E2E_ALL|End-to-end tests of the whole project'
 explain_agent_token() {
   local name="peppec workflow - ${REPO##*/}" url
   url="https://github.com/settings/personal-access-tokens/new?$(jq -rn --arg n "${name:0:40}" \
-    --arg d "Pushes PEPPEC agent commits and opens pull requests. If it expires, the queue stops: regenerate it and update AGENT_TOKEN." \
+    --arg d "Pushes PEPPEC agent commits and opens pull requests. If it expires, the queue stops: regenerate it and update PEPPEC_AGENT_TOKEN." \
     '"name=\($n | @uri)&description=\($d | @uri)&expires_in=365&contents=write&issues=write&pull_requests=write&actions=read"')"
-  note "${B}AGENT_TOKEN${N}: a personal access token of your GitHub account."
+  note "${B}PEPPEC_AGENT_TOKEN${N}: a personal access token of your GitHub account."
   note "It is not the app's key, and not the token gh uses on this computer."
   note "The workflow uses it to push the agent's commits and open pull requests in your name."
   note "Create a fine-grained token; this link fills in name, description, expiry and permissions:"
@@ -601,7 +601,7 @@ init_secrets() {
   step "Secrets"
   note "Values are read without echo and sent straight to GitHub: nothing is written to disk."
   local name value existing
-  for name in CLAUDE_CODE_OAUTH_TOKEN AGENT_TOKEN TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+  for name in CLAUDE_CODE_OAUTH_TOKEN PEPPEC_AGENT_TOKEN PEPPEC_TELEGRAM_BOT_TOKEN PEPPEC_TELEGRAM_CHAT_ID; do
     existing=false; grep -qx "$name" <<< "$SECRET_NAMES" && existing=true
     value="${!name:-}"
     if [ -z "$value" ] && [ "$YES" = false ]; then
@@ -611,12 +611,12 @@ init_secrets() {
         CLAUDE_CODE_OAUTH_TOKEN)
           note "${B}CLAUDE_CODE_OAUTH_TOKEN${N}: lets the agent use Claude Code with your subscription."
           note "Run 'claude setup-token' in another terminal and paste the token it prints.";;
-        AGENT_TOKEN) explain_agent_token;;
-        TELEGRAM_BOT_TOKEN)
-          note "${B}TELEGRAM_BOT_TOKEN${N}: the token of your Telegram bot, used to send you notifications."
+        PEPPEC_AGENT_TOKEN) explain_agent_token;;
+        PEPPEC_TELEGRAM_BOT_TOKEN)
+          note "${B}PEPPEC_TELEGRAM_BOT_TOKEN${N}: the token of your Telegram bot, used to send you notifications."
           note "From @BotFather: /newbot for a new bot, or /mybots → your bot → API Token.";;
-        TELEGRAM_CHAT_ID)
-          note "${B}TELEGRAM_CHAT_ID${N}: the chat the notifications go to, and the only one the bot obeys."
+        PEPPEC_TELEGRAM_CHAT_ID)
+          note "${B}PEPPEC_TELEGRAM_CHAT_ID${N}: the chat the notifications go to, and the only one the bot obeys."
           if [ -n "${BOT_TOKEN:-}" ]; then
             note "Send any message to your bot now, then press Enter (empty to type the ID yourself)."
             read -r -p "  " _ || true
@@ -625,7 +625,7 @@ init_secrets() {
           fi;;
       esac
       if [ -z "$value" ]; then
-        if [ "$name" = TELEGRAM_CHAT_ID ]; then ask value "TELEGRAM_CHAT_ID" ""
+        if [ "$name" = PEPPEC_TELEGRAM_CHAT_ID ]; then ask value "PEPPEC_TELEGRAM_CHAT_ID" ""
         else ask_hidden value "Paste $name (it will not be shown)"; fi
       fi
     fi
@@ -637,36 +637,36 @@ init_secrets() {
       CLAUDE_CODE_OAUTH_TOKEN)
         case "$value" in sk-ant-oat*) ;; *) warn "the value does not look like a token from 'claude setup-token'";; esac
         NEW_CLAUDE_TOKEN=true;;
-      AGENT_TOKEN)
+      PEPPEC_AGENT_TOKEN)
         if [ "$(GH_TOKEN="$value" gh api "repos/$REPO" --jq .permissions.push 2> /dev/null)" = true ]; then
           ok "the token can write to $REPO"
-        else bad "AGENT_TOKEN cannot write to $REPO: not stored. Check its repository access and permissions"; continue; fi
+        else bad "PEPPEC_AGENT_TOKEN cannot write to $REPO: not stored. Check its repository access and permissions"; continue; fi
         NEW_AGENT_TOKEN=true;;
-      TELEGRAM_BOT_TOKEN)
+      PEPPEC_TELEGRAM_BOT_TOKEN)
         if telegram "$value" getMe | jq -e .ok > /dev/null 2>&1; then ok "Telegram accepts the bot token"; BOT_TOKEN="$value"
         else bad "Telegram rejects the bot token: not stored"; continue; fi;;
-      TELEGRAM_CHAT_ID)
+      PEPPEC_TELEGRAM_CHAT_ID)
         case "$value" in -[0-9]*|[0-9]*) ;; *) bad "the chat ID must be a number: not stored"; continue;; esac;;
     esac
     put_secret "$name" "$value"
   done
-  local expires; expires=$(var_of AGENT_TOKEN_EXPIRES)
+  local expires; expires=$(var_of PEPPEC_AGENT_TOKEN_EXPIRES)
   if [ "${NEW_AGENT_TOKEN:-false}" = true ] || [ -z "$expires" ]; then
     local proposal="$expires"
     if [ "${NEW_AGENT_TOKEN:-false}" = true ]; then proposal=$(next_year); fi
-    ask expires "Expiry date of AGENT_TOKEN, as shown by GitHub (YYYY-MM-DD, empty if it never expires)" "$proposal"
+    ask expires "Expiry date of PEPPEC_AGENT_TOKEN, as shown by GitHub (YYYY-MM-DD, empty if it never expires)" "$proposal"
   fi
-  if [ -z "$expires" ]; then warn "AGENT_TOKEN_EXPIRES not set: no warning before the personal token expires"
-  elif epoch_of "$expires" > /dev/null; then set_var AGENT_TOKEN_EXPIRES "$expires"
-  else bad "AGENT_TOKEN_EXPIRES: '$expires' is not a date (YYYY-MM-DD)"; fi
-  expires=$(var_of CLAUDE_TOKEN_EXPIRES)
+  if [ -z "$expires" ]; then warn "PEPPEC_AGENT_TOKEN_EXPIRES not set: no warning before the personal token expires"
+  elif epoch_of "$expires" > /dev/null; then set_var PEPPEC_AGENT_TOKEN_EXPIRES "$expires"
+  else bad "PEPPEC_AGENT_TOKEN_EXPIRES: '$expires' is not a date (YYYY-MM-DD)"; fi
+  expires=$(var_of PEPPEC_CLAUDE_TOKEN_EXPIRES)
   if [ "${NEW_CLAUDE_TOKEN:-false}" = true ]; then
-    set_var CLAUDE_TOKEN_EXPIRES "$(next_year)"
+    set_var PEPPEC_CLAUDE_TOKEN_EXPIRES "$(next_year)"
   elif [ -n "$expires" ]; then
-    ok "CLAUDE_TOKEN_EXPIRES = $expires"
+    ok "PEPPEC_CLAUDE_TOKEN_EXPIRES = $expires"
   else
     ask expires "Expiry date of the Claude token (YYYY-MM-DD, one year after it was generated)" "$(next_year)"
-    set_var CLAUDE_TOKEN_EXPIRES "$expires"
+    set_var PEPPEC_CLAUDE_TOKEN_EXPIRES "$expires"
   fi
 }
 
@@ -702,7 +702,7 @@ init_files() {
   cron=$(summary_cron "$TZ_NAME" "$SUMMARY_HOUR")
   for f in agent ci summary; do
     content=$(engine_file "examples/$f.yml" | sed -e '/^# Copy to /d' \
-      -e "s|\\.yml@v1\$|.yml@$REF|" -e "s|engine_ref: v1|engine_ref: $REF|" \
+      -e "s|\\.yml@v2\$|.yml@$REF|" -e "s|engine_ref: v2|engine_ref: $REF|" \
       -e "s|cron: '0 7,8 \\* \\* \\*'|cron: '$cron'|")
     keep_own_workflow "$f"
     write_file ".github/workflows/$f.yml" "$content"
@@ -905,7 +905,7 @@ cmd_init() {
   init_default_branch
   printf '%sPEPPEC%s on %s%s%s, engine %s@%s\n' "$B" "$N" "$B" "$REPO" "$N" "$ENGINE" "$REF"
   load_vars
-  FRESH=false; [ -n "$(var_of CONTROL_ISSUE)" ] || FRESH=true
+  FRESH=false; [ -n "$(var_of PEPPEC_CONTROL_ISSUE)" ] || FRESH=true
   SECRET_NAMES=$(gh secret list -R "$REPO" --json name --jq '.[].name')
   [ "$FRESH" = false ] || init_ready_issues
   init_labels
@@ -989,7 +989,7 @@ cmd_doctor() {
     local v; v=$(var_of "$name"); [ -z "$v" ] || is_number "$v" || bad "$name is not a number: $v"
   done <<< "$NUMBERS"
   # Not in the list above: without it the base branch is main
-  BASE_BRANCH=$(var_of BASE_BRANCH); BASE_BRANCH="${BASE_BRANCH:-main}"
+  BASE_BRANCH=$(var_of PEPPEC_BASE_BRANCH); BASE_BRANCH="${BASE_BRANCH:-main}"
   local default_branch; default_branch=$(gh api "repos/$REPO" --jq .default_branch)
   if [ "$BASE_BRANCH" = "$default_branch" ]; then ok "base branch: $BASE_BRANCH"
   elif gh api "repos/$REPO/branches/$BASE_BRANCH" > /dev/null 2>&1; then
@@ -1008,16 +1008,16 @@ cmd_doctor() {
   elif [ -n "$(var_of PEPPEC_E2E_FEATURE)$(var_of PEPPEC_E2E_ALL)" ]; then
     warn "end-to-end tests are set but never run: they run on feature branches, and PEPPEC_BRANCHES is not set"
   fi
-  local tz; tz=$(var_of TZ_NAME)
+  local tz; tz=$(var_of PEPPEC_TZ_NAME)
   if [ -n "$tz" ] && [ ! -e "/usr/share/zoneinfo/$tz" ] && [ ! -e "/var/db/timezone/zoneinfo/$tz" ]; then
-    warn "TZ_NAME '$tz' is not a time zone known to this computer"
+    warn "PEPPEC_TZ_NAME '$tz' is not a time zone known to this computer"
   fi
   local expires days label
-  for name in CLAUDE_TOKEN_EXPIRES AGENT_TOKEN_EXPIRES; do
-    label="Claude token"; [ "$name" = AGENT_TOKEN_EXPIRES ] && label="personal token (AGENT_TOKEN)"
+  for name in PEPPEC_CLAUDE_TOKEN_EXPIRES PEPPEC_AGENT_TOKEN_EXPIRES; do
+    label="Claude token"; [ "$name" = PEPPEC_AGENT_TOKEN_EXPIRES ] && label="personal token (PEPPEC_AGENT_TOKEN)"
     expires=$(var_of "$name")
     if [ -z "$expires" ]; then
-      [ "$name" = AGENT_TOKEN_EXPIRES ] && warn "AGENT_TOKEN_EXPIRES not set: no warning before the personal token expires"
+      [ "$name" = PEPPEC_AGENT_TOKEN_EXPIRES ] && warn "PEPPEC_AGENT_TOKEN_EXPIRES not set: no warning before the personal token expires"
       continue
     fi
     if days=$(epoch_of "$expires"); then
@@ -1035,19 +1035,19 @@ cmd_doctor() {
   if [ -z "$missing" ]; then ok "all secrets set (their values cannot be read back)"; else bad "missing secrets:$missing"; fi
 
   step "GitHub App"
-  local app_id; app_id=$(var_of APP_ID)
+  local app_id; app_id=$(var_of PEPPEC_APP_ID)
   KEY_FILE="${KEY_FILE/#\~/$HOME}"
   if [ -n "$KEY_FILE" ] && [ -n "$app_id" ]; then
     [ -f "$KEY_FILE" ] || die "no such file: $KEY_FILE"
     if check_app "$app_id" "$KEY_FILE"; then
-      [ "${APP_SLUG}[bot]" = "$(var_of APP_LOGIN)" ] || bad "APP_LOGIN is '$(var_of APP_LOGIN)' but the app is '${APP_SLUG}[bot]'"
+      [ "${APP_SLUG}[bot]" = "$(var_of PEPPEC_APP_LOGIN)" ] || bad "PEPPEC_APP_LOGIN is '$(var_of PEPPEC_APP_LOGIN)' but the app is '${APP_SLUG}[bot]'"
     fi
   else
     warn "installation not checked: pass --key <the app's .pem file> to check it"
   fi
 
   step "Control panel"
-  local control state; control=$(var_of CONTROL_ISSUE)
+  local control state; control=$(var_of PEPPEC_CONTROL_ISSUE)
   if [ -n "$control" ]; then
     state=$(gh issue view "$control" -R "$REPO" --json state,title,labels \
       --jq '"\(.state)|\(.title)|\([.labels[].name] | join(", "))"' 2> /dev/null || true)
@@ -1204,12 +1204,12 @@ cmd_doctor() {
   state=$(gh run list -R "$REPO" --workflow ci.yml --branch "$default_branch" --event push --limit 1 \
     --json conclusion --jq '.[0].conclusion // ""' 2> /dev/null || true)
   [ "$state" != failure ] || warn "the last CI run on $default_branch failed: the agent cannot tell its own failures from these"
-  local slowest stall; stall=$(var_of STALL_MINUTES); stall=${stall:-120}
+  local slowest stall; stall=$(var_of PEPPEC_STALL_MINUTES); stall=${stall:-120}
   local minutes='[.[] | (.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601)] | (max // 0) / 60 | floor'
   slowest=$(gh run list -R "$REPO" --workflow ci.yml --status success --limit 10 --json createdAt,updatedAt \
     --jq "$minutes" 2> /dev/null || echo 0)
-  if [ "${slowest:-0}" -ge "$stall" ]; then warn "CI took up to $slowest minutes, STALL_MINUTES is $stall: issues will stop waiting for it; raise STALL_MINUTES"
-  elif [ "${slowest:-0}" -ge $(( stall / 2 )) ]; then note "CI takes up to $slowest minutes, STALL_MINUTES is $stall"; fi
+  if [ "${slowest:-0}" -ge "$stall" ]; then warn "CI took up to $slowest minutes, PEPPEC_STALL_MINUTES is $stall: issues will stop waiting for it; raise PEPPEC_STALL_MINUTES"
+  elif [ "${slowest:-0}" -ge $(( stall / 2 )) ]; then note "CI takes up to $slowest minutes, PEPPEC_STALL_MINUTES is $stall"; fi
 
   echo
   if [ "$PROBLEMS" -gt 0 ]; then printf '%s%d problem(s)%s, %d warning(s)\n' "$R" "$PROBLEMS" "$N" "$WARNINGS"; exit 1; fi
@@ -1226,8 +1226,8 @@ cmd_bot() {
     REPO="$r"
     resolve_repo
     load_vars
-    id=$(var_of APP_ID); control=$(var_of CONTROL_ISSUE)
-    [ -n "$id" ] && [ -n "$control" ] || die "APP_ID or CONTROL_ISSUE not set on $REPO: run 'peppec init' first"
+    id=$(var_of PEPPEC_APP_ID); control=$(var_of PEPPEC_CONTROL_ISSUE)
+    [ -n "$id" ] && [ -n "$control" ] || die "PEPPEC_APP_ID or PEPPEC_CONTROL_ISSUE not set on $REPO: run 'peppec init' first"
     [ -z "$app_id" ] || [ "$id" = "$app_id" ] \
       || die "$REPO uses another GitHub App ($id instead of $app_id): a bot follows repositories that share the app"
     app_id="$id"
@@ -1238,8 +1238,8 @@ cmd_bot() {
   step "Values"
   note "The same bot token and chat ID stored as secrets: GitHub cannot give them back."
   note "Every repository listed must use this same bot and chat."
-  token="${TELEGRAM_BOT_TOKEN:-}"; [ -n "$token" ] || ask_hidden token "TELEGRAM_BOT_TOKEN"
-  chat="${TELEGRAM_CHAT_ID:-}"; [ -n "$chat" ] || ask chat "TELEGRAM_CHAT_ID" ""
+  token="${PEPPEC_TELEGRAM_BOT_TOKEN:-}"; [ -n "$token" ] || ask_hidden token "PEPPEC_TELEGRAM_BOT_TOKEN"
+  chat="${PEPPEC_TELEGRAM_CHAT_ID:-}"; [ -n "$chat" ] || ask chat "PEPPEC_TELEGRAM_CHAT_ID" ""
   [ -n "$token" ] && [ -n "$chat" ] || die "bot token and chat ID are required"
   telegram "$token" getMe | jq -e .ok > /dev/null 2>&1 || die "Telegram rejects the bot token"
   KEY_FILE="${KEY_FILE:-${PEPPEC_APP_KEY_FILE:-}}"
@@ -1328,8 +1328,8 @@ Usage:
 Options:
   --ref <ref>   Engine version to install (default: v1)
   --yes         Never ask: keep what is set, take the defaults, read secrets from the
-                environment (CLAUDE_CODE_OAUTH_TOKEN, AGENT_TOKEN, TELEGRAM_BOT_TOKEN,
-                TELEGRAM_CHAT_ID, PEPPEC_APP_ID, PEPPEC_APP_KEY_FILE)
+                environment (CLAUDE_CODE_OAUTH_TOKEN, PEPPEC_AGENT_TOKEN, PEPPEC_TELEGRAM_BOT_TOKEN,
+                PEPPEC_TELEGRAM_CHAT_ID, PEPPEC_APP_ID, PEPPEC_APP_KEY_FILE)
 EOF
 }
 

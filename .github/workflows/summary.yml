@@ -12,11 +12,11 @@ on:
         type: string
         default: PeppeColi/peppec
     secrets:
-      APP_PRIVATE_KEY:
+      PEPPEC_APP_PRIVATE_KEY:
         required: true
-      TELEGRAM_BOT_TOKEN:
+      PEPPEC_TELEGRAM_BOT_TOKEN:
         required: true
-      TELEGRAM_CHAT_ID:
+      PEPPEC_TELEGRAM_CHAT_ID:
         required: true
 
 jobs:
@@ -33,15 +33,15 @@ jobs:
       - id: app
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ vars.PEPPEC_APP_ID }}
+          private-key: ${{ secrets.PEPPEC_APP_PRIVATE_KEY }}
       - run: bash _ctl/scripts/summary.sh
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           REPO: ${{ github.repository }}
-          TZ_NAME: ${{ vars.TZ_NAME }}
-          SUMMARY_HOUR: ${{ vars.SUMMARY_HOUR }}
-          CLAUDE_TOKEN_EXPIRES: ${{ vars.CLAUDE_TOKEN_EXPIRES }}
-          AGENT_TOKEN_EXPIRES: ${{ vars.AGENT_TOKEN_EXPIRES }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TZ_NAME: ${{ vars.PEPPEC_TZ_NAME }}
+          SUMMARY_HOUR: ${{ vars.PEPPEC_SUMMARY_HOUR }}
+          CLAUDE_TOKEN_EXPIRES: ${{ vars.PEPPEC_CLAUDE_TOKEN_EXPIRES }}
+          AGENT_TOKEN_EXPIRES: ${{ vars.PEPPEC_AGENT_TOKEN_EXPIRES }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}
