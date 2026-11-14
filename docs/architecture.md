@@ -91,6 +91,8 @@ check: |
   cargo test --all-features
 ```
 
+The preset `none` is a placeholder for a project whose language is not chosen yet: it installs nothing and its check is `true`, so CI passes, while the queue starts no agent work (no issue, no fix round) and labels the control panel `no preset`. The ready issues wait, and you are told about each one once, in one message per run.
+
 Two more keys cover what a preset cannot know: `options` passes values to the preset (a language version, extensions), and `extra_setup` names a setup action of the host, run after the preset's, for services and system packages.
 
 CI and the agent use the same definition: CI runs the setup and the check commands, and the agent's prompt tells it to run the same commands until they pass.
@@ -214,6 +216,7 @@ The dashboard speaks plain HTTP and can act on your repositories: keep it inside
 | `needs human` | Issue and pull request | Workflow | Limits exceeded, queue stopped |
 | `paused` / `auto mode` / `always on` | Control panel issue | Bot | No new issues, merge mode and schedule |
 | `base missing` | Control panel issue | Workflow | The base branch does not exist: queue stopped until it is back |
+| `no preset` | Control panel issue | Workflow | The preset is `none`: the agent builds nothing until a language is chosen |
 
 The workflow keeps its own state in hidden comments (`<!-- peppec:KEY=VALUE -->`), written with the app's token and read only from the app: the minutes worked on an issue, the branch it started on, the feature branch of a specification, the end-to-end results already judged and how many hotfixes they caused, the number of sub-issues already announced as ready to be tried, the review requests already made for a commit, the replies posted to CodeRabbit, and which one-time warnings were already sent. Hotfix and sync work units, and the pull request of a feature, carry a marker in their body.
 

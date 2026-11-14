@@ -7,7 +7,8 @@ err() { echo "::error::$1"; fail=1; }
 
 for dir in "$ROOT"/presets/*/; do
   name=$(basename "$dir")
-  [[ "$name" =~ ^[a-z0-9]+(-[a-z0-9]+)*-v[0-9]+$ ]] || err "$name: the directory name must look like <name>-v<N>"
+  # "none", the placeholder preset, has no version and no tools to block
+  [ "$name" = none ] || [[ "$name" =~ ^[a-z0-9]+(-[a-z0-9]+)*-v[0-9]+$ ]] || err "$name: the directory name must look like <name>-v<N>"
   for f in action.yml preset.yml README.md; do
     [ -f "$dir$f" ] || err "$name: missing $f"
   done
@@ -31,7 +32,7 @@ for dir in "$ROOT"/presets/*/; do
   for key in description check; do
     [ -n "$(jq -r --arg k "$key" '.[$k] // "" | tostring | gsub("\\s"; "")' <<< "$p")" ] || err "$name: preset.yml must set '$key'"
   done
-  [ "$(jq -r '.disallowed_tools // [] | length' <<< "$p")" -gt 0 ] \
+  [ "$name" = none ] || [ "$(jq -r '.disallowed_tools // [] | length' <<< "$p")" -gt 0 ] \
     || err "$name: disallowed_tools must block at least running and publishing the project"
   if grep -qE '\|\|[[:space:]]*(true|:)[[:space:]]*$' <<< "$(jq -r '.check // ""' <<< "$p")"; then
     err "$name: check commands cannot ignore failures"

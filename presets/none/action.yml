@@ -1,0 +1,11 @@
+name: none
+description: No language yet: installs nothing, so PEPPEC can be set up before the language is chosen
+inputs:
+  options:
+    description: 'JSON object from the "options" key of .github/peppec.yml; this preset has none'
+    default: '{}'
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: echo "Preset none: nothing to set up. Choose a preset with peppec init --preset <name>."

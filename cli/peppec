@@ -41,7 +41,8 @@ ci 5|Check fix attempt 5
 paused|No new issues start; the one in progress goes on (control panel)
 auto mode|Automatic merge enabled (control panel)
 always on|New issues start at any hour, not only at night (control panel)
-base missing|The base branch does not exist: queue stopped until it is back (control panel)'
+base missing|The base branch does not exist: queue stopped until it is back (control panel)
+no preset|The preset is none: the agent builds nothing until a language is chosen (control panel)'
 
 # name|default|question; an empty default means the value is computed or asked without one
 NUMBERS='PEPPEC_WORK_START_HOUR|22|Hour at which agents may start new issues (0-23)
@@ -715,21 +716,46 @@ keep_own_workflow() {
   fi
 }
 
+preset_of() { sed -nE 's/^preset:[[:space:]]*([^[:space:]#]+).*/\1/p' | head -n 1; }
+
+# Rewrites the preset line of .github/peppec.yml (--preset with a different preset), after saying
+# what the change touches: the keys written for the old language, and the work in progress
+change_preset() { # change_preset OLD NEW
+  local keys busy
+  keys=$(sed -nE 's/^(options|check|extra_setup|allowed_tools|disallowed_tools|protected_paths|never_commit|notes):.*/\1/p' .github/peppec.yml | paste -sd' ' -)
+  note "The preset changes from $1 to $2."
+  [ -z "$keys" ] || warn "these keys of .github/peppec.yml may be written for $1: $keys. Check them by hand"
+  busy=$(gh issue list -R "$REPO" --state open --label "in progress" --json number --jq '.[] | "#\(.number)"' 2> /dev/null | paste -sd' ' - || true)
+  [ -z "$busy" ] || warn "in progress: $busy. Its pull request will be checked with $2: change preset with the queue empty"
+  [ "$2" = none ] || [ "$1" != none ] || note "The checks of $2 must pass: the first issue can create the project skeleton."
+  if confirm "Change the preset in .github/peppec.yml to $2?" y; then
+    local tmp; tmp=$(mktemp)
+    sed -E "s/^preset:[[:space:]]*[^[:space:]#]+/preset: $2/" .github/peppec.yml > "$tmp" && cat "$tmp" > .github/peppec.yml
+    rm -f "$tmp"
+    ok ".github/peppec.yml (preset: $2)"
+  else
+    PRESET=$1
+  fi
+}
+
 init_files() {
   step "Files"
-  local presets detected="" content f line cron
+  local presets detected=none content f line cron current=""
   presets=$(gh api "repos/$ENGINE/contents/presets?ref=$REF" --jq '.[].name')
-  if [ -z "$PRESET" ] && [ -f .github/peppec.yml ]; then
-    PRESET=$(sed -n 's/^preset:[[:space:]]*//p' .github/peppec.yml | head -n 1)
-  fi
+  [ -f .github/peppec.yml ] && current=$(preset_of < .github/peppec.yml)
+  [ -n "$PRESET" ] || PRESET=$current
   if [ -z "$PRESET" ]; then
+    # "none" when no language is recognised: PEPPEC installs, the queue waits for the language
     [ -f Cargo.toml ] && detected=rust-v1
     [ -f composer.json ] && detected=php-v1
     note "Available presets: $(echo $presets)"
+    [ "$detected" != none ] || note "none: the language is not chosen yet; the agent builds nothing until you change it"
     ask PRESET "Preset" "$detected"
   fi
   grep -qx "$PRESET" <<< "$presets" || die "unknown preset '$PRESET'"
+  if [ -n "$current" ] && [ "$PRESET" != "$current" ]; then change_preset "$current" "$PRESET"; fi
   ok "preset $PRESET"
+  [ "$PRESET" != none ] || warn "preset none: the agent builds nothing until you run peppec init --preset <name>"
 
   cron=$(summary_cron "$TZ_NAME" "$SUMMARY_HOUR")
   # CI runs on the pushes to main and to the base branch, where the merges land
@@ -1142,6 +1168,7 @@ cmd_doctor() {
   preset=$(sed -n 's/^preset:[[:space:]]*//p' <<< "$content" | head -n 1)
   if [ -z "$content" ]; then missing_file .github/peppec.yml "$BASE_BRANCH"
   elif [ -z "$preset" ]; then bad ".github/peppec.yml has no preset"
+  elif [ "$preset" = none ]; then warn "preset none: the agent builds nothing until you run peppec init --preset <name>"
   elif gh api "repos/$ENGINE/contents/presets/$preset/preset.yml?ref=${ref:-$REF}" > /dev/null 2>&1; then ok "preset $preset"
   else bad "preset '$preset' does not exist in the engine at ${ref:-$REF}"; fi
   content=$(host_file .coderabbit.yaml || true)
