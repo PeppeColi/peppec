@@ -406,8 +406,8 @@ function repoPage(repo) {
         el("button", {type: "button", class: "plain", disabled: busy,
           on: () => act(repo, repo.paused ? "resume" : "pause")}, busy ? "Working…" : repo.paused ? "Resume the queue" : "Pause the queue"),
         el("div", {class: "small"}, repo.paused
-          ? "Paused: nothing moves until you resume." : repo.base_missing
-          ? "Stopped: the base branch does not exist." : "Running. Pausing stops every issue until you resume."))),
+          ? "Paused: no new issue starts until you resume. The one in progress goes on." : repo.base_missing
+          ? "Stopped: the base branch does not exist." : "Running. Pausing starts no new issues; the one in progress goes on."))),
     el("div", {class: "group"}, el("div", {class: "label"}, "In progress"),
       repo.active
         ? el("div", {class: "card"}, row(issueLink(repo), "#" + repo.active.number + " " + repo.active.title,

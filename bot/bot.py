@@ -45,8 +45,8 @@ REPORT = re.compile(r"^Problem with ([\w.-]+/[\w.-]+)#(\d+):")
 # The menu Telegram shows when you type "/"
 COMMANDS = [
     ("status", "State of the queues, with buttons to change it"),
-    ("pause", "Stop the queue"),
-    ("unblock", "Clear pause and blocks, then restart"),
+    ("pause", "Start no new issues"),
+    ("unblock", "Clear the blocks of an issue, then restart"),
     ("hint", "Give the agent a hint on an issue"),
     ("mode", "Merge mode: manual or automatic"),
     ("schedule", "Work hours: nightly or always"),
@@ -203,7 +203,7 @@ class Repo:
         out = [self.name,
                f"Mode: {'automatic' if auto else 'manual'}",
                f"Schedule: {'always' if always else 'nightly'}",
-               f"Paused: {'yes' if paused else 'no'}"]
+               f"Paused: {'yes, no new issues start' if paused else 'no'}"]
         if "base missing" in c:
             out.append("Stopped: the base branch does not exist")
         rows = [[self.button("Resume", "resume") if paused else self.button("Pause", "pause")],
@@ -314,7 +314,7 @@ class Repo:
         """The actions that need no text, shared by the buttons and the dashboard."""
         if action == "pause":
             self.add(self.control, "paused")
-            return f"Queue paused: {self.name}."
+            return f"Queue paused: {self.name}. No new issue starts; the one in progress goes on."
         if action == "resume":
             self.rm(self.control, "paused")
             self.dispatch()
@@ -333,7 +333,7 @@ class Repo:
         self.comment(n, text)
         self.rm(n, "question open")
         self.dispatch()
-        return f"Answer posted on {self.name}#{n}, restarting."
+        return f"Answer posted on {self.name}#{n}, restarting." + self.still_paused()
 
     def accept(self, n):
         """Sends the answer the agent recommends as yours. Pressed twice, the second finds the
@@ -344,7 +344,7 @@ class Repo:
         if not recommended:
             raise UserError(f"The question on {self.name}#{n} has no recommended answer: reply with yours.")
         self.answer(n, f"Accepted the recommended answer:\n\n{recommended}")
-        return f"Recommended answer accepted on {self.name}#{n}, restarting."
+        return f"Recommended answer accepted on {self.name}#{n}, restarting." + self.still_paused()
 
     def set_mode(self, value):
         if value == "automatic":
@@ -362,20 +362,23 @@ class Repo:
         self.dispatch()
         return f"Schedule of {self.name} set to {value}."
 
+    def still_paused(self):
+        """Only Resume lifts the pause: the other actions say so when it is on."""
+        return " The queue is still paused: no new issue starts until you press Resume." \
+            if "paused" in self.labels(self.control) else ""
+
     def restart(self, n=None):
-        """Clears the pause and the blocks of issue n, if any, then restarts."""
-        self.rm(self.control, "paused")
+        """Clears the blocks of issue n, if any, then restarts. The pause stays."""
         if n:
             self.unblock(n)
         self.dispatch()
-        return f"Unblocked {self.name}{f'#{n}' if n else ''}, restarting."
+        return f"Unblocked {self.name}{f'#{n}' if n else ''}, restarting." + self.still_paused()
 
     def hint(self, n, body):
         self.comment(n, f"Hint for the agent: {body.strip()}")
         self.unblock(n)
-        self.rm(self.control, "paused")
         self.dispatch()
-        return f"Hint added to {self.name}#{n}, restarting."
+        return f"Hint added to {self.name}#{n}, restarting." + self.still_paused()
 
 
 def not_work_unit(issue):
@@ -537,7 +540,8 @@ def handle(msg):
         targets = [repo] if repo else REPOS
         for r in targets:
             r.add(r.control, "paused")
-        send(f"Queue paused: {', '.join(r.name for r in targets)}.")
+        send(f"Queue paused: {', '.join(r.name for r in targets)}. No new issue starts; the one in "
+             "progress goes on. Resume from /status.")
     elif cmd in ("/unblock", "/hint", "/mode", "/schedule") and (not repo or (not arg and cmd != "/unblock")):
         # Something is missing: the buttons offer the same choices, with nothing to type
         send(f"{'Which repository? ' if not repo else ''}Use the buttons, or the full command: {USAGE[cmd]}")

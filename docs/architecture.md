@@ -164,8 +164,8 @@ The commands still work when typed in full:
 | Command | Effect |
 | --- | --- |
 | `/status [repo]` | Mode, schedule, pause, current issue with labels, issues in queue, and the buttons |
-| `/pause [repo]` | Stops the whole queue |
-| `/unblock [repo] [n]` | Clears pause and blocks, resets the issue's time budget and counters, restarts |
+| `/pause [repo]` | Starts no new issues; the issue in progress goes on to its merge |
+| `/unblock [repo] [n]` | Clears the blocks, resets the issue's time budget and counters, restarts |
 | `/hint [repo] <n> <text>` | Comments the hint on the issue, unblocks it and restarts; without the text, the bot asks for it |
 | `/mode [repo] manual` or `/mode [repo] automatic` | Switches the merge mode |
 | `/schedule [repo] nightly` or `/schedule [repo] always` | Switches between the work window and working at any hour |
@@ -181,7 +181,9 @@ With one repository, `repo` is never needed. With several:
 - `/status` and `/pause` without a repository apply to all of them;
 - the other commands need the repository, unless you send them as a reply to a notification: `/unblock` in reply to a "Queue stopped" message acts on the repository of that message. A command that misses the repository or the value is answered with the buttons.
 
-The Resume button only lifts the pause; `/unblock` and the Unblock button also clear the blocks of the issue and reset its time budget. The buttons on the notifications need a bot of version 1.9 or later.
+Only the Resume button lifts the pause. `/unblock`, the Unblock and Hint buttons and the answers act on the issue and leave the pause on, and their reply says so.
+
+The pause stops only new issues. While it is on, the issue in progress goes on: its checks are fixed, CodeRabbit reviews it, and it is merged (automatic mode) or marked ready to merge. A pull request you merge by hand is tidied up at once (issue closed, branch removed, "ready to be tried" message). A finished feature still gets the base branch, its end-to-end tests are read, and the sync and hotfix work units the queue opens for it start, Report a problem included: they finish work already built. To stop the issue in progress as well, label it `needs human`. The buttons on the notifications need a bot of version 1.9 or later.
 
 ## Dashboard
 
@@ -210,7 +212,7 @@ The dashboard speaks plain HTTP and can act on your repositories: keep it inside
 | `ci 1`–`5` | Pull request | Workflow | Attempts to make the checks pass |
 | `ready to merge` | Pull request | Workflow | Review passed, waiting for you |
 | `needs human` | Issue and pull request | Workflow | Limits exceeded, queue stopped |
-| `paused` / `auto mode` / `always on` | Control panel issue | Bot | Global pause, merge mode and schedule |
+| `paused` / `auto mode` / `always on` | Control panel issue | Bot | No new issues, merge mode and schedule |
 | `base missing` | Control panel issue | Workflow | The base branch does not exist: queue stopped until it is back |
 
 Two hidden counters are kept as comments (`<!-- peppec:KEY=VALUE -->`): the minutes worked on an issue and the commit a review was requested for.

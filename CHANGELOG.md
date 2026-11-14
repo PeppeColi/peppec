@@ -9,6 +9,21 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-11-14
+
+### Changed
+
+- The pause stops only new issues: the issue in progress goes on to its merge (or "ready to
+  merge"), and the sync and hotfix work units of a feature already built still start. To stop the
+  issue in progress too, label it `needs human`.
+- Only Resume lifts the pause: Unblock, Hint and the answers to a question leave it on, and their
+  reply says so.
+
+### Fixed
+
+- A pull request merged by hand while the queue is paused is tidied up at once: its issue is closed
+  and the "ready to be tried" message is sent, which was lost after a merge into the default branch.
+
 ## [1.30.1] - 2026-11-14
 
 ### Added
@@ -408,7 +423,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.30.1...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.31.0...HEAD
+[1.31.0]: https://github.com/PeppeColi/peppec/compare/v1.30.1...v1.31.0
 [1.30.1]: https://github.com/PeppeColi/peppec/compare/v1.30.0...v1.30.1
 [1.30.0]: https://github.com/PeppeColi/peppec/compare/v1.29.2...v1.30.0
 [1.29.2]: https://github.com/PeppeColi/peppec/compare/v1.29.1...v1.29.2

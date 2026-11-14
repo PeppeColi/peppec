@@ -115,7 +115,7 @@ ci 2|Check fix attempt 2
 ci 3|Check fix attempt 3
 ci 4|Check fix attempt 4
 ci 5|Check fix attempt 5
-paused|Queue paused (control panel)
+paused|No new issues start; the one in progress goes on (control panel)
 auto mode|Automatic merge enabled (control panel)
 always on|New issues start at any hour, not only at night (control panel)
 base missing|The base branch does not exist: queue stopped until it is back (control panel)
@@ -186,7 +186,7 @@ Pause and merge mode are labels on a "Control panel" issue, so you can see them 
 ```bash
 R=<USER>/<REPO>
 gh issue create -R "$R" --title "Control panel" \
-  --body "Labels: paused = queue stopped; auto mode = automatic merge; always on = work at any hour. Do not close."
+  --body "Labels: paused = no new issues start; auto mode = automatic merge; always on = work at any hour. Do not close."
 gh issue pin <N_CONTROL> -R "$R"
 ```
 
