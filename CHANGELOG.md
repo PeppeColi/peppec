@@ -9,6 +9,22 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-14
+
+### Fixed
+
+- In an empty repository, GitHub never started from an event the workflows that arrived with the
+  first push: no CI, no agent schedule, and the queue stood still unnoticed. `peppec init` now
+  pushes a starting commit without workflows first, to `main` and the base branch together (an
+  empty commit, or the commits already in the clone when they hold no `.github/workflows`); the
+  install commit follows as the second push.
+
+### Added
+
+- `peppec doctor` reports as a problem a repository where no workflow has ever started from an
+  event within half an hour of the last push to `main`, with the remedy: a commit that adds a new
+  workflow file, then removes it (changing an existing one is not enough).
+
 ## [2.2.0] - 2026-11-14
 
 ### Changed
@@ -479,7 +495,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/PeppeColi/peppec/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/PeppeColi/peppec/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/PeppeColi/peppec/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/PeppeColi/peppec/compare/v1.32.0...v2.0.0

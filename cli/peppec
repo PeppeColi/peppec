@@ -533,20 +533,41 @@ init_variables() {
 }
 
 # The base branch exists from day one: created now at the commit of main, so the install commit can
-# land on both in the same push. In an empty repository that first push creates both.
+# land on both in the same push. An empty repository first gets a starting commit on both.
 init_base_branch() {
+  local sha
+  if ! sha=$(api "repos/$REPO/git/ref/heads/main" --jq .object.sha); then init_first_commit; return; fi
   [ "$BASE_BRANCH" != main ] || return 0
   if api "repos/$REPO/branches/$BASE_BRANCH" > /dev/null; then ok "branch $BASE_BRANCH exists"; return; fi
-  local sha
-  if ! sha=$(api "repos/$REPO/git/ref/heads/main" --jq .object.sha); then
-    note "The repository is empty: the push of the install commit creates main and $BASE_BRANCH together."
-    return
-  fi
   if api -X POST "repos/$REPO/git/refs" -f "ref=refs/heads/$BASE_BRANCH" -f "sha=$sha" > /dev/null; then
     ok "branch $BASE_BRANCH created from main"
   else
     bad "could not create the branch $BASE_BRANCH: git push origin main:$BASE_BRANCH"
   fi
+}
+# In an empty repository, GitHub never starts from an event the workflows that arrive with the first
+# push: no CI, no agent schedule. A starting commit without workflows goes first, on main and the base
+# branch together (docs/setup.md, "Empty repository").
+init_first_commit() {
+  local names=main refs=HEAD:main what="an empty starting commit"
+  [ "$BASE_BRANCH" = main ] || { names="main and $BASE_BRANCH"; refs="HEAD:main HEAD:$BASE_BRANCH"; }
+  note "The repository is empty: a first push without workflows comes before the install commit, or GitHub never starts them from an event."
+  if git rev-parse -q --verify HEAD > /dev/null; then
+    if git ls-tree -r --name-only HEAD | grep -q '^\.github/workflows/'; then
+      bad "your commits already hold .github/workflows: push a commit without them to $names first, then the rest"
+      return
+    fi
+    what="your commits"
+  fi
+  confirm "Push $what to $names now?" y || { bad "nothing is on GitHub yet: push $what to $names before the install commit"; return; }
+  if [ "$what" != "your commits" ]; then
+    # An empty tree: whatever is staged stays staged, out of this commit
+    git update-ref HEAD "$(git commit-tree "$(git hash-object -w -t tree /dev/null)" -m "chore: start")" \
+      || { bad "could not create the starting commit"; return; }
+  fi
+  # shellcheck disable=SC2086 # refs holds one or two refspecs
+  if git push -q --atomic origin $refs && git branch -q -u origin/main; then ok "$what pushed to $names"
+  else bad "the push failed: git push --atomic origin $refs"; fi
 }
 
 # How dev relates to main: identical (or main is empty), behind (main has more) or ahead/diverged
@@ -1213,6 +1234,20 @@ cmd_doctor() {
       *) warn "$f: $state";;
     esac
   done
+  # Workflows that came with the first push of an empty repository never start from an event: only
+  # by hand. Half an hour covers a push just made and the first run of the agent's schedule.
+  local events age where=main
+  [ "$BASE_BRANCH" = main ] || where="main and $BASE_BRANCH"
+  events=$(gh run list -R "$REPO" --limit 50 --json event --jq '[.[] | select(.event != "workflow_dispatch")] | length' 2> /dev/null || true)
+  if [ "$events" = 0 ]; then
+    age=$(api "repos/$REPO/commits/main" --jq '(now - (.commit.committer.date | fromdateiso8601)) / 60 | floor' 2> /dev/null || true)
+    if is_number "$age" && [ "$age" -ge 30 ]; then
+      bad "no workflow has ever started from an event (push, pull request, schedule): GitHub has not woken them up"
+      note "Push to $where a commit that adds a new workflow file (any name), then remove it; changing an existing one is not enough (docs/setup.md, \"Empty repository\")."
+    elif is_number "$age"; then
+      note "no workflow has started from an event yet: the last push to main is less than half an hour old"
+    fi
+  fi
   # The checks must start green where the agent starts: for it "done" means "the checks pass"
   state=$(gh run list -R "$REPO" --workflow ci.yml --branch "$BASE_BRANCH" --event push --limit 1 \
     --json conclusion --jq '.[0].conclusion // ""' 2> /dev/null || true)
