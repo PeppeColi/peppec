@@ -9,6 +9,15 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Added
+
+- Browser notifications on the dashboard: with the page open, the messages that make Telegram ring
+  also appear as notifications of the browser, turned on at the bottom of the home page. Every
+  `notify` that rings also writes an annotation `peppec` in its job; the bot reads them every minute
+  and serves the last 50 at `/api/events`, so the list follows `notify` and `notify_info` by itself.
+  On the dashboard's plain HTTP, Chrome needs the flag "Insecure origins treated as secure" for its
+  address: the page explains it.
+
 ## [2.5.0] - 2026-11-14
 
 ### Added

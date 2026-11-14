@@ -8,6 +8,14 @@ notify() {
   text="${text:0:4000}"
   # Also in the job log, so the reason of a stop can be read without Telegram
   echo "notify: $text"
+  # A notification that rings is also an annotation of the job: the bot reads them back and the
+  # dashboard shows them as browser notifications (new_events in bot/bot.py). Same stream as
+  # the line above, so a caller that redirects one redirects both
+  if [ -z "${NOTIFY_SILENT:-}" ] && [ "${GITHUB_ACTIONS:-}" = true ]; then
+    local line="${text//%/%25}"
+    line="${line//$'\r'/%0D}"
+    echo "::notice title=peppec::${line//$'\n'/%0A}"
+  fi
   # $2, optional: the buttons under the message, as the reply_markup of the Telegram API
   # Telegram's refusal (wrong chat, bot blocked, bad markup) is only in its answer: log it
   local answer

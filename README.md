@@ -29,7 +29,7 @@ The full picture is in [docs/architecture.md](docs/architecture.md).
 
 ## Notifications
 
-Every message starts with the repository it comes from, as in `[owner/name]`. Only the messages that need you make the phone ring (🔔); the others arrive silently (🔕), without sound or vibration, and stay in the chat as a trace.
+Every message starts with the repository it comes from, as in `[owner/name]`. Only the messages that need you make the phone ring (🔔); the others arrive silently (🔕), without sound or vibration, and stay in the chat as a trace. With the [dashboard](docs/architecture.md#dashboard) open in a browser, the 🔔 messages can also appear as browser notifications.
 
 | Message | What to do | Sound |
 | --- | --- | --- |

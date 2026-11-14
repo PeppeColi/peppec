@@ -297,10 +297,75 @@ function home() {
         cap(r.mode) + " · " + (r.schedule === "always" ? "Always on" : "Nightly") + " · " + (r.base_missing ? "Base branch missing" : r.no_preset ? "No preset" : r.paused ? "Paused" : "Running"),
         (r.active ? "#" + r.active.number + " in progress" : "No issue in progress") + " · " + r.queue.length + " in queue")))),
     claude(),
+    notifications(),
     el("div", {class: "small center"}, "bot " + state.version),
   ];
 }
 const cap = (word) => word[0].toUpperCase() + word.slice(1);
+
+// Browser notifications: the Telegram messages that ring, read from the bot every minute, also
+// with the page in the background. The browser allows them only on HTTPS or on localhost
+function stored(key) { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } }
+function store(key, value) { try { value ? localStorage.setItem(key, value) : localStorage.removeItem(key); } catch (e) {} }
+const canNotify = () => window.isSecureContext && "Notification" in window;
+const notifying = () => canNotify() && Notification.permission === "granted" && stored("peppec-notify") === "1";
+let notifyProblem = "";
+
+// e: an event of the bot; without it, a count of messages
+function show(e, count) {
+  const n = new Notification(e ? "PEPPEC · " + short(e) : "PEPPEC",
+    {body: e ? e.text : count + " messages need you. Open Telegram to read them.", tag: e ? String(e.id) : "peppec-many"});
+  n.onclick = () => {
+    window.focus(); n.close();
+    const repo = e && state && state.repos.find((r) => r.key === e.repo);
+    if (repo && repo.active && e.numbers.includes(repo.active.number)) location.hash = issueLink(repo);
+    else if (e && e.url) window.open(e.url, "_blank", "noopener");
+    else location.hash = "#/";
+    load(true);
+  };
+}
+
+async function turnOn() {
+  notifyProblem = "";
+  if (await Notification.requestPermission() === "granted") {
+    try {
+      // Only what comes from now on: nothing older is shown
+      store("peppec-seen", String((await api("/api/events?after=" + Number.MAX_SAFE_INTEGER)).last || 1));
+    } catch (e) { notifyProblem = e.message || "The bot did not answer."; return render(); }
+    try {
+      new Notification("PEPPEC", {body: "Notifications are on.", tag: "peppec-on"});
+      store("peppec-notify", "1");
+    } catch (e) { notifyProblem = "This browser shows notifications only to installed apps: use Telegram here."; }
+  }
+  render();
+}
+function turnOff() { store("peppec-notify", ""); store("peppec-seen", ""); render(); }
+
+async function poll() {
+  if (!notifying() || !password()) return;
+  let data;
+  try { data = await api("/api/events?after=" + (Number(stored("peppec-seen")) || 0)); } catch (e) { return; }
+  const fresh = data.events || [];
+  if (!fresh.length) return;
+  store("peppec-seen", String(fresh[fresh.length - 1].id));
+  if (fresh.length > 3) show(null, fresh.length); else fresh.forEach((e) => show(e));
+  load();
+}
+
+function notifications() {
+  let body;
+  if (!canNotify()) body = [
+    el("div", {}, "This browser shows notifications only to HTTPS pages."),
+    el("div", {class: "small"}, "In Chrome on a computer: open ", el("code", {}, "chrome://flags/#unsafely-treat-insecure-origin-as-secure"),
+      ", add ", el("code", {}, location.origin), ", choose Enabled and relaunch Chrome.")];
+  else if (Notification.permission === "denied") body = el("div", {}, "Notifications are blocked for this page: allow them in the browser's site settings.");
+  else if (notifying()) body = [el("div", {class: "small"}, "On: the messages that make Telegram ring also appear here, up to a few minutes later, while this page is open."),
+    el("button", {type: "button", class: "plain", on: turnOff}, "Turn off")];
+  else body = [el("div", {class: "small"}, "The messages that make Telegram ring also appear as notifications of this browser, while this page is open."),
+    el("button", {type: "button", class: "plain", on: turnOn}, "Turn on notifications"),
+    notifyProblem && el("div", {class: "small warn-text"}, notifyProblem)];
+  return el("div", {class: "group"}, el("div", {class: "label"}, "Browser notifications"), el("div", {class: "card pad"}, body));
+}
 
 function issuePage(repo, number) {
   const back = bar(backHome());
@@ -445,6 +510,7 @@ window.addEventListener("hashchange", () => { flash = ""; problem = ""; hinting 
 document.addEventListener("visibilitychange", () => { if (!document.hidden && state) load(); });
 setInterval(() => { if (!document.hidden && state && !busy) load(); }, 30000);
 setInterval(tick, 5000);
+setInterval(poll, 60000);
 load().then(loadUsage);
 </script>
 </body>

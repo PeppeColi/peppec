@@ -6,10 +6,11 @@ import re
 import subprocess
 import threading
 import time
+from collections import deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote, unquote
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import jwt
 import requests
@@ -70,6 +71,11 @@ USAGE_LOCK = threading.Lock()
 USAGE_REUSE = 60  # seconds a reading is shown again instead of asking Anthropic
 USAGE_CACHE = {"last": None, "wait_until": 0}  # last reading; no request before wait_until (429)
 LOGIN_HINT = "run 'docker compose run --rm peppec-bot claude' on the bot's machine and log in"
+# Browser notifications: the Telegram messages that ring, read back from the annotations "peppec"
+# of the jobs (notify in scripts/lib.sh). The last ones stay in memory only, for the dashboard
+EVENTS = deque(maxlen=50)
+STARTED = time.time()  # a job that ended before the bot started brings no event
+EVENTS_EVERY = 60  # seconds between two readings of the jobs
 
 
 class UserError(Exception):
@@ -85,6 +91,7 @@ class Repo:
         self.key = hashlib.sha1(name.lower().encode()).hexdigest()[:8]
         self._token = ""
         self._expires = 0.0
+        self._runs = {}  # run id -> (its updated_at once all its jobs are read, the jobs read)
 
     def token(self):
         """Installation token of the GitHub App, renewed 5 minutes before it expires."""
@@ -120,6 +127,36 @@ class Repo:
             if len(got) < 100:
                 return items
             page += 1
+
+    def new_events(self):
+        """The texts of the notifications that rang in the jobs ended since the last call: the
+        annotations "peppec" that notify writes in scripts/lib.sh. Runs are listed for the last
+        7 hours, longer than a job may last; a run is read again only when it changed."""
+        since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 7 * 3600))
+        runs = self.gh("GET", "/actions/runs", params={"created": f">={since}", "per_page": 100})["workflow_runs"]
+        texts, seen = [], {}
+        for run in runs:
+            rid, updated = run["id"], run["updated_at"]
+            last, read = self._runs.get(rid, (None, frozenset()))
+            if last == updated or (run["status"] == "completed" and stamp(updated) < STARTED):
+                seen[rid] = (updated, read)
+                continue
+            done = True
+            for job in self.gh("GET", f"/actions/runs/{rid}/jobs", params={"per_page": 100})["jobs"]:
+                if job["id"] in read:
+                    continue
+                if job["status"] != "completed":
+                    done = False
+                    continue
+                read |= {job["id"]}
+                if stamp(job["completed_at"]) >= STARTED:
+                    check = job["check_run_url"].rsplit("/", 1)[1]
+                    texts += [a["message"] for a in self.gh("GET", f"/check-runs/{check}/annotations",
+                                                            params={"per_page": 50}) if a.get("title") == "peppec"]
+            # A run with jobs still going is read again at the next call
+            seen[rid] = (updated if done else None, read)
+        self._runs = seen
+        return texts
 
     def question(self, n):
         """The open question on issue n and the answer the agent recommends ("" when none).
@@ -383,6 +420,44 @@ class Repo:
         self.unblock(n)
         self.dispatch()
         return f"Hint added to {self.name}#{n}, restarting." + self.still_paused()
+
+
+def stamp(iso):
+    """Seconds since the epoch of a time of the GitHub API ("2026-11-15T09:30:00Z")."""
+    return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+
+
+def add_event(repo, text):
+    """One browser notification for the dashboard. Its id grows with time, across restarts too,
+    so a page that remembers the last id it showed never shows one twice."""
+    m = PREFIX.match(text)
+    body = text[m.end():] if m else text
+    # Only a link to this repository is opened by a click: the text comes from a job's log
+    links = re.findall(rf"https://github\.com/{re.escape(repo.name)}/\S+", body, re.IGNORECASE)
+    with LOCK:
+        last = EVENTS[-1]["id"] if EVENTS else 0
+        EVENTS.append({"id": max(int(time.time() * 1000), last + 1), "repo": repo.key, "name": repo.name,
+                       "text": body, "url": links[-1].rstrip(".,;)") if links else None,
+                       "numbers": [int(n) for n in re.findall(r"#(\d+)", body)]})
+
+
+def watch_events():
+    while True:
+        for r in REPOS:
+            try:
+                with LOCK:
+                    texts = r.new_events()
+                for text in texts:
+                    add_event(r, text)
+            except Exception as e:  # one repository that cannot be read does not stop the others
+                print(f"events of {r.name}: {explain(e)}", flush=True)
+        time.sleep(EVENTS_EVERY)
+
+
+def events_after(after):
+    with LOCK:
+        return json.dumps({"events": [e for e in EVENTS if e["id"] > after],
+                           "last": EVENTS[-1]["id"] if EVENTS else 0}).encode()
 
 
 def not_work_unit(issue):
@@ -785,6 +860,12 @@ class Dashboard(BaseHTTPRequestHandler):
                 except Exception as e:
                     self.error(502, f"Error: {e}")
             return
+        url = urlparse(self.path)
+        if url.path == "/api/events":
+            if self.allowed():
+                after = parse_qs(url.query).get("after", ["0"])[0]
+                self.reply(200, events_after(int(after) if after.isdigit() else 0))
+            return
         if self.path not in ("/api/state", "/api/state?fresh=1"):
             return self.error(404, "Not found.")
         if self.allowed():
@@ -820,6 +901,7 @@ def start_dashboard():
         return
     server = ThreadingHTTPServer(("0.0.0.0", DASHBOARD_PORT), Dashboard)
     threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=watch_events, daemon=True).start()
     print(f"dashboard on port {DASHBOARD_PORT}", flush=True)
 
 
