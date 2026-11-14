@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-11-14
+
 ### Added
 
 - A specification decides whether its feature needs new end-to-end tests, in a section named
@@ -432,7 +434,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.31.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.32.0...HEAD
+[1.32.0]: https://github.com/PeppeColi/peppec/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/PeppeColi/peppec/compare/v1.30.1...v1.31.0
 [1.30.1]: https://github.com/PeppeColi/peppec/compare/v1.30.0...v1.30.1
 [1.30.0]: https://github.com/PeppeColi/peppec/compare/v1.29.2...v1.30.0
