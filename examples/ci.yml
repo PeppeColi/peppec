@@ -1,11 +1,13 @@
 # Copy to .github/workflows/ci.yml in your repository.
 # The check run it produces is named "ci / ci": require that name in the branch ruleset.
 # With feature branches and PEPPEC_E2E_ALL, also require "ci / e2e_all" on the base branch.
+# The push list names main and the base branch (PEPPEC_BASE_BRANCH): each merge is checked
+# where it lands. Leave the agent's branches out: their pull requests already run CI.
 name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, dev]
 
 permissions:
   contents: read

@@ -700,10 +700,13 @@ init_files() {
   ok "preset $PRESET"
 
   cron=$(summary_cron "$TZ_NAME" "$SUMMARY_HOUR")
+  # CI runs on the pushes to main and to the base branch, where the merges land
+  local pushed="main"; [ "$BASE_BRANCH" = main ] || pushed="main, $BASE_BRANCH"
   for f in agent ci summary; do
     content=$(engine_file "examples/$f.yml" | sed -e '/^# Copy to /d' \
       -e "s|\\.yml@v2\$|.yml@$REF|" -e "s|engine_ref: v2|engine_ref: $REF|" \
-      -e "s|cron: '0 7,8 \\* \\* \\*'|cron: '$cron'|")
+      -e "s|cron: '0 7,8 \\* \\* \\*'|cron: '$cron'|" \
+      -e "s|branches: \\[main, dev\\]|branches: [$pushed]|")
     keep_own_workflow "$f"
     write_file ".github/workflows/$f.yml" "$content"
   done
@@ -1087,6 +1090,16 @@ cmd_doctor() {
         || bad "$f.yml differs between $BASE_BRANCH and $default_branch: merge $default_branch into $BASE_BRANCH"
     done
   fi
+  # Each merge is checked where it lands: CI must run on the pushes to the base branch too.
+  # A push trigger without a branch list runs everywhere, which covers it
+  if [ "$BASE_BRANCH" != "$default_branch" ]; then
+    local push_on
+    push_on=$(host_file .github/workflows/ci.yml | sed -n '/^  push:/,/^ \{0,2\}[^ ]/p' || true)
+    if [ -z "$push_on" ] || { grep -q 'branches' <<< "$push_on" \
+         && ! grep -qE "[[ ,]$BASE_BRANCH[], ]|^ *- *$BASE_BRANCH *\$" <<< "$push_on"; }; then
+      warn "ci.yml does not run on the pushes to $BASE_BRANCH: add it next to main under 'push: branches', so each merge is checked where it lands"
+    fi
+  fi
   # The agent and the checks of its pull requests read the configuration from the base branch
   content=$(host_file .github/peppec.yml "$BASE_BRANCH" || true)
   if [ "$BASE_BRANCH" != "$default_branch" ] && [ -n "$content" ] \
@@ -1200,10 +1213,10 @@ cmd_doctor() {
       *) warn "$f: $state";;
     esac
   done
-  # The checks must start green: for the agent "done" means "the checks pass"
-  state=$(gh run list -R "$REPO" --workflow ci.yml --branch "$default_branch" --event push --limit 1 \
+  # The checks must start green where the agent starts: for it "done" means "the checks pass"
+  state=$(gh run list -R "$REPO" --workflow ci.yml --branch "$BASE_BRANCH" --event push --limit 1 \
     --json conclusion --jq '.[0].conclusion // ""' 2> /dev/null || true)
-  [ "$state" != failure ] || warn "the last CI run on $default_branch failed: the agent cannot tell its own failures from these"
+  [ "$state" != failure ] || warn "the last CI run on $BASE_BRANCH failed: the agent cannot tell its own failures from these"
   local slowest stall; stall=$(var_of PEPPEC_STALL_MINUTES); stall=${stall:-120}
   local minutes='[.[] | (.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601)] | (max // 0) / 60 | floor'
   slowest=$(gh run list -R "$REPO" --workflow ci.yml --status success --limit 10 --json createdAt,updatedAt \

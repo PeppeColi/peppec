@@ -9,6 +9,18 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-14
+
+### Changed
+
+- CI runs on the pushes to the base branch too, not only to `main`: each merge is checked where
+  it lands, and the pull requests into the base branch get a fresh build cache. `peppec init`
+  writes `main` and the base branch under `push: branches` in `ci.yml` (only `main` when it is
+  the base branch). An installation upgrades by adding its base branch there by hand, or by
+  running `peppec init` again.
+- `peppec doctor` checks the last CI run on the base branch instead of the default branch, and
+  warns when `ci.yml` does not run on the pushes to the base branch.
+
 ## [2.1.0] - 2026-11-14
 
 ### Removed
@@ -467,7 +479,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/PeppeColi/peppec/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/PeppeColi/peppec/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/PeppeColi/peppec/compare/v1.32.0...v2.0.0
 [1.32.0]: https://github.com/PeppeColi/peppec/compare/v1.31.0...v1.32.0
