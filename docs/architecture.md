@@ -183,7 +183,7 @@ With one repository, `repo` is never needed. With several:
 
 Only the Resume button lifts the pause. `/unblock`, the Unblock and Hint buttons and the answers act on the issue and leave the pause on, and their reply says so.
 
-The pause stops only new issues. While it is on, the issue in progress goes on: its checks are fixed, CodeRabbit reviews it, and it is merged (automatic mode) or marked ready to merge. A pull request you merge by hand is tidied up at once (issue closed, branch removed, "ready to be tried" message). A finished feature still gets the base branch, its end-to-end tests are read, and the sync and hotfix work units the queue opens for it start, Report a problem included: they finish work already built. To stop the issue in progress as well, label it `needs human`. The buttons on the notifications need a bot of version 1.9 or later.
+The pause stops only new issues. While it is on, the issue in progress goes on: its checks are fixed, CodeRabbit reviews it, and it is merged (automatic mode) or marked ready to merge. A pull request you merge by hand is tidied up at once (issue closed, branch removed, "ready to be tried" message). A finished feature still gets the base branch, its end-to-end tests are read, and the sync and hotfix work units the queue opens for it start, Report a problem included: they finish work already built. To stop the issue in progress as well, label it `needs human`.
 
 ## Dashboard
 
@@ -215,7 +215,7 @@ The dashboard speaks plain HTTP and can act on your repositories: keep it inside
 | `paused` / `auto mode` / `always on` | Control panel issue | Bot | No new issues, merge mode and schedule |
 | `base missing` | Control panel issue | Workflow | The base branch does not exist: queue stopped until it is back |
 
-Two hidden counters are kept as comments (`<!-- peppec:KEY=VALUE -->`): the minutes worked on an issue and the commit a review was requested for.
+The workflow keeps its own state in hidden comments (`<!-- peppec:KEY=VALUE -->`), written with the app's token and read only from the app: the minutes worked on an issue, the branch it started on, the feature branch of a specification, the end-to-end results already judged and how many hotfixes they caused, the number of sub-issues already announced as ready to be tried, the review requests already made for a commit, the replies posted to CodeRabbit, and which one-time warnings were already sent. Hotfix and sync work units, and the pull request of a feature, carry a marker in their body.
 
 ## Security
 

@@ -9,6 +9,23 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-14
+
+### Removed
+
+- The bot no longer reads `REPO` and `CONTROL_ISSUE`, the settings of the single-repository bot:
+  `REPOS` is the only way to name the repositories it follows. A bot that still has the old
+  settings stops at start with "REPOS is empty".
+
+### Fixed
+
+- `bot/.env.example` lists `TELEGRAM_USER_IDS`, needed to command the bot from a group chat.
+- `examples/peppec.yml` says the configuration is read from the base branch, not from `main`.
+- The docs no longer carry notes about 1.x versions; the setup guide says that `init` creates
+  the GitHub App with you; the architecture lists the hidden state the workflow keeps; the
+  planning guide describes end-to-end tests with and without `PEPPEC_E2E_FEATURE` in two
+  separate sections.
+
 ## [2.0.0] - 2026-11-14
 
 ### Changed
@@ -450,7 +467,9 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v1.32.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/PeppeColi/peppec/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/PeppeColi/peppec/compare/v1.32.0...v2.0.0
 [1.32.0]: https://github.com/PeppeColi/peppec/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/PeppeColi/peppec/compare/v1.30.1...v1.31.0
 [1.30.1]: https://github.com/PeppeColi/peppec/compare/v1.30.0...v1.30.1

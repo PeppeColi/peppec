@@ -393,11 +393,8 @@ def size_of(labels):
 
 
 def load_repos():
-    """REPOS is a list of owner/name#N, N being the number of the "Control panel" issue.
-    REPO and CONTROL_ISSUE, the settings of the single-repository bot, still work."""
+    """REPOS is a list of owner/name#N, N being the number of the "Control panel" issue."""
     spec = os.environ.get("REPOS", "")
-    if not spec.strip() and os.environ.get("REPO"):
-        spec = f"{os.environ['REPO']}#{os.environ.get('CONTROL_ISSUE', '')}"
     repos = []
     for item in re.split(r"[,\s]+", spec.strip()):
         if not item:
