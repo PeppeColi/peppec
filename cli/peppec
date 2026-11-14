@@ -53,7 +53,7 @@ PEPPEC_MAX_ISSUE_MINUTES|120|Agent working time per issue, in minutes
 PEPPEC_STALL_MINUTES|120|Minutes a pull request may wait for a CI result
 PEPPEC_QUOTA_RETRY_MINUTES|60|Minutes between retries when the Claude quota is exhausted
 PEPPEC_SUMMARY_HOUR|9|Hour of the daily summary (0-23)'
-VARIABLES="PEPPEC_CONTROL_ISSUE PEPPEC_OWNER_LOGIN PEPPEC_APP_ID PEPPEC_APP_LOGIN PEPPEC_AGENT_GIT_NAME PEPPEC_AGENT_GIT_EMAIL PEPPEC_TZ_NAME PEPPEC_WORK_START_HOUR PEPPEC_WORK_END_HOUR PEPPEC_MAX_REVIEW_ROUNDS PEPPEC_LARGE_FROM_ROUND PEPPEC_MAX_CI_ATTEMPTS PEPPEC_MAX_ISSUE_MINUTES PEPPEC_STALL_MINUTES PEPPEC_QUOTA_RETRY_MINUTES PEPPEC_SUMMARY_HOUR PEPPEC_CLAUDE_TOKEN_EXPIRES"
+VARIABLES="PEPPEC_CONTROL_ISSUE PEPPEC_OWNER_LOGIN PEPPEC_APP_ID PEPPEC_APP_CLIENT_ID PEPPEC_APP_LOGIN PEPPEC_AGENT_GIT_NAME PEPPEC_AGENT_GIT_EMAIL PEPPEC_TZ_NAME PEPPEC_WORK_START_HOUR PEPPEC_WORK_END_HOUR PEPPEC_MAX_REVIEW_ROUNDS PEPPEC_LARGE_FROM_ROUND PEPPEC_MAX_CI_ATTEMPTS PEPPEC_MAX_ISSUE_MINUTES PEPPEC_STALL_MINUTES PEPPEC_QUOTA_RETRY_MINUTES PEPPEC_SUMMARY_HOUR PEPPEC_CLAUDE_TOKEN_EXPIRES"
 
 # ---------- output ----------
 if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=""; G=""; Y=""; R=""; N=""; fi
@@ -192,8 +192,11 @@ app_api() { # app_api APP_ID KEY_FILE path
     "https://api.github.com$3" 2> /dev/null
 }
 # Checks the key against the app and the app's installation on the repository; sets APP_SLUG
+# and APP_CLIENT_ID
 check_app() { # check_app APP_ID KEY_FILE
-  APP_SLUG=$(app_api "$1" "$2" /app | jq -r '.slug // empty' || true)
+  local app; app=$(app_api "$1" "$2" /app || true)
+  APP_SLUG=$(jq -r '.slug // empty' <<< "$app" 2> /dev/null || true)
+  APP_CLIENT_ID=$(jq -r '.client_id // empty' <<< "$app" 2> /dev/null || true)
   if [ -z "$APP_SLUG" ]; then bad "the key does not belong to app $1, or the app does not exist"; return 1; fi
   ok "key valid for the app '$APP_SLUG'"
   if app_api "$1" "$2" "/repos/$REPO/installation" > /dev/null; then
@@ -392,7 +395,7 @@ print(got[0] if got else "")
 
 # Registers the app from a manifest: the browser shows GitHub's confirmation page, GitHub
 # sends back a code, and the code is exchanged for the App ID and the private key.
-# Sets APP_ID, APP_SLUG and KEY_FILE; returns 1 if the app was not created.
+# Sets APP_ID, APP_CLIENT_ID, APP_SLUG and KEY_FILE; returns 1 if the app was not created.
 create_app() {
   local owner action state port manifest tmp reply="" code="" app listener=""
   owner="${REPO%%/*}"
@@ -441,6 +444,7 @@ create_app() {
     bad "GitHub did not accept the code of the new app: delete the app on GitHub and try again"; return 1
   fi
   APP_ID=$(jq -r .id <<< "$app"); APP_SLUG=$(jq -r .slug <<< "$app")
+  APP_CLIENT_ID=$(jq -r '.client_id // empty' <<< "$app")
   KEY_FILE="$HOME/$APP_SLUG.private-key.pem"
   [ -e "$KEY_FILE" ] && KEY_FILE="$HOME/$APP_SLUG.$APP_ID.private-key.pem"
   ( umask 077; jq -r .pem <<< "$app" > "$KEY_FILE" )
@@ -457,7 +461,7 @@ init_app() {
   step "GitHub App"
   local current; current=$(var_of PEPPEC_APP_ID)
   note "The app that applies labels and merges, and that the Telegram bot acts as."
-  APP_ID=""; APP_SLUG=""
+  APP_ID=""; APP_SLUG=""; APP_CLIENT_ID=""
   KEY_FILE="${KEY_FILE:-${PEPPEC_APP_KEY_FILE:-}}"
   if [ -z "$current" ] && [ -z "${PEPPEC_APP_ID:-}" ] && [ "$YES" = false ]; then
     note "One app can serve several repositories: answer no if you already have it."
@@ -495,6 +499,11 @@ init_app() {
     current=$(var_of PEPPEC_APP_LOGIN)
     ask APP_SLUG "App short name, as in its URL" "${current%\[bot\]}"
   fi
+  if [ -z "$APP_CLIENT_ID" ]; then
+    # Read from the app when the key is at hand; otherwise the one stored, or asked
+    current=$(var_of PEPPEC_APP_CLIENT_ID)
+    ask APP_CLIENT_ID "App Client ID (on the app's page, it starts with Iv)" "${PEPPEC_APP_CLIENT_ID:-$current}"
+  fi
 }
 
 init_variables() {
@@ -504,6 +513,8 @@ init_variables() {
   set_var PEPPEC_CONTROL_ISSUE "$CONTROL"
   set_var PEPPEC_OWNER_LOGIN "$(jq -r .login <<< "$me")"
   [ -n "$APP_ID" ] && set_var PEPPEC_APP_ID "$APP_ID"
+  if [ -n "${APP_CLIENT_ID:-}" ]; then set_var PEPPEC_APP_CLIENT_ID "$APP_CLIENT_ID"
+  else bad "PEPPEC_APP_CLIENT_ID not set: the workflows cannot act as the app (run init again with --key <file>)"; fi
   if [ -n "$APP_SLUG" ]; then set_var PEPPEC_APP_LOGIN "${APP_SLUG}[bot]"; else bad "PEPPEC_APP_LOGIN not set: the app's short name is unknown"; fi
   name=$(var_of PEPPEC_AGENT_GIT_NAME); email=$(var_of PEPPEC_AGENT_GIT_EMAIL)
   ask value "Name on the agent's commits" "${name:-$(jq -r '.name // .login' <<< "$me")}"
@@ -1065,6 +1076,7 @@ cmd_doctor() {
     [ -f "$KEY_FILE" ] || die "no such file: $KEY_FILE"
     if check_app "$app_id" "$KEY_FILE"; then
       [ "${APP_SLUG}[bot]" = "$(var_of PEPPEC_APP_LOGIN)" ] || bad "PEPPEC_APP_LOGIN is '$(var_of PEPPEC_APP_LOGIN)' but the app is '${APP_SLUG}[bot]'"
+      [ "$APP_CLIENT_ID" = "$(var_of PEPPEC_APP_CLIENT_ID)" ] || bad "PEPPEC_APP_CLIENT_ID is '$(var_of PEPPEC_APP_CLIENT_ID)' but the app's Client ID is '$APP_CLIENT_ID'"
     fi
   else
     warn "installation not checked: pass --key <the app's .pem file> to check it"
@@ -1377,7 +1389,7 @@ Options:
   --ref <ref>   Engine version to install (default: v1)
   --yes         Never ask: keep what is set, take the defaults, read secrets from the
                 environment (CLAUDE_CODE_OAUTH_TOKEN, PEPPEC_AGENT_TOKEN, PEPPEC_TELEGRAM_BOT_TOKEN,
-                PEPPEC_TELEGRAM_CHAT_ID, PEPPEC_APP_ID, PEPPEC_APP_KEY_FILE)
+                PEPPEC_TELEGRAM_CHAT_ID, PEPPEC_APP_ID, PEPPEC_APP_CLIENT_ID, PEPPEC_APP_KEY_FILE)
 EOF
 }
 

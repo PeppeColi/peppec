@@ -8,6 +8,7 @@ Follow the phases in order: each one assumes the previous ones are done. Replace
 | `<REPO>` | The repository name |
 | `<APP_SLUG>` | The GitHub App's short name, as in its URL (Phase 2) |
 | `<APP_ID>` | The GitHub App's numeric ID (Phase 2) |
+| `<CLIENT_ID>` | The GitHub App's Client ID, starting with `Iv` (Phase 2) |
 | `<N_CONTROL>` | The number of the "Control panel" issue (Phase 4) |
 
 ## Quick path: the command line
@@ -136,7 +137,7 @@ Labels, merges, counters and the Telegram bot act through a GitHub App of yours,
 
 Never write these values in a file of the repository, in an issue or in a note.
 
-`peppec init` can do steps 1 and 2 for you: it opens GitHub with the settings below already filled in, you confirm, and it receives the App ID and the private key, which it saves in your home folder. Then it opens the page of step 3. By hand:
+`peppec init` can do steps 1 and 2 for you: it opens GitHub with the settings below already filled in, you confirm, and it receives the App ID, the Client ID and the private key, which it saves in your home folder. Then it opens the page of step 3. By hand:
 
 1. Create the app: **Settings → Developer settings → GitHub Apps → New GitHub App**.
    - Name: any free name; the name in the app's URL is your `<APP_SLUG>`.
@@ -144,7 +145,7 @@ Never write these values in a file of the repository, in an issue or in a note.
    - Webhook: untick **Active**.
    - Repository permissions: Actions, Contents, Issues and Pull requests set to **Read and write**; Checks set to **Read-only**.
    - Where can this GitHub App be installed: **Only on this account**.
-2. On the app page note the **App ID**, then under **Private keys** click **Generate a private key**: a `.pem` file downloads.
+2. On the app page note the **App ID** and the **Client ID**, then under **Private keys** click **Generate a private key**: a `.pem` file downloads.
 3. Install it: **Install App → your account → Only select repositories → `<REPO>`**.
 4. Claude token: run `claude setup-token` and copy the token. It lasts one year: note the date.
 5. Personal token: **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate**, "Only select repositories" → `<REPO>`, with the permissions in the table. `peppec init` prints a link that fills in name, description, expiry and permissions.
@@ -202,6 +203,7 @@ gh api user --jq '.name, "\(.id)+\(.login)@users.noreply.github.com"'
 gh variable set PEPPEC_CONTROL_ISSUE -R "$R" -b "<N_CONTROL>"
 gh variable set PEPPEC_OWNER_LOGIN -R "$R" -b "<USER>"
 gh variable set PEPPEC_APP_ID -R "$R" -b "<APP_ID>"
+gh variable set PEPPEC_APP_CLIENT_ID -R "$R" -b "<CLIENT_ID>"
 gh variable set PEPPEC_APP_LOGIN -R "$R" -b "<APP_SLUG>[bot]"
 gh variable set PEPPEC_AGENT_GIT_NAME -R "$R" -b "<your name>"
 gh variable set PEPPEC_AGENT_GIT_EMAIL -R "$R" -b "<noreply email>"
