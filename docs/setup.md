@@ -61,7 +61,7 @@ Prerequisites:
 - [ ] Claude Code installed and signed in with your subscription
 - [ ] A Telegram account
 - [ ] An always-on machine with Docker and Docker Compose for the bot (a Raspberry Pi with a 64-bit system is enough)
-- [ ] A repository whose default branch is `main`, with a project one of the [presets](../presets) can build
+- [ ] A repository whose default branch is `main`, with a project one of the [presets](../presets) can build. If the language is not chosen yet, start with the preset `none` and change it later (see [Changing the preset](#changing-the-preset))
 
 All `gh` commands run on your computer, signed in as `<USER>`.
 
@@ -120,6 +120,7 @@ paused|No new issues start; the one in progress goes on (control panel)
 auto mode|Automatic merge enabled (control panel)
 always on|New issues start at any hour, not only at night (control panel)
 base missing|The base branch does not exist: queue stopped until it is back (control panel)
+no preset|The preset is none: the agent builds nothing until a language is chosen (control panel)
 EOF
 ```
 
@@ -274,6 +275,19 @@ extra_setup: .github/actions/services
 ```
 
 The action must live under `.github/`, so the agent cannot change it. Like the rest of the configuration, it is read from the base branch.
+
+### Changing the preset
+
+A new project can start with the preset `none` (`peppec init` proposes it when there is neither `Cargo.toml` nor `composer.json`): CI passes, planning and issues can be written, and the agent builds nothing. The control panel carries the `no preset` label, `/status` and the dashboard say so, and the ready issues wait: each run tells you once about the ones not reported yet, in a single message.
+
+To choose the language later, or to move from one language to another:
+
+1. Pause the queue and let the issue in progress finish: its pull request would be checked with the new preset.
+2. Run `peppec init --preset <name>`. It shows what the change touches (the keys of `.github/peppec.yml` written for the old language, such as `options`, `check` and `extra_setup`, and the issue in progress), then rewrites the `preset:` line after asking.
+3. Review the other keys, commit, and push the same commit to `main` and to the base branch, like every configuration change: the agent reads the configuration from the base branch.
+4. Resume the queue.
+
+The project must pass the new preset's checks. Coming from `none`, CI on `main` and on the base branch fails until the project has a skeleton: the first issue can create it (for example "create the Cargo project with `cargo init`"). Files of the old language outside the preset, such as `.gitignore` entries or the path filters of `.coderabbit.yaml`, are yours to adjust.
 
 ### The base branch `dev`
 

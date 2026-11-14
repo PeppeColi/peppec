@@ -294,7 +294,7 @@ function home() {
       state.repos.map((r) => el("div", {class: "card"}, r.error
         ? row("#/repo/" + r.key, short(r), "Cannot be read", el("span", {class: "small warn-text"}, r.error))
         : row("#/repo/" + r.key, short(r),
-        cap(r.mode) + " · " + (r.schedule === "always" ? "Always on" : "Nightly") + " · " + (r.base_missing ? "Base branch missing" : r.paused ? "Paused" : "Running"),
+        cap(r.mode) + " · " + (r.schedule === "always" ? "Always on" : "Nightly") + " · " + (r.base_missing ? "Base branch missing" : r.no_preset ? "No preset" : r.paused ? "Paused" : "Running"),
         (r.active ? "#" + r.active.number + " in progress" : "No issue in progress") + " · " + r.queue.length + " in queue")))),
     claude(),
     el("div", {class: "small center"}, "bot " + state.version),
@@ -393,6 +393,8 @@ function repoPage(repo) {
     messages(),
     repo.base_missing && el("div", {class: "notice", role: "alert"},
       "Queue stopped: the base branch does not exist. Create it again and the queue goes on by itself."),
+    repo.no_preset && el("div", {class: "notice", role: "alert"},
+      "No preset: the agent builds nothing until you choose the language with peppec init --preset <name>."),
     el("div", {class: "card pad"},
       el("div", {class: "group"}, el("div", {class: "label"}, "Merge mode"),
         choice(repo, "mode", repo.mode, [["manual", "Manual"], ["automatic", "Automatic"]]),

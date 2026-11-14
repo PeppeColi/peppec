@@ -1,0 +1,15 @@
+# The placeholder preset: PEPPEC installed before the language is chosen.
+# CI passes (ci / ci is a required check, and your own commits of plans and documents must merge),
+# and the queue starts no agent work while a repository uses it (scripts/decide.sh).
+
+description: Language not chosen yet
+
+# Nothing to check yet: the agent never runs with this preset
+check: |
+  true
+
+notes: []
+allowed_tools: []
+disallowed_tools: []
+never_commit: []
+protected_paths: []

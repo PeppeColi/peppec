@@ -4,6 +4,11 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 action=none issue="" pr="" sha="" size="" round="" ci_tries="" reason="" minutes="" branch="" base=""
 emit() {
+  # The placeholder preset: no agent work starts, whatever the rest of the queue decided
+  if [ "${no_preset:-false}" = true ] && [[ "$action" =~ ^(start|fix_ci|fix_review)$ ]]; then
+    echo "Preset none: $action of #$issue not started (choose a preset: peppec init --preset <name>)"
+    action=none
+  fi
   for k in action issue pr sha size round ci_tries reason minutes branch base; do
     echo "$k=${!k}" >> "$GITHUB_OUTPUT"
   done
@@ -57,6 +62,31 @@ fi
 if has "$ctrl" "base missing"; then
   rm_label "$CONTROL_ISSUE" "base missing"
   notify_info "The base branch $BASE_BRANCH is back: the queue goes on."
+fi
+
+# The placeholder preset "none" (presets/none): the language is not chosen yet, so the agent never
+# runs (see emit). The ready issues wait; you are told once per issue, in one message per run
+no_preset=false
+if [ "$(host_preset)" = none ]; then
+  no_preset=true
+  echo "Preset none: the queue starts no agent work"
+  # Read by the bot and the dashboard, which do not read the configuration
+  has "$ctrl" "no preset" || add_label "$CONTROL_ISSUE" "no preset"
+  waiting=$(gh api --paginate "repos/$REPO/issues?state=open&labels=ready&per_page=100" \
+    | jq -s -r --arg o "${OWNER_LOGIN:-}" --arg a "${APP_LOGIN:-}" \
+      '[add // [] | .[] | select(.pull_request | not) | select(.user.login == $o or .user.login == $a)
+        | select('"$NOT_WORK_UNIT"' | not)] | sort_by(.created_at) | .[].number')
+  told=""
+  for n in $waiting; do
+    [ -z "$(marker_get "$n" nopreset)" ] || continue
+    marker_set "$n" nopreset 1
+    told="$told #$n"
+  done
+  if [ -n "$told" ]; then
+    notify "Ready but waiting:$told. The preset is none, so the agent builds nothing until you choose the language: peppec init --preset <name> (for example rust-v1). https://github.com/$REPO/issues?q=is%3Aopen+label%3Aready"
+  fi
+elif has "$ctrl" "no preset"; then
+  rm_label "$CONTROL_ISSUE" "no preset"
 fi
 
 # Finished features waiting for you get the base branch again when it went on (resync_features),
@@ -178,6 +208,8 @@ if [ -z "$active" ]; then
   done
   issue=${issue:-$first}
   [ -n "$issue" ] || { echo "No ready issues to start"; exit 0; }
+  # Before plan_branch, which creates the feature branch and remembers the branch on the issue
+  [ "$no_preset" = false ] || { echo "Preset none: #$issue waits"; issue=""; exit 0; }
   if ! plan_branch "$issue"; then action=stop; reason=$plan_error; exit 0; fi
   echo "Issue #$issue on $branch, based on $base"
   size=$(size_of "$(labels_of "$issue")")

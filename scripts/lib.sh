@@ -279,6 +279,17 @@ base_branch_missing() {
   out=$(gh api "repos/$REPO/branches/$BASE_BRANCH" --jq .name 2>&1) && return 1
   grep -q "HTTP 404" <<< "$out" || { echo "$out" >&2; exit 1; }
 }
+# The preset in .github/peppec.yml on the base branch, where the configuration is read from;
+# empty when the file is missing. Any other error stops the run, as above
+host_preset() {
+  local out
+  if out=$(gh api -H "Accept: application/vnd.github.raw" \
+      "repos/$REPO/contents/.github/peppec.yml?ref=${BASE_BRANCH:-main}" 2>&1); then
+    sed -nE 's/^preset:[[:space:]]*([^[:space:]#]+).*/\1/p' <<< "$out" | head -n 1
+  else
+    grep -q "HTTP 404" <<< "$out" || { echo "$out" >&2; exit 1; }
+  fi
+}
 has() { grep -qxF -- "$2" <<< "$1"; }
 age_minutes() { echo $(( ($(date +%s) - $(date -d "$1" +%s)) / 60 )); }
 # Hidden marker comments on an issue or PR: <!-- peppec:KEY=VALUE -->. The workflow writes them

@@ -9,6 +9,18 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Added
+
+- The preset `none`, for a project whose language is not chosen yet: it installs nothing and its
+  check is `true`, so CI passes. While a repository uses it the queue starts no agent work (no new
+  issue, no fix round); merges and closures go on. The control panel gets the `no preset` label,
+  shown by `/status` and the dashboard, and the ready issues wait: each run sends one Telegram
+  message listing the ones not reported yet. `peppec init` proposes `none` when there is neither
+  `Cargo.toml` nor `composer.json`, and `peppec doctor` warns about it.
+- `peppec init --preset <name>` on a repository with another preset rewrites the `preset:` line of
+  `.github/peppec.yml` after asking, and first lists the keys written for the old language and the
+  issue in progress. docs/setup.md explains how to change preset.
+
 ## [2.4.0] - 2026-11-14
 
 ### Changed
