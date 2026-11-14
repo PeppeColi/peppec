@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-11-14
+
 ### Changed
 
 - The workflows give `actions/create-github-app-token` the app's Client ID (`client-id`) in place of
@@ -511,7 +513,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.3.1...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/PeppeColi/peppec/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/PeppeColi/peppec/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/PeppeColi/peppec/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/PeppeColi/peppec/compare/v2.1.0...v2.2.0
