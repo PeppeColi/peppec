@@ -28,7 +28,7 @@ size_of() {
 REVIEW_RETRY_MINUTES=20 REVIEW_REQUESTS=3
 budget() { local used; used=$(marker_get "$1" minutes); echo $(( MAX_ISSUE_MINUTES - ${used:-0} )); }
 
-# A pull request of the agent merged by hand: its branch is removed here, even with the queue paused.
+# A pull request of the agent merged by hand: its branch is removed here.
 # A feature branch you merged: its specification is closed and the branch removed
 if [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ]; then
   delete_agent_branch "$EVENT_HEAD_REF"
@@ -36,7 +36,10 @@ if [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ]; then
 fi
 
 ctrl=$(labels_of "$CONTROL_ISSUE")
-if has "$ctrl" "paused"; then echo "Queue paused"; exit 0; fi
+# "paused" on the control panel stops only new issues: the issue in progress goes on to its merge
+# (or "ready to merge"), merges done by hand are tidied up, and the sync and hotfix work units the
+# queue opens to finish a feature already built still start
+paused=false; has "$ctrl" "paused" && paused=true
 mode=manual; has "$ctrl" "auto mode" && mode=automatic
 
 # Without its base branch (deleted by hand, or by GitHub after a merge into the default branch)
@@ -161,6 +164,9 @@ if [ -z "$active" ]; then
   ready=$(jq -r '.[] | select('"$NOT_WORK_UNIT"' | not) | .number' <<< "$open_ready")
   first=""
   for n in $ready; do
+    if [ "$paused" = true ] && [ "$(kind_of "$n")" = work ]; then
+      echo "Issue #$n waits: the queue is paused, no new issue starts"; continue
+    fi
     blockers=$(open_blockers "$n" "$closed")
     if [ -n "$blockers" ]; then echo "Issue #$n waits for $blockers"; continue; fi
     [ -n "$first" ] || first=$n

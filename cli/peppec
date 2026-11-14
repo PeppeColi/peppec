@@ -38,7 +38,7 @@ ci 2|Check fix attempt 2
 ci 3|Check fix attempt 3
 ci 4|Check fix attempt 4
 ci 5|Check fix attempt 5
-paused|Queue paused (control panel)
+paused|No new issues start; the one in progress goes on (control panel)
 auto mode|Automatic merge enabled (control panel)
 always on|New issues start at any hour, not only at night (control panel)
 base missing|The base branch does not exist: queue stopped until it is back (control panel)'
@@ -360,7 +360,7 @@ init_control_panel() {
   if [ -n "$CONTROL" ]; then ok "issue #$CONTROL"; return; fi
   local url
   url=$(gh issue create -R "$REPO" --title "Control panel" \
-    --body "Labels: paused = queue stopped; auto mode = automatic merge; always on = work at any hour. Do not close.")
+    --body "Labels: paused = no new issues start; auto mode = automatic merge; always on = work at any hour. Do not close.")
   CONTROL="${url##*/}"
   gh issue pin "$CONTROL" -R "$REPO" > /dev/null 2>&1 || true
   ok "issue #$CONTROL (created and pinned)"
