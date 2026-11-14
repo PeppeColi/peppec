@@ -31,11 +31,31 @@ These options need `gh` 2.94 or later.
 5. **Try it when you are told.** When the last sub-issue is closed you get a Telegram message. Try the feature on the base branch (or on its feature branch); what does not work becomes a new sub-issue of the same specification, and you get the message again when those are closed too. The message has a **Report a problem** button (the dashboard has the same, under "Ready to try"): write what does not work in one sentence and the bot opens that sub-issue for you, labelled `ready` and `size: S`. The agent receives the specification with it, so it sees your scenarios. For another size, change the label on GitHub before the issue starts.
 6. **Bring it to `main`** with a pull request merged with a merge commit, and close the specification (with feature branches, merging the feature's pull request into the base branch closes it for you; `main` still gets the base branch from you). This merge is yours, always, in either merge mode: merging the base branch into `main` is how you declare that the feature passed its end-to-end test. PEPPEC never opens or merges that pull request.
 
-To have the feature checked end to end by the machine as well, write the scenarios in the specification while planning, in given/when/then form, and make the last sub-issue "automate these scenarios", blocked by all the others. The agent then translates scenarios you wrote instead of inventing its own exam, and they run with the checks from then on.
-
-With end-to-end tests per feature ([End-to-end tests](setup.md#end-to-end-tests)), the specification also decides whether the feature needs new ones, in a section named "End-to-end": `None: unit tests cover it.` with the reason, or the scenarios to cover. With scenarios, `/to-tickets` adds the work unit that writes them, `size: L`, blocked by the others. Without the section they are required. `docs/agents/e2e.md` says how this repository writes and runs them.
-
 Keep a feature to a handful of issues, and plan the next one after seeing the first built: issues written long before they run describe code that no longer exists.
+
+## End-to-end tests
+
+Every specification carries its scenarios, in given/when/then form, under a heading named "Scenarios": the PEPPEC section of `CLAUDE.md` asks for them. How they become tests depends on whether the repository runs end-to-end tests per feature.
+
+### Without end-to-end tests per feature
+
+This is the case when `PEPPEC_E2E_FEATURE` is not set, with or without feature branches.
+
+- **Nothing runs them by itself.** The scenarios are what you try by hand when you are told the feature is ready.
+- **To have them checked by the machine**, ask `/to-tickets` for one more sub-issue, "Automate the scenarios of #N", blocked by all the others. Nothing adds it for you.
+- **The agent translates your scenarios** instead of inventing its own exam.
+- **They become part of the checks.** The check commands run them on every pull request from then on, so they must be tests those commands run, and fast enough for CI.
+
+### With end-to-end tests per feature
+
+This is the case with [feature branches](setup.md#feature-branches) and `PEPPEC_E2E_FEATURE` set (see [End-to-end tests](setup.md#end-to-end-tests)). The tests run on the pull request of each finished feature into the base branch, not on every pull request.
+
+- **The specification decides** whether the feature needs new ones, in a section named "End-to-end".
+- **`None: unit tests cover it.`**, with the reason in one line: `ci / e2e_feature` is skipped for that feature.
+- **Or the scenarios to cover:** `/to-tickets` adds the work unit that writes them, `size: L`, blocked by the others. Each test is tagged or named with the number of the specification, so the command in `PEPPEC_E2E_FEATURE` selects it.
+- **Without the section they are required**, so a forgotten decision costs a hotfix rather than a gap.
+- **`ci / e2e_all` runs either way**: a feature with no new tests can still break old ones.
+- **`docs/agents/e2e.md`** says how this repository writes and runs them.
 
 ## Working on an existing codebase
 
@@ -88,5 +108,3 @@ The skills come as a Claude Code plugin, `mattpocock-skills`. Installed from the
 - **In `peppec doctor`** and `peppec skills`, which show the installed version and the same checks.
 
 If you prefer to change version only on purpose, install the plugin from its own marketplace pinned to a release, where automatic updates are off by default: `/plugin marketplace add mattpocock/skills#v1.3.2`, then install `mattpocock-skills` from it, and uninstall the copy from the official marketplace (the skills have the same names). To upgrade, add the marketplace again with the new tag, run `/setup-matt-pocock-skills`, then `peppec init`.
-
-Earlier versions of this page asked you to add an "Issues built by PEPPEC" section at the end of `docs/agents/issue-tracker.md`. The section in `CLAUDE.md` replaces it: delete it, so the two cannot disagree.

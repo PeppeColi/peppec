@@ -40,8 +40,8 @@ peppec init
 
 What stays manual, because it needs your login or a secret only you can generate:
 
-1. Before `init`: create the GitHub App, generate its private key and install it on the repository (Phase 2, steps 1–3); create the Telegram bot (step 6).
-2. During `init`: paste the Claude token, your personal token and the bot token when asked. The values are read without echo and sent straight to GitHub.
+1. Before `init`: create the Telegram bot (Phase 2, step 6).
+2. During `init`: confirm the GitHub App in the browser and install it on the repository (Phase 2, steps 1–3: `init` opens the pages); paste the Claude token, your personal token and the bot token when asked. The values are read without echo and sent straight to GitHub.
 3. After `init`: commit the files it wrote and push them to `main` and `dev` together (`init` prints the command), install CodeRabbit (Phase 3), then run `peppec bot` and copy the folder it prepares to the bot's machine (Phase 6).
 
 `init` also creates `CHANGELOG.md` when the repository has none, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format: the agent adds one line under "Unreleased" in each pull request, and turning those lines into a version is yours. An existing changelog is left alone; it needs a `## [Unreleased]` heading.
@@ -290,7 +290,7 @@ gh variable set PEPPEC_BASE_BRANCH -R "$R" -b dev
 
 Then add `dev` to the target branches of the ruleset of Phase 1, and create a second branch ruleset for `dev` alone, with only "Restrict deletions" and an empty bypass list. `peppec init` creates the second ruleset itself. On a private repository of a free plan rulesets are not available: `dev` works all the same, only without that second guard.
 
-If `dev` already exists with commits `main` lacks, push the install commit to `main` and bring `main` into `dev` with a pull request merged with a merge commit; `init` prints the command. To merge the agent's work straight into `main` instead, answer `main` when `init` asks for the base branch: an installation made before this default keeps `main` unless you change it.
+If `dev` already exists with commits `main` lacks, push the install commit to `main` and bring `main` into `dev` with a pull request merged with a merge commit; `init` prints the command. To merge the agent's work straight into `main` instead, answer `main` when `init` asks for the base branch.
 
 What changes:
 
@@ -419,10 +419,6 @@ If something gets stuck, look first at the log of the `decide` job: it always sa
 The engine version is the ref after `@` in the three workflows, repeated in `engine_ref`. To upgrade, change both in each file. With a base branch other than `main`, merge `main` into it afterwards, so both branches run the same version. `v2` follows every compatible release; use a full version or a commit SHA if you prefer to upgrade deliberately.
 
 The bot follows the same versions: `docker compose pull && docker compose up -d`, then `/version`.
-
-From 2.0 every variable and secret of PEPPEC starts with `PEPPEC_` (`CLAUDE_CODE_OAUTH_TOKEN` excepted). To move a 1.x installation, run `peppec init` of 2.0, which asks again for the secrets and stores the new names and workflows, then delete the old variables and secrets on GitHub. The bot's `.env` keeps its names; change the image tag in `docker-compose.yml` to `:2`.
-
-From 1.6 the notifications start with the repository name, and a bot older than 1.6 does not accept replies to them: upgrade the bot together with the engine. A bot configured with `REPO` and `CONTROL_ISSUE` keeps working; `REPOS` replaces both.
 
 ## Security notes
 
