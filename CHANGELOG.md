@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-11-15
+
 ### Added
 
 - A glossary of PEPPEC's terms, `docs/glossary.md`, for agents and contributors, kept apart from
@@ -544,7 +546,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/PeppeColi/peppec/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/PeppeColi/peppec/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/PeppeColi/peppec/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/PeppeColi/peppec/compare/v2.3.1...v2.4.0
