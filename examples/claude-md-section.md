@@ -12,6 +12,14 @@ Terms such as work unit, specification, `ready` and size are PEPPEC's, defined i
 https://github.com/PeppeColi/peppec/blob/v2/docs/glossary.md. Never add them to this
 repository's GLOSSARY.md: that file is the domain of this application.
 
+### Where planning commits go
+
+When the repository has a base branch other than `main` (the `PEPPEC_BASE_BRANCH` variable,
+usually `dev`), commit and push what a planning session writes (GLOSSARY.md, decision records,
+files under `docs/`) to that branch, never to `main`. The agent starts from the base branch, and
+`main` gets everything from it with the owner's release pull request. If the clone is on `main`,
+switch to the base branch before the first commit.
+
 ### Wayfinder maps
 
 When you chart a wayfinder map, write these constraints in its Notes, so that every session on

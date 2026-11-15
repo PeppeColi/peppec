@@ -317,7 +317,10 @@ The agent's pull requests are collected on a branch of their own, `dev`, and you
 ```bash
 git add .github .coderabbit.yaml .gitignore CHANGELOG.md CLAUDE.md && git commit -m 'chore: install PEPPEC'
 git push --atomic origin HEAD:main HEAD:dev     # one push, both branches
+git checkout dev                                # from now on, work on dev
 ```
+
+From then on work on `dev`, never on `main`: `main` changes only through your release pull request from `dev`. Planning sessions commit on the branch the clone is on, and the PEPPEC section of `CLAUDE.md` tells them to use the base branch.
 
 By hand, create `dev` before the install commit (`git push origin main:dev`; in an empty repository, with the starting commit described in [Empty repository](#empty-repository)) and set the variable:
 

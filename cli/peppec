@@ -1039,12 +1039,15 @@ cmd_init() {
       identical|behind)
         note "1. Review the files, then commit them on main and push the same commit to main and $BASE_BRANCH:"
         note "     git add $paths && git commit -m 'chore: install PEPPEC'"
-        note "     git push --atomic origin HEAD:main HEAD:$BASE_BRANCH";;
+        note "     git push --atomic origin HEAD:main HEAD:$BASE_BRANCH"
+        note "   Then work on $BASE_BRANCH, never on main: planning sessions commit on the branch of the clone"
+        note "     git checkout $BASE_BRANCH";;
       *)
         note "1. Review the files, then commit them on main and push:"
         note "     git add $paths && git commit -m 'chore: install PEPPEC' && git push"
         note "2. $BASE_BRANCH has commits main lacks: bring main into it with a pull request, merged with a merge commit:"
         note "     gh pr create -B $BASE_BRANCH -H main -t 'chore: install PEPPEC' -b 'Same workflow files on both branches.'"
+        note "   Once it is merged, work on $BASE_BRANCH, never on main: git checkout $BASE_BRANCH && git pull"
         n=3;;
     esac
   fi
