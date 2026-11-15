@@ -31,7 +31,10 @@ curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec -o ~
 chmod +x ~/.local/bin/peppec
 ```
 
-If `~/.local/bin` is not in your `PATH`, call the script with its full path. `peppec update` replaces it with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update. To try it without installing anything: `bash <(curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec) init`.
+If `~/.local/bin` is not in your `PATH`, call the script with its full path. `peppec update` replaces it with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update. It never moves to a new major version by itself, which may need changes on your side: it tells you when one is out, and `PEPPEC_REF=v2 peppec update` moves a copy that still follows `v1`. To try it without installing anything: `bash <(curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec) init`.
+
+> [!NOTE]
+> **Using Matt Pocock's skills?** Set them up before `peppec init`: type `/setup-matt-pocock-skills` in a Claude Code session (or your agent harness of choice) opened in the clone, and accept every suggested answer (GitHub as issue tracker, the default label names, single-context domain docs). `peppec init` then applies what PEPPEC needs: it maps their `ready-for-agent` label to `ready` and adds the PEPPEC section to `CLAUDE.md`. Run the setup inside the clone, where the remote tells it to propose GitHub: `init` does not change the issue tracker if you pick another one.
 
 Then, inside a clone of your repository, in a terminal of your own (not from inside Claude Code or another agent harness, for example with `!`: `init` asks questions the harness neither shows nor lets you answer):
 
@@ -41,8 +44,8 @@ peppec init
 
 What stays manual, because it needs your login or a secret only you can generate:
 
-1. Before `init`: create the Telegram bot (Phase 2, step 6). If you use Matt Pocock's skills, run their setup, `/setup-matt-pocock-skills`, first too: `init` maps their `ready-for-agent` label to `ready` in the file that setup writes, and skips the mapping when the file is not there yet.
-2. During `init`: confirm the GitHub App in the browser and install it on the repository (Phase 2, steps 1–3: `init` opens the pages); paste the Claude token, your personal token and the bot token when asked. The values are read without echo and sent straight to GitHub.
+1. Before `init`: create the Telegram bot (Phase 2, step 6), and set up Matt Pocock's skills if you use them (see the note above: `init` skips the `ready` mapping when their setup has not run yet).
+2. During `init`: confirm the GitHub App in the browser (you need no key beforehand: `init` creates the app and saves its private key in your home folder; `--key <file>` is only for an app you already have) and install it on the repository (Phase 2, steps 1–3: `init` opens the pages); paste the Claude token, your personal token and the bot token when asked. The values are read without echo and sent straight to GitHub.
 3. After `init`: commit the files it wrote and push them to `main` and `dev` together (`init` prints the command; on an empty repository it pushes a starting commit first, see [Empty repository](#empty-repository)), install CodeRabbit (Phase 3), then run `peppec bot` and copy the folder it prepares to the bot's machine (Phase 6).
 
 `init` also creates `CHANGELOG.md` when the repository has none, in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format: the agent adds one line under "Unreleased" in each pull request, and turning those lines into a version is yours. An existing changelog is left alone; it needs a `## [Unreleased]` heading.

@@ -1413,6 +1413,7 @@ cmd_update() {
     rm -f "$tmp"; die "could not download a valid cli/peppec from $ENGINE@$REF"
   fi
   local release; release=$(release_of "$REF")
+  local newer; newer=$(newer_major "$REF")
   if cmp -s "$tmp" "$self"; then
     rm -f "$tmp"; ok "already up to date with $ENGINE@$REF${release:+ ($release)}"
     note "Only this script is compared: a release that changes the workflows alone leaves it as it is."
@@ -1422,6 +1423,18 @@ cmd_update() {
     mv "$tmp" "$self"
     ok "updated to $ENGINE@$REF${release:+ ($release)}: $self"
   fi
+  if [ -n "$newer" ]; then
+    warn "$newer is out: this script follows $REF, and moving to a new major version is up to you"
+    note "Read what changes in https://github.com/$ENGINE/blob/$newer/CHANGELOG.md, then: PEPPEC_REF=$newer peppec update"
+  fi
+}
+
+# The next major version when the engine has its tag (v2 -> v3); empty otherwise
+newer_major() {
+  case "$1" in v[0-9]|v[0-9][0-9]) ;; *) return 0;; esac
+  local next="v$(( ${1#v} + 1 ))"
+  api "repos/$ENGINE/git/ref/tags/$next" --jq .ref > /dev/null && echo "$next"
+  return 0
 }
 
 # The release a ref points to (v1 -> v1.27.0); empty when no vX.Y.Z tag is on that commit
@@ -1440,7 +1453,7 @@ Usage:
   peppec init [--preset <name>] [--key <app.pem>] [--yes]
       Install PEPPEC on the repository of the current clone: labels, settings, control
       panel, variables, secrets, workflow files, the PEPPEC section of CLAUDE.md, branch
-      protection. Safe to run again.
+      protection. Safe to run again. Run it in a terminal: it asks questions.
   peppec doctor [-R owner/repo] [--key <app.pem>]
       Check an installation and list what is missing or wrong.
   peppec bot [-R owner/repo]... [--key <app.pem>] [--out <dir>]
@@ -1453,7 +1466,9 @@ Usage:
       With --hook (the SessionStart hook init adds) it prints only when something changed.
 
 Options:
-  --ref <ref>   Engine version to install (default: v1)
+  --key <file>  The private key (.pem) of an app you already have. Not needed for a new
+                app: init creates it in the browser and saves its key in your home folder
+  --ref <ref>   Engine version to install (default: $REF)
   --yes         Never ask: keep what is set, take the defaults, read secrets from the
                 environment (CLAUDE_CODE_OAUTH_TOKEN, PEPPEC_AGENT_TOKEN, PEPPEC_TELEGRAM_BOT_TOKEN,
                 PEPPEC_TELEGRAM_CHAT_ID, PEPPEC_APP_ID, PEPPEC_APP_CLIENT_ID, PEPPEC_APP_KEY_FILE)

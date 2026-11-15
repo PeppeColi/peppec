@@ -9,6 +9,16 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- `peppec update` tells you when a new major version of the engine is out, with the command that moves
+  to it; it still never moves by itself.
+- `peppec --help` explains that `--key` is only for an app you already have, and shows the real default
+  of `--ref` (it said `v1`, the default is `v2`).
+- README and `docs/setup.md` put the setup of Matt Pocock's skills in a note before `peppec init`: where
+  to type it, that the suggested answers are enough, and what `init` adds afterwards. They also say to
+  run the `peppec` commands in a terminal, and how to move a copy of the script from `v1` to `v2`.
+
 ## [2.8.0] - 2026-11-15
 
 ### Changed
