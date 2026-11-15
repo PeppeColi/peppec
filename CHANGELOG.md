@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Added
+
+- A glossary of PEPPEC's terms, `docs/glossary.md`, for agents and contributors, kept apart from
+  the domain glossary of a host. The PEPPEC section of `CLAUDE.md` written by `peppec init` points
+  to it and says not to copy its terms into the host's `GLOSSARY.md`.
+
 ## [2.6.0] - 2026-11-15
 
 ### Added

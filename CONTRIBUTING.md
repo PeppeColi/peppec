@@ -65,3 +65,5 @@ What a preset cannot guarantee is the behaviour of the dependencies a project in
 Changes to the workflows, the scripts or the bot are welcome too. Open an issue first to discuss them: they affect every installation.
 
 Every pull request that changes what users see adds a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md), in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. A release moves those lines under the new version, with its date and compare link, in the same commit that is tagged.
+
+Use the words of [docs/glossary.md](docs/glossary.md). A pull request that brings a new term, or changes what one means, updates the glossary in the same pull request.

@@ -126,7 +126,7 @@ A preset is a directory with a setup action, default check commands and a small 
 | `bot/` | The Telegram bot, published as `ghcr.io/peppecoli/peppec-bot` |
 | `examples/` | The files to copy into your repository |
 | `cli/peppec` | The command line that installs and checks PEPPEC on a repository |
-| `docs/` | Architecture, setup guide and [how to plan work for the agents](docs/planning.md) |
+| `docs/` | Architecture, setup guide, [how to plan work for the agents](docs/planning.md) and the [glossary](docs/glossary.md) |
 
 ## Security in one paragraph
 
