@@ -136,18 +136,22 @@ Waits for quota, CI and CodeRabbit do not count as working time. Counters move o
 
 ## Schedule and quota
 
-Agents start new issues only inside the work window (`PEPPEC_WORK_START_HOUR`–`PEPPEC_WORK_END_HOUR`). An issue already in progress is always finished. In manual mode, merging a pull request starts the next issue right away, at any hour.
-
-The schedule is `nightly` by default. With `/schedule always` (the `always on` label on the control panel) new issues start at any hour and the work window is ignored. During the day the agents draw on the same Claude quota you use yourself: that is why nightly is the default. Pausing works in both schedules.
+The schedule is `always` by default (the `schedule: always` label on the control panel): new issues start at any hour. With `/schedule nightly` (the `schedule: nightly` label) agents start new issues only inside the work window (`PEPPEC_WORK_START_HOUR`–`PEPPEC_WORK_END_HOUR`); in manual mode, merging a pull request still starts the next issue right away, at any hour. An issue already in progress is always finished. During the day the agents draw on the same Claude quota you use yourself: switch to nightly when you need that quota. Pausing works in both schedules.
 
 When the Claude quota runs out, the issue gets the `awaiting quota` label, you get a notification, and the workflow retries after `PEPPEC_QUOTA_RETRY_MINUTES`.
 
 ## Merge modes
 
-| Mode | Who merges | Effect on the queue |
+The merge mode is the `merge: manual` (default) or `merge: automatic` label on the control panel.
+
+| Pull request | Manual (default) | Automatic |
 | --- | --- | --- |
-| Manual (default) | You, with the Merge button | The queue waits for your merge |
-| Automatic | The workflow, as the app, as soon as the review passes | The queue runs on its own through the work window |
+| Agent branch → base branch or feature branch | You | The app, once the review passes |
+| Feature branch → base branch | You | You |
+| Base branch → `main` | You | You |
+| Opened by anyone else | Never touched by the workflow | Never touched by the workflow |
+
+The base branch → `main` row applies only when the base branch is not `main` (usually `dev`). In manual mode the queue waits for your merge; in automatic mode it runs on its own.
 
 Pull requests are merged into the base branch: `main`, or the branch named by the `PEPPEC_BASE_BRANCH` variable. GitHub closes an issue by itself only when its pull request reaches the default branch, so with another base branch the workflow closes it: right after an automatic merge, and at its next run after a merge done by hand. An issue you reopen after a merge is worked on again.
 
@@ -215,9 +219,13 @@ The dashboard speaks plain HTTP and can act on your repositories: keep it inside
 | `ci 1`–`5` | Pull request | Workflow | Attempts to make the checks pass |
 | `ready to merge` | Pull request | Workflow | Review passed, waiting for you |
 | `needs human` | Issue and pull request | Workflow | Limits exceeded, queue stopped |
-| `paused` / `auto mode` / `always on` | Control panel issue | Bot | No new issues, merge mode and schedule |
+| `merge: manual` / `merge: automatic` | Control panel issue | Bot | Merge mode |
+| `schedule: always` / `schedule: nightly` | Control panel issue | Bot | Schedule |
+| `paused` | Control panel issue | Bot | No new issues start |
 | `base missing` | Control panel issue | Workflow | The base branch does not exist: queue stopped until it is back |
 | `no preset` | Control panel issue | Workflow | The preset is `none`: the agent builds nothing until a language is chosen |
+
+The control panel always carries one `merge:` and one `schedule:` label. With neither, the default applies (`manual`, `always`) and the workflow adds its label back; with both (set by hand, or read while the bot switches them, since it adds the new label before removing the old one) the cautious value wins: `manual`, `nightly`. `peppec doctor` and `/status` point out both. `peppec init` gives the labels their colors: red for the labels that stop the queue (`paused`, `base missing`, `no preset`), yellow for those that wait for you (`question open`, `needs human`), teal for the settings of the control panel.
 
 The workflow keeps its own state in hidden comments (`<!-- peppec:KEY=VALUE -->`), written with the app's token and read only from the app: the minutes worked on an issue, the branch it started on, the feature branch of a specification, the end-to-end results already judged and how many hotfixes they caused, the number of sub-issues already announced as ready to be tried, the review requests already made for a commit, the replies posted to CodeRabbit, and which one-time warnings were already sent. Hotfix and sync work units, and the pull request of a feature, carry a marker in their body.
 

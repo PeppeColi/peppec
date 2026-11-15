@@ -96,31 +96,33 @@ printf '.agent/\n_ctl/\n_preset/\n_extra/\n_base/\n' >> .gitignore
 
 ```bash
 R=<USER>/<REPO>
-while IFS='|' read -r name desc; do
-  gh label create "$name" -R "$R" --description "$desc" --force
+while IFS='|' read -r name color desc; do
+  gh label create "$name" -R "$R" --color "$color" --description "$desc" --force
 done <<'EOF'
-ready|Ready to be picked up by the agents
-size: S|Small issue, for the lightest model (Haiku by default)
-size: M|Medium issue, the default (Sonnet by default)
-size: L|Large issue, for the strongest model (Opus by default)
-in progress|An agent is working on this issue
-question open|The agent is waiting for an answer
-awaiting quota|Paused until the Claude quota resets
-needs human|Limits exceeded, manual action required
-ready to merge|Review passed, waiting for manual merge
-review 1|Review round 1
-review 2|Review round 2
-review 3|Review round 3
-ci 1|Check fix attempt 1
-ci 2|Check fix attempt 2
-ci 3|Check fix attempt 3
-ci 4|Check fix attempt 4
-ci 5|Check fix attempt 5
-paused|No new issues start; the one in progress goes on (control panel)
-auto mode|Automatic merge enabled (control panel)
-always on|New issues start at any hour, not only at night (control panel)
-base missing|The base branch does not exist: queue stopped until it is back (control panel)
-no preset|The preset is none: the agent builds nothing until a language is chosen (control panel)
+ready|C2E0C6|Ready to be picked up by the agents
+size: S|D4C5F9|Small issue, for the lightest model (Haiku by default)
+size: M|A88BEB|Medium issue, the default (Sonnet by default)
+size: L|5319E7|Large issue, for the strongest model (Opus by default)
+in progress|1D76DB|An agent is working on this issue
+question open|FBCA04|The agent is waiting for an answer
+awaiting quota|FEF2C0|Paused until the Claude quota resets
+needs human|FBCA04|Limits exceeded, manual action required
+ready to merge|0E8A16|Review passed, waiting for manual merge
+review 1|BFD4F2|Review round 1
+review 2|BFD4F2|Review round 2
+review 3|BFD4F2|Review round 3
+ci 1|BFD4F2|Check fix attempt 1
+ci 2|BFD4F2|Check fix attempt 2
+ci 3|BFD4F2|Check fix attempt 3
+ci 4|BFD4F2|Check fix attempt 4
+ci 5|BFD4F2|Check fix attempt 5
+merge: manual|006B75|You merge the pull requests of the agent branches (control panel)
+merge: automatic|006B75|The app merges the pull requests of the agent branches once reviewed (control panel)
+schedule: always|006B75|New issues start at any hour (control panel)
+schedule: nightly|006B75|New issues start only in the work window (control panel)
+paused|B60205|No new issues start; the one in progress goes on (control panel)
+base missing|B60205|The base branch does not exist: queue stopped until it is back (control panel)
+no preset|B60205|The preset is none: the agent builds nothing until a language is chosen (control panel)
 EOF
 ```
 
@@ -181,14 +183,30 @@ CodeRabbit approves a pull request once its comments are resolved, and the workf
 
 ## Phase 4 — Control panel and variables
 
-Pause and merge mode are labels on a "Control panel" issue, so you can see them on GitHub and the bot can change them. The other parameters are repository variables.
+Pause, merge mode and schedule are labels on a "Control panel" issue, so you can see them on GitHub and the bot can change them. The other parameters are repository variables.
 
 1. Create and pin the panel, and note its number:
 
 ```bash
 R=<USER>/<REPO>
-gh issue create -R "$R" --title "Control panel" \
-  --body "Labels: paused = no new issues start; auto mode = automatic merge; always on = work at any hour. Do not close."
+gh issue create -R "$R" --title "Control panel" --label "merge: manual" --label "schedule: always" --body-file - <<'EOF'
+This issue holds the state of the PEPPEC queue in its labels. Keep it open and pinned.
+Change the state from the Telegram bot or the dashboard; editing the labels by hand works too.
+
+| Label | Meaning |
+|---|---|
+| `merge: manual` | You merge the pull requests of the agent branches (default) |
+| `merge: automatic` | The app merges the pull requests of the agent branches once the review passes |
+| `schedule: always` | New issues start at any hour (default) |
+| `schedule: nightly` | New issues start only in the work window (`PEPPEC_WORK_START_HOUR`–`PEPPEC_WORK_END_HOUR`) |
+| `paused` 🔴 | No new issue starts; the one in progress goes on. Only Resume lifts it |
+| `base missing` 🔴 | The base branch does not exist: the queue is stopped until it is back. Set by the workflow |
+| `no preset` 🔴 | The preset is `none`: nothing is built until you run `peppec init --preset <name>`. Set by the workflow |
+
+Exactly one `merge:` and one `schedule:` label at a time. With neither, the default applies and the workflow adds it back; with both, `nightly` and `manual` win.
+
+Who merges what: [Merge modes](https://github.com/PeppeColi/peppec/blob/v2/docs/architecture.md#merge-modes).
+EOF
 gh issue pin <N_CONTROL> -R "$R"
 ```
 

@@ -79,7 +79,7 @@ What the agent receives for a move: the issue, the owner's and the app's comment
 _Avoid_: prompt (the prompt is one part of it), job
 
 **Control panel**
-A pinned issue of the host whose labels hold the state of the whole queue: `paused`, `auto mode`, `always on`, `base missing`, `no preset`.
+A pinned issue of the host whose labels hold the state of the whole queue: always one `merge:` and one `schedule:` label, and `paused`, `base missing`, `no preset` when they apply.
 _Avoid_: settings issue, config, dashboard
 
 **Pause**
@@ -87,11 +87,11 @@ The `paused` label on the control panel: no new issue starts; the one in progres
 _Avoid_: stop, freeze
 
 **Merge mode**
-Manual (the owner merges, default) or automatic (the workflow merges as the app once the review passes, label `auto mode`).
+Manual (the owner merges the pull requests of the agent branches, label `merge: manual`, default) or automatic (the workflow merges them as the app once the review passes, label `merge: automatic`). Feature branches and the base branch are always merged by the owner.
 _Avoid_: auto-merge (GitHub's own feature, not used)
 
 **Schedule**
-`nightly` (new issues start only in the work window, default) or `always` (label `always on`).
+`always` (new issues start at any hour, label `schedule: always`, default) or `nightly` (new issues start only in the work window, label `schedule: nightly`).
 
 **Work window**
 The hours between `PEPPEC_WORK_START_HOUR` and `PEPPEC_WORK_END_HOUR` in which new issues start on the nightly schedule.

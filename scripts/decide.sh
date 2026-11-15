@@ -45,7 +45,21 @@ ctrl=$(labels_of "$CONTROL_ISSUE")
 # (or "ready to merge"), merges done by hand are tidied up, and the sync and hotfix work units the
 # queue opens to finish a feature already built still start
 paused=false; has "$ctrl" "paused" && paused=true
-mode=manual; has "$ctrl" "auto mode" && mode=automatic
+# The merge mode and the schedule are always one label each on the control panel. With neither,
+# the default applies and its label is added back; with both (set by hand, or read while the bot
+# switches them: it adds the new label before removing the old one) the cautious one wins
+if has "$ctrl" "merge: manual"; then mode=manual
+elif has "$ctrl" "merge: automatic"; then mode=automatic
+else
+  mode=manual
+  add_label "$CONTROL_ISSUE" "merge: manual" || echo "Could not add merge: manual to the control panel"
+fi
+if has "$ctrl" "schedule: nightly"; then schedule=nightly
+elif has "$ctrl" "schedule: always"; then schedule=always
+else
+  schedule=always
+  add_label "$CONTROL_ISSUE" "schedule: always" || echo "Could not add schedule: always to the control panel"
+fi
 
 # Without its base branch (deleted by hand, or by GitHub after a merge into the default branch)
 # the queue has nothing to start from or to merge into: every issue would fail in turn. So the
@@ -163,8 +177,8 @@ done
 
 if [ -z "$active" ]; then
   ok=false
-  # "always on" on the control panel: new issues start at any hour
-  if in_window || has "$ctrl" "always on" || [ "$FORCE" = true ]; then ok=true; fi
+  # The schedule always: new issues start at any hour; nightly: only in the work window
+  if [ "$schedule" = always ] || in_window || [ "$FORCE" = true ]; then ok=true; fi
   if [ "$mode" = manual ] && [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ] \
      && is_agent_branch "$EVENT_HEAD_REF"; then ok=true; fi
   [ "$ok" = true ] || { echo "Outside the work window"; exit 0; }

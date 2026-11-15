@@ -21,28 +21,32 @@ OUT_DIR="peppec-bot"
 SECRETS="CLAUDE_CODE_OAUTH_TOKEN PEPPEC_AGENT_TOKEN PEPPEC_APP_PRIVATE_KEY PEPPEC_TELEGRAM_BOT_TOKEN PEPPEC_TELEGRAM_CHAT_ID"
 WORK_DIRS=".agent/ _ctl/ _preset/ _extra/ _base/"
 
-LABELS='ready|Ready to be picked up by the agents
-size: S|Small issue, for the lightest model (Haiku by default)
-size: M|Medium issue, the default (Sonnet by default)
-size: L|Large issue, for the strongest model (Opus by default)
-in progress|An agent is working on this issue
-question open|The agent is waiting for an answer
-awaiting quota|Paused until the Claude quota resets
-needs human|Limits exceeded, manual action required
-ready to merge|Review passed, waiting for manual merge
-review 1|Review round 1
-review 2|Review round 2
-review 3|Review round 3
-ci 1|Check fix attempt 1
-ci 2|Check fix attempt 2
-ci 3|Check fix attempt 3
-ci 4|Check fix attempt 4
-ci 5|Check fix attempt 5
-paused|No new issues start; the one in progress goes on (control panel)
-auto mode|Automatic merge enabled (control panel)
-always on|New issues start at any hour, not only at night (control panel)
-base missing|The base branch does not exist: queue stopped until it is back (control panel)
-no preset|The preset is none: the agent builds nothing until a language is chosen (control panel)'
+# name|color|description. Colors by group: red stops the queue, yellow waits for you, teal is a
+# setting of the control panel
+LABELS='ready|C2E0C6|Ready to be picked up by the agents
+size: S|D4C5F9|Small issue, for the lightest model (Haiku by default)
+size: M|A88BEB|Medium issue, the default (Sonnet by default)
+size: L|5319E7|Large issue, for the strongest model (Opus by default)
+in progress|1D76DB|An agent is working on this issue
+question open|FBCA04|The agent is waiting for an answer
+awaiting quota|FEF2C0|Paused until the Claude quota resets
+needs human|FBCA04|Limits exceeded, manual action required
+ready to merge|0E8A16|Review passed, waiting for manual merge
+review 1|BFD4F2|Review round 1
+review 2|BFD4F2|Review round 2
+review 3|BFD4F2|Review round 3
+ci 1|BFD4F2|Check fix attempt 1
+ci 2|BFD4F2|Check fix attempt 2
+ci 3|BFD4F2|Check fix attempt 3
+ci 4|BFD4F2|Check fix attempt 4
+ci 5|BFD4F2|Check fix attempt 5
+merge: manual|006B75|You merge the pull requests of the agent branches (control panel)
+merge: automatic|006B75|The app merges the pull requests of the agent branches once reviewed (control panel)
+schedule: always|006B75|New issues start at any hour (control panel)
+schedule: nightly|006B75|New issues start only in the work window (control panel)
+paused|B60205|No new issues start; the one in progress goes on (control panel)
+base missing|B60205|The base branch does not exist: queue stopped until it is back (control panel)
+no preset|B60205|The preset is none: the agent builds nothing until a language is chosen (control panel)'
 
 # name|default|question; an empty default means the value is computed or asked without one
 NUMBERS='PEPPEC_WORK_START_HOUR|22|Hour at which agents may start new issues (0-23)
@@ -331,11 +335,11 @@ init_labels() {
   local n=0 old
   # ready already in use with another meaning: its description is about to change
   old=$(gh label list -R "$REPO" --limit 200 --json name,description --jq '.[] | select(.name == "ready") | .description' || true)
-  if [ -n "$old" ] && [ "$old" != "$(sed -n 's/^ready|//p' <<< "$LABELS")" ]; then
+  if [ -n "$old" ] && [ "$old" != "$(sed -n 's/^ready|[^|]*|//p' <<< "$LABELS")" ]; then
     warn "the label ready already existed ('$old'): from now on it means \"build this issue\""
   fi
-  while IFS='|' read -r name desc; do
-    gh label create "$name" -R "$REPO" --description "$desc" --force > /dev/null
+  while IFS='|' read -r name color desc; do
+    gh label create "$name" -R "$REPO" --color "$color" --description "$desc" --force > /dev/null
     n=$((n + 1))
   done <<< "$LABELS"
   ok "$n labels present"
@@ -358,14 +362,36 @@ init_settings() {
   fi
 }
 
+# The body of the control panel, written only when init creates it. Same text as in docs/setup.md
+control_body() {
+  cat <<'BODY'
+This issue holds the state of the PEPPEC queue in its labels. Keep it open and pinned.
+Change the state from the Telegram bot or the dashboard; editing the labels by hand works too.
+
+| Label | Meaning |
+|---|---|
+| `merge: manual` | You merge the pull requests of the agent branches (default) |
+| `merge: automatic` | The app merges the pull requests of the agent branches once the review passes |
+| `schedule: always` | New issues start at any hour (default) |
+| `schedule: nightly` | New issues start only in the work window (`PEPPEC_WORK_START_HOUR`–`PEPPEC_WORK_END_HOUR`) |
+| `paused` 🔴 | No new issue starts; the one in progress goes on. Only Resume lifts it |
+| `base missing` 🔴 | The base branch does not exist: the queue is stopped until it is back. Set by the workflow |
+| `no preset` 🔴 | The preset is `none`: nothing is built until you run `peppec init --preset <name>`. Set by the workflow |
+
+Exactly one `merge:` and one `schedule:` label at a time. With neither, the default applies and the workflow adds it back; with both, `nightly` and `manual` win.
+
+BODY
+  printf 'Who merges what: [Merge modes](https://github.com/%s/blob/%s/docs/architecture.md#merge-modes).\n' "$ENGINE" "$REF"
+}
+
 init_control_panel() {
   step "Control panel"
   CONTROL=$(gh issue list -R "$REPO" --state open --search 'in:title "Control panel"' --json number,title \
     --jq '[.[] | select(.title == "Control panel")] | sort_by(.number) | .[0].number // empty')
   if [ -n "$CONTROL" ]; then ok "issue #$CONTROL"; return; fi
   local url
-  url=$(gh issue create -R "$REPO" --title "Control panel" \
-    --body "Labels: paused = no new issues start; auto mode = automatic merge; always on = work at any hour. Do not close.")
+  url=$(control_body | gh issue create -R "$REPO" --title "Control panel" --body-file - \
+    --label "merge: manual" --label "schedule: always")
   CONTROL="${url##*/}"
   gh issue pin "$CONTROL" -R "$REPO" > /dev/null 2>&1 || true
   ok "issue #$CONTROL (created and pinned)"
@@ -895,12 +921,26 @@ init_keep_base() {
   fi
 }
 
+# One pair of labels of the control panel, for doctor: $1 its labels, $2 what it is, $3 the prefix,
+# $4 the value that wins when both are there, $5 the other, $6 the default. Same rule as decide.sh
+doctor_pair() {
+  local a=false b=false
+  case "$1" in *"$3: $4"*) a=true;; esac
+  case "$1" in *"$3: $5"*) b=true;; esac
+  if [ "$a" = true ] && [ "$b" = true ]; then
+    warn "$2: both '$3: $4' and '$3: $5' on the control panel, so $4 applies: remove one"
+  elif [ "$a" = true ]; then note "$2: $4"
+  elif [ "$b" = true ]; then note "$2: $5"
+  else note "$2: $6 (no '$3:' label yet: the next run of the workflow adds '$3: $6')"
+  fi
+}
+
 # Private repositories of a free plan have no rulesets: what that means for the queue
 explain_unprotected() {
   note "Without a ruleset, $1 accept direct pushes, force pushes and deletion from anyone with write"
   note "access and from any of their tokens, and GitHub does not require green CI before a merge."
   note "PEPPEC itself merges only after green CI and CodeRabbit's approval, but nothing enforces it."
-  note "Safer: keep the merge mode manual (no 'auto mode' label on the control panel), or use"
+  note "Safer: keep the merge mode manual (label 'merge: manual' on the control panel), or use"
   note "GitHub Pro, or make the repository public."
 }
 
@@ -1117,8 +1157,8 @@ cmd_doctor() {
     elif [ "${state%%|*}" != OPEN ]; then bad "issue #$control is closed: reopen it"
     else
       ok "issue #$control open"
-      case "$state" in *"auto mode"*) note "merge mode: automatic";; *) note "merge mode: manual";; esac
-      case "$state" in *"always on"*) note "schedule: always";; *) note "schedule: nightly";; esac
+      doctor_pair "$state" "merge mode" merge manual automatic manual
+      doctor_pair "$state" schedule schedule nightly always always
       case "$state" in *paused*) warn "the queue is paused";; esac
       case "$state" in *"base missing"*) warn "the queue is stopped: its base branch was missing at the last run";; esac
     fi
@@ -1246,7 +1286,7 @@ cmd_doctor() {
   if [ -n "$unprotected" ]; then
     unprotected=$(sed 's/^ //; s/ / and /g' <<< "$unprotected")
     case "${state:-}" in
-      *"auto mode"*) warn "automatic merge is on, but $unprotected not protected: nothing on GitHub guards the merges";;
+      *"merge: automatic"*) warn "automatic merge is on, but $unprotected not protected: nothing on GitHub guards the merges";;
     esac
     explain_unprotected "$unprotected"
   fi
