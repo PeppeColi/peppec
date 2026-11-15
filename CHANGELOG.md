@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-11-15
+
 ### Changed
 
 - With a base branch other than `main`, the PEPPEC section of `CLAUDE.md` tells planning sessions to
@@ -592,7 +594,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.8.2...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.9.0...HEAD
+[2.9.0]: https://github.com/PeppeColi/peppec/compare/v2.8.2...v2.9.0
 [2.8.2]: https://github.com/PeppeColi/peppec/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/PeppeColi/peppec/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/PeppeColi/peppec/compare/v2.7.0...v2.8.0
