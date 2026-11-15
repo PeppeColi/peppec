@@ -236,10 +236,11 @@ class Repo:
     def panel(self):
         """The state of the repository and the buttons that change it."""
         c = self.labels(self.control)
-        auto, always, paused = "auto mode" in c, "always on" in c, "paused" in c
+        mode, schedule, paused = merge_mode(c), schedule_of(c), "paused" in c
+        auto, always = mode == "automatic", schedule == "always"
         out = [self.name,
-               f"Mode: {'automatic' if auto else 'manual'}",
-               f"Schedule: {'always' if always else 'nightly'}",
+               f"Mode: {mode}" + both_warning(c, "merge"),
+               f"Schedule: {schedule}" + both_warning(c, "schedule"),
                f"Paused: {'yes, no new issues start' if paused else 'no'}"]
         if "base missing" in c:
             out.append("Stopped: the base branch does not exist")
@@ -272,8 +273,7 @@ class Repo:
         """What the dashboard shows of the repository."""
         c = self.labels(self.control)
         out = {"name": self.name, "key": self.key, "url": f"https://github.com/{self.name}",
-               "mode": "automatic" if "auto mode" in c else "manual",
-               "schedule": "always" if "always on" in c else "nightly",
+               "mode": merge_mode(c), "schedule": schedule_of(c),
                "paused": "paused" in c, "base_missing": "base missing" in c,
                "no_preset": "no preset" in c, "active": None}
         active = self.issues("in progress")
@@ -387,20 +387,19 @@ class Repo:
         self.answer(n, f"Accepted the recommended answer:\n\n{recommended}")
         return f"Recommended answer accepted on {self.name}#{n}, restarting." + self.still_paused()
 
-    def set_mode(self, value):
-        if value == "automatic":
-            self.add(self.control, "auto mode")
-        else:
-            self.rm(self.control, "auto mode")
+    def switch(self, prefix, value, other):
+        """One label of a pair on the control panel: the new one is added before the old one goes,
+        so a run reading in between sees both (the cautious value wins), never neither."""
+        self.add(self.control, f"{prefix}: {value}")
+        self.rm(self.control, f"{prefix}: {other}")
         self.dispatch()
+
+    def set_mode(self, value):
+        self.switch("merge", value, "manual" if value == "automatic" else "automatic")
         return f"Mode of {self.name} set to {value}."
 
     def set_schedule(self, value):
-        if value == "always":
-            self.add(self.control, "always on")
-        else:
-            self.rm(self.control, "always on")
-        self.dispatch()
+        self.switch("schedule", value, "nightly" if value == "always" else "always")
         return f"Schedule of {self.name} set to {value}."
 
     def still_paused(self):
@@ -469,6 +468,22 @@ def not_work_unit(issue):
 
 def size_of(labels):
     return next((x[6:] for x in labels if x.startswith("size: ")), "M")
+
+
+# The merge mode and the schedule: one label each on the control panel. With neither the default
+# applies (the workflow adds it back), with both the cautious value wins. Same rule as decide.sh
+def merge_mode(labels):
+    return "automatic" if "merge: automatic" in labels and "merge: manual" not in labels else "manual"
+
+
+def schedule_of(labels):
+    return "nightly" if "schedule: nightly" in labels else "always"
+
+
+def both_warning(labels, prefix):
+    """A note for /status when both labels of a pair are on the control panel."""
+    return " (both labels on the control panel: remove one)" \
+        if sum(x.startswith(f"{prefix}: ") for x in labels) > 1 else ""
 
 
 def load_repos():

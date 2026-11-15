@@ -9,6 +9,22 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- The schedule is `always` by default: new issues start at any hour. `nightly` is now the choice.
+- The merge mode and the schedule are always one label each on the control panel: `merge: manual` or
+  `merge: automatic`, `schedule: always` or `schedule: nightly`. They replace `auto mode` and
+  `always on`, and the missing label no longer means anything. With neither label of a pair the
+  default applies and the workflow adds it back; with both, `manual` and `nightly` win, and
+  `peppec doctor` and `/status` point it out. The bot adds the new label before removing the old one.
+- `peppec init` gives the labels fixed colors: red for those that stop the queue (`paused`,
+  `base missing`, `no preset`), yellow for those that wait for you (`question open`, `needs human`),
+  teal for the settings of the control panel. It used to let `gh` pick them at random.
+- The control panel created by `peppec init` starts with `merge: manual` and `schedule: always`, and
+  its body is a table of all its labels with a link to who merges what. Existing panels keep their
+  body.
+- The merge modes in `docs/architecture.md` are a table of who merges each kind of pull request.
+
 ## [2.7.0] - 2026-11-15
 
 ### Added
