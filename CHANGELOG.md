@@ -9,6 +9,14 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- With a base branch other than `main`, the PEPPEC section of `CLAUDE.md` tells planning sessions to
+  commit what they write (glossary, decision records, docs) to the base branch, never to `main`, and
+  the "Next steps" of `peppec init` end with `git checkout <base branch>`. A wayfinder session had
+  committed the glossary to `main`, where the agent, starting from `dev`, never sees it. Hosts get the
+  new section at their next `peppec init`.
+
 ## [2.8.2] - 2026-11-15
 
 ### Fixed
