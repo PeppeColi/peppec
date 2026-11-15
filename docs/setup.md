@@ -33,7 +33,7 @@ chmod +x ~/.local/bin/peppec
 
 If `~/.local/bin` is not in your `PATH`, call the script with its full path. `peppec update` replaces it with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update. To try it without installing anything: `bash <(curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec) init`.
 
-Then, inside a clone of your repository:
+Then, inside a clone of your repository, in a terminal of your own (not from inside Claude Code or another agent harness, for example with `!`: `init` asks questions the harness neither shows nor lets you answer):
 
 ```bash
 peppec init

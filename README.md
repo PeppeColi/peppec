@@ -75,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec -o ~
 chmod +x ~/.local/bin/peppec
 ```
 
-Then, inside a clone of your repository (if you use Matt Pocock's skills, run their setup, `/setup-matt-pocock-skills`, before `peppec init`):
+Then, inside a clone of your repository (if you use Matt Pocock's skills, run their setup, `/setup-matt-pocock-skills`, before `peppec init`), run these commands in a terminal of your own, not from inside Claude Code or another agent harness (for example with `!`): `init` asks questions and opens pages in the browser, and the harness neither shows the questions nor lets you answer them.
 
 ```bash
 peppec init      # labels, settings, variables, secrets, workflow files, CLAUDE.md section, branch protection
