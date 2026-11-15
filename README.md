@@ -75,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec -o ~
 chmod +x ~/.local/bin/peppec
 ```
 
-Then, inside a clone of your repository:
+Then, inside a clone of your repository (if you use Matt Pocock's skills, run their setup, `/setup-matt-pocock-skills`, before `peppec init`):
 
 ```bash
 peppec init      # labels, settings, variables, secrets, workflow files, CLAUDE.md section, branch protection
