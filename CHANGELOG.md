@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.8.2] - 2026-11-15
+
 ### Fixed
 
 - The folder `peppec bot` prepares inside a clone, with the app's key and the bot token, could end up in
@@ -582,7 +584,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.8.1...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.8.2...HEAD
+[2.8.2]: https://github.com/PeppeColi/peppec/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/PeppeColi/peppec/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/PeppeColi/peppec/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/PeppeColi/peppec/compare/v2.6.0...v2.7.0
