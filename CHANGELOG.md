@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-11-15
+
 ### Changed
 
 - `peppec update` tells you when a new major version of the engine is out, with the command that moves
@@ -574,7 +576,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.8.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.8.1...HEAD
+[2.8.1]: https://github.com/PeppeColi/peppec/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/PeppeColi/peppec/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/PeppeColi/peppec/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/PeppeColi/peppec/compare/v2.5.0...v2.6.0
