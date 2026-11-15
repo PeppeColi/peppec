@@ -75,7 +75,10 @@ curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec -o ~
 chmod +x ~/.local/bin/peppec
 ```
 
-Then, inside a clone of your repository (if you use Matt Pocock's skills, run their setup, `/setup-matt-pocock-skills`, before `peppec init`), run these commands in a terminal of your own, not from inside Claude Code or another agent harness (for example with `!`): `init` asks questions and opens pages in the browser, and the harness neither shows the questions nor lets you answer them.
+> [!NOTE]
+> **Using Matt Pocock's skills?** Set them up before `peppec init`: type `/setup-matt-pocock-skills` in a Claude Code session (or your agent harness of choice) opened in the clone, and accept every suggested answer (GitHub as issue tracker, the default label names, single-context domain docs). `peppec init` then applies what PEPPEC needs: it maps their `ready-for-agent` label to `ready` and adds the PEPPEC section to `CLAUDE.md`. Run the setup inside the clone, where the remote tells it to propose GitHub: `init` does not change the issue tracker if you pick another one.
+
+Then, inside a clone of your repository, run these commands in a terminal of your own, not from inside Claude Code or another agent harness (for example with `!`): `init` asks questions and opens pages in the browser, and the harness neither shows the questions nor lets you answer them.
 
 ```bash
 peppec init      # labels, settings, variables, secrets, workflow files, CLAUDE.md section, branch protection
@@ -86,7 +89,7 @@ peppec skills    # checks the planning skills on this computer (also run by a Se
 
 One bot can follow several repositories: `peppec bot -R owner/first -R owner/second`.
 
-If `~/.local/bin` is not in your `PATH`, call it with its full path. `peppec update` replaces the script with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update.
+If `~/.local/bin` is not in your `PATH`, call it with its full path. `peppec update` replaces the script with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update. It never moves to a new major version by itself, which may need changes on your side: it tells you when one is out, and `PEPPEC_REF=v2 peppec update` moves a copy that still follows `v1`.
 
 It asks for what only you can provide: the tokens and your preferences. It creates the GitHub App with you, in the browser: you only confirm. [docs/setup.md](docs/setup.md) explains each step and how to do everything by hand.
 
