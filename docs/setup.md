@@ -41,7 +41,7 @@ peppec init
 
 What stays manual, because it needs your login or a secret only you can generate:
 
-1. Before `init`: create the Telegram bot (Phase 2, step 6).
+1. Before `init`: create the Telegram bot (Phase 2, step 6). If you use Matt Pocock's skills, run their setup, `/setup-matt-pocock-skills`, first too: `init` maps their `ready-for-agent` label to `ready` in the file that setup writes, and skips the mapping when the file is not there yet.
 2. During `init`: confirm the GitHub App in the browser and install it on the repository (Phase 2, steps 1–3: `init` opens the pages); paste the Claude token, your personal token and the bot token when asked. The values are read without echo and sent straight to GitHub.
 3. After `init`: commit the files it wrote and push them to `main` and `dev` together (`init` prints the command; on an empty repository it pushes a starting commit first, see [Empty repository](#empty-repository)), install CodeRabbit (Phase 3), then run `peppec bot` and copy the folder it prepares to the bot's machine (Phase 6).
 
