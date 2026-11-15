@@ -8,6 +8,9 @@ body of its parent issue, and it cannot run the program: "done" means the projec
 The triage role `ready-for-agent` is the label `ready`.
 The queue builds only issues written by the owner or the app: never put `ready` on an issue
 someone else wrote. Write a new issue with what should be built, and label that one.
+Terms such as work unit, specification, `ready` and size are PEPPEC's, defined in
+https://github.com/PeppeColi/peppec/blob/v2/docs/glossary.md. Never add them to this
+repository's GLOSSARY.md: that file is the domain of this application.
 
 ### Wayfinder maps
 
