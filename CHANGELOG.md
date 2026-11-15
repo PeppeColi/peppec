@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- The folder `peppec bot` prepares inside a clone, with the app's key and the bot token, could end up in
+  a commit. `peppec init` now adds `peppec-bot/` to `.gitignore`, and `peppec bot` adds its folder to
+  `.git/info/exclude` when git does not ignore it yet.
+
 ## [2.8.1] - 2026-11-15
 
 ### Changed

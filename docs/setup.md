@@ -86,10 +86,10 @@ Two planning sessions are worth doing before the first feature: see [Working on 
 
 ## Phase 1 — Repository settings and labels
 
-1. Add the working folders of the workflows to `.gitignore`:
+1. Add the working folders of the workflows, and the folder `peppec bot` prepares (it holds the app's key and the bot token), to `.gitignore`:
 
 ```bash
-printf '.agent/\n_ctl/\n_preset/\n_extra/\n_base/\n' >> .gitignore
+printf '.agent/\n_ctl/\n_preset/\n_extra/\n_base/\npeppec-bot/\n' >> .gitignore
 ```
 
 2. Protect `main`: **Settings → Rules → Rulesets → New branch ruleset**, target `main`, enable "Require a pull request before merging" (0 approvals) and "Block force pushes". Under **Bypass list** add the **Repository admin** role, so you can push the setup files straight to `main`. The required status check is added in Phase 5.

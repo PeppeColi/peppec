@@ -19,7 +19,9 @@ PRESET=""
 BASE_BRANCH=main
 OUT_DIR="peppec-bot"
 SECRETS="CLAUDE_CODE_OAUTH_TOKEN PEPPEC_AGENT_TOKEN PEPPEC_APP_PRIVATE_KEY PEPPEC_TELEGRAM_BOT_TOKEN PEPPEC_TELEGRAM_CHAT_ID"
-WORK_DIRS=".agent/ _ctl/ _preset/ _extra/ _base/"
+# Lines init adds to .gitignore: the working folders of the workflows, and the folder of
+# `peppec bot`, which holds the app's key and the bot token
+WORK_DIRS=".agent/ _ctl/ _preset/ _extra/ _base/ peppec-bot/"
 
 # name|color|description. Colors by group: red stops the queue, yellow waits for you, teal is a
 # setting of the control panel
@@ -1381,6 +1383,7 @@ cmd_bot() {
   step "Folder"
   ( umask 077
     mkdir -p "$OUT_DIR/data"
+    keep_out_of_git "$OUT_DIR"
     cp "$KEY_FILE" "$OUT_DIR/data/app.pem"
     printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\nAPP_ID=%s\nREPOS=%s\n' \
       "$token" "$chat" "$app_id" "$repos" > "$OUT_DIR/.env" )
@@ -1395,6 +1398,18 @@ cmd_bot() {
   note "     rm -rf $OUT_DIR"
   note "To follow one more repository later, add it to REPOS in the .env on the bot's machine"
   note "(owner/name#N, N being its control panel issue) and run 'docker compose up -d' again."
+}
+
+# keep_out_of_git DIR: inside a clone, a folder git does not ignore yet goes in .git/info/exclude,
+# so the key and the token never reach a commit, even before init has written .gitignore
+keep_out_of_git() {
+  case "$1" in /*) return 0;; esac
+  git rev-parse --is-inside-work-tree > /dev/null 2>&1 || return 0
+  git check-ignore -q "$1/data/app.pem" 2> /dev/null && return 0
+  local exclude; exclude=$(git rev-parse --git-path info/exclude)
+  mkdir -p "$(dirname "$exclude")"
+  printf '/%s%s/\n' "$(git rev-parse --show-prefix)" "${1%/}" >> "$exclude"
+  ok "${1%/}/ added to .git/info/exclude: git never commits it"
 }
 
 # ---------- update ----------
