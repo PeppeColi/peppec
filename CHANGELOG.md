@@ -11,6 +11,9 @@ history when this file was created.
 
 ### Changed
 
+- The `git add` that `peppec init` suggests also takes `docs/agents` when it holds files not yet
+  in git, such as those written by `/setup-matt-pocock-skills`.
+
 - The end-to-end questions of `peppec init` say "leave empty to skip" (they said "empty: none",
   which read like an invitation to type `none`), and a typed `none` is taken as empty.
 
