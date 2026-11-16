@@ -212,7 +212,8 @@ class Repo:
     def has_work(self):
         """Something a run of the agent workflow may move: the issue in progress, unless it waits
         for you (blocked, a question, a pull request ready for your merge in manual mode), or a
-        ready issue that no open issue blocks. Same reading as decide.sh, in short."""
+        ready issue that no open issue blocks, unless the queue is paused or has no preset (Resume
+        and init start a run themselves). Same reading as decide.sh, in short."""
         active = self.issues("in progress")
         if active:
             n = active[0]["number"]
@@ -221,6 +222,8 @@ class Repo:
             pr = self.agent_pr(n)
             return not (pr and "ready to merge" in self.labels(pr)
                         and merge_mode(self.labels(self.control)) == "manual")
+        if {"paused", "no preset"} & set(self.labels(self.control)):
+            return False
         return any(not (i.get("issue_dependencies_summary") or {}).get("blocked_by") for i in self.queue())
 
     def ping(self):

@@ -15,7 +15,8 @@ history when this file was created.
   its notes.
 - The ping: the bot starts the agent workflow every `PING_MINUTES` (15 by default) on each
   repository with something to move (an issue in progress that does not wait for you, or a ready
-  issue no open issue blocks) and no run in the meantime, and the summary workflow once a day from
+  issue no open issue blocks, the queue being neither paused nor without a preset) and no run in
+  the meantime, and the summary workflow once a day from
   `SUMMARY_HOUR` (9 by default) in its time zone `TZ`. `peppec bot` asks for both and writes `TZ`.
 - `peppec doctor` warns about a GitHub cron left in `agent.yml` or `summary.yml`, and about an
   `agent.yml` without the `ping` input.
