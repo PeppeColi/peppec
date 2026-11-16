@@ -9,6 +9,11 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- `peppec init` proposes feature branches by default on a first install. A repository already
+  installed without them keeps no as the default.
+
 ## [2.13.0] - 2026-11-16
 
 ### Changed
