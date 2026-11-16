@@ -42,7 +42,7 @@ Every specification carries its scenarios, in given/when/then form, under a head
 
 ### Without end-to-end tests per feature
 
-This is the case when `PEPPEC_E2E_FEATURE` is not set, with or without feature branches.
+This is the case when `PEPPEC_E2E_FEATURE` is not set, with or without feature branches. Planning sessions read files, not GitHub variables: `peppec init` writes the state in a status line of `docs/agents/e2e.md` ("End-to-end tests per feature: off" or "on"), and the PEPPEC section of `CLAUDE.md` follows that line. `peppec doctor` warns when the line and the variable disagree.
 
 - **Nothing runs them by itself.** The scenarios are what you try by hand when you are told the feature is ready.
 - **To have them checked by the machine**, ask `/to-tickets` for one more sub-issue, "Automate the scenarios of #N", blocked by all the others. Nothing adds it for you.

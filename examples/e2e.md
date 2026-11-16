@@ -1,5 +1,7 @@
-<!-- Copy to docs/agents/e2e.md in the host repository: `peppec init` creates it when missing, then it is yours -->
+<!-- Copy to docs/agents/e2e.md in the host repository: `peppec init` creates it when missing, then it is yours, except the status line under the heading, which init keeps in step with PEPPEC_E2E_FEATURE -->
 # End-to-end tests
+
+**End-to-end tests per feature: off.** `PEPPEC_E2E_FEATURE` is not set: specifications write no "End-to-end" section, and no work unit writes end-to-end tests. Kept up to date by `peppec init`.
 
 How this repository writes and runs its end-to-end tests. Planning sessions read it when a
 specification decides whether a feature needs new ones (the "End-to-end" section, see the PEPPEC
