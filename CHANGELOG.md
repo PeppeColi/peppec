@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-11-16
+
 ### Changed
 
 - The branch names of a specification leave out a leading `Spec:` of its title:
@@ -636,7 +638,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.12.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.13.0...HEAD
+[2.13.0]: https://github.com/PeppeColi/peppec/compare/v2.12.0...v2.13.0
 [2.12.0]: https://github.com/PeppeColi/peppec/compare/v2.11.0...v2.12.0
 [2.11.0]: https://github.com/PeppeColi/peppec/compare/v2.10.0...v2.11.0
 [2.10.0]: https://github.com/PeppeColi/peppec/compare/v2.9.0...v2.10.0
