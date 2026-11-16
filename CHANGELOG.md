@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- A sync work unit opened by a run now starts in that same run, ahead of the other ready issues:
+  GitHub's list of ready issues did not show it yet, so another work unit started first and the
+  finished feature waited for it.
+
 ## [2.18.0] - 2026-11-16
 
 ### Added

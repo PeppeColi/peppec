@@ -3,6 +3,10 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 action=none issue="" pr="" sha="" size="" round="" ci_tries="" reason="" minutes="" branch="" base=""
+# The sync work units this run opens (sync_issue): GitHub's list of ready issues may not show one
+# labelled a few seconds earlier, and a sync work unit goes first
+SYNC_OPENED=$(mktemp)
+export SYNC_OPENED
 emit() {
   # The placeholder preset: no agent work starts, whatever the rest of the queue decided
   if [ "${no_preset:-false}" = true ] && [[ "$action" =~ ^(start|fix_ci|fix_review)$ ]]; then
@@ -242,6 +246,10 @@ if [ -z "$active" ]; then
     # A sync work unit first of all: a finished feature waits for it
     if [ "$(kind_of "$n")" = sync ] || under_construction "$n"; then issue=$n; break; fi
   done
+  if [ -s "$SYNC_OPENED" ] && { [ -z "${issue:-}" ] || [ "$(kind_of "$issue")" != sync ]; }; then
+    issue=$(head -n 1 "$SYNC_OPENED")
+    echo "Sync work unit #$issue was opened by this run: it goes first"
+  fi
   issue=${issue:-$first}
   [ -n "$issue" ] || { echo "No ready issues to start"; exit 0; }
   # Before plan_branch, which creates the feature branch and remembers the branch on the issue

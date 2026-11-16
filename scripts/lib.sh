@@ -587,6 +587,7 @@ ${log:-- (not available)}
   gh api -X POST "repos/$REPO/issues/$pn/sub_issues" -F sub_issue_id="$(jq -r .id <<< "$issue")" > /dev/null
   n=$(jq -r .number <<< "$issue")
   add_label "$n" ready
+  [ -z "${SYNC_OPENED:-}" ] || echo "$n" >> "$SYNC_OPENED"
   notify_info "${BASE_BRANCH:-main} and the feature of #$pn conflict: #$n will resolve it. https://github.com/$REPO/issues/$n"
 }
 
