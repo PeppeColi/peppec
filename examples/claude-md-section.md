@@ -18,7 +18,8 @@ When the repository has a base branch other than `main` (the `PEPPEC_BASE_BRANCH
 usually `dev`), commit and push what a planning session writes (GLOSSARY.md, decision records,
 files under `docs/`) to that branch, never to `main`. The agent starts from the base branch, and
 `main` gets everything from it with the owner's release pull request. If the clone is on `main`,
-switch to the base branch before the first commit.
+switch to the base branch before the first commit. Push these files before the work units get
+`ready`: the agent sees only what is on the base branch.
 
 ### Wayfinder maps
 
@@ -49,9 +50,9 @@ A work unit is an issue the agent builds in one pull request: a sub-issue of a s
 labelled `ready`. When you create one:
 
 - Set its blockers with the native "blocked by" relationship, never as text in the body.
-- Create all the work units first, set every blocker, and only then add `ready`, from the
-  oldest issue to the newest: a work unit labelled before its blockers are set can start too
-  early.
+- Create all the work units first and set every blocker. Then check each one on the tracker
+  (title, body, size label, blockers) and only then add `ready`, from the oldest issue to the
+  newest: a work unit labelled before its blockers are set can start too early.
 - When it needs the code of another specification that is not on the base branch yet (it is
   still on that specification's feature branch, `PEPPEC_BRANCHES`), block it by that
   specification, never by its work units: the specification is closed only when its feature

@@ -18,7 +18,7 @@ A good work unit, the issue the agent builds in one pull request, is the smalles
 
 1. **The specification is the parent issue.** Write it yourself: the problem, the solution, the decisions already taken, what is out of scope. It does not get the `ready` label. If it gets it by mistake once it has sub-issues, the queue skips it and tells you once on Telegram; a specification without sub-issues yet cannot be told apart from a work unit, and would be built in one run.
 2. **Each work unit is a sub-issue** of the specification, labelled `ready` and with its size. The agent receives the specification as background and builds only its own work unit.
-3. **Order comes from "blocked by".** Mark each issue as blocked by the ones it needs: an issue starts only when its blockers are closed. Create all the work units first, set every blocker, and only then add `ready`, from the oldest issue to the newest: a work unit that has `ready` before its blockers are set can start too early.
+3. **Order comes from "blocked by".** Mark each issue as blocked by the ones it needs: an issue starts only when its blockers are closed. Create all the work units first and set every blocker; check each one on GitHub (title, body, size, blockers), and only then add `ready`, from the oldest issue to the newest: a work unit that has `ready` before its blockers are set can start too early. Push the files the planning session wrote (glossary, design notes) to the base branch before that: the agent sees only what is there.
 
 ```bash
 gh issue create --parent <SPEC> --label "size: S" --title "..." --body "..."   # every work unit, no ready yet
