@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- The branch names of a specification leave out a leading `Spec:` of its title:
+  `feature/12-notes-cli-v1/dev` instead of `feature/12-spec-notes-cli-v1/dev`. A feature branch
+  already created keeps its name, and its new work units follow it.
+
 ### Fixed
 
 - A pull request no longer waits forever when CodeRabbit answers the review request of a new commit

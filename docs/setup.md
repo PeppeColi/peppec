@@ -379,7 +379,7 @@ The variable holds one `kind=template` per line; a kind left out takes its defau
 | `sync` | `feature/{spec}/sync-{n}` | its feature branch | Resolving the conflicts between the base branch and the feature |
 | `single` | `fix/{n}-{slug}` | the base branch | An issue without a specification |
 
-`{spec}` is the number of the specification and its title in lowercase words joined by dashes (`78-stats`), `{n}` the number of the issue, `{slug}` its title the same way. Every template but `feature` must contain `{n}`; `feature` must contain `{spec}`. Never create a branch named like the beginning of a feature branch (`feature/78-stats` next to `feature/78-stats/dev`): git cannot hold both.
+`{spec}` is the number of the specification and its title in lowercase words joined by dashes, without a leading `Spec:` (`78-stats` for "Spec: Stats"), `{n}` the number of the issue, `{slug}` its title the same way. Every template but `feature` must contain `{n}`; `feature` must contain `{spec}`. Never create a branch named like the beginning of a feature branch (`feature/78-stats` next to `feature/78-stats/dev`): git cannot hold both.
 
 How it works:
 
