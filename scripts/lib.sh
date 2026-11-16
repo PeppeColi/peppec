@@ -91,6 +91,12 @@ slug() {
   a=$(iconv -f utf-8 -t ascii//TRANSLIT <<< "$1" 2> /dev/null) || a=$1
   printf '%s\n' "$a" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//' | cut -c1-30 | sed -E 's/-+$//'
 }
+# The title of a specification without a leading "Spec:" or "Specification:", which every
+# specification would otherwise repeat in its branch names ("78-spec-stats")
+spec_title() {
+  local re='^[[:space:]]*[Ss][Pp][Ee][Cc]([Ii][Ff][Ii][Cc][Aa][Tt][Ii][Oo][Nn])?[[:space:]]*:[[:space:]]*(.*)$'
+  if [[ "$1" =~ $re ]]; then echo "${BASH_REMATCH[2]}"; else echo "$1"; fi
+}
 # $1 template, $2 {spec}, $3 {n}, $4 {slug}
 fill() {
   local t=$1
@@ -204,7 +210,7 @@ valid_branch() { [ -n "$1" ] && git check-ref-format --branch "$1" > /dev/null 2
 # Sets the variables branch and base; creates the feature branch from BASE_BRANCH when it is
 # missing. Returns 1, with the reason in plan_error, when PEPPEC_BRANCHES gives a bad name
 plan_branch() {
-  local n=$1 saved spec sn sname ft kind fb title
+  local n=$1 saved spec sn sname ft kind fb title ts
   saved=$(marker_get "$n" branch)
   if [ -n "$saved" ] && ! saved_branch_ok "$n" "$saved"; then
     plan_error="the saved branch of #$n is not a branch of the agent for it: '$saved'"; return 1
@@ -215,7 +221,11 @@ plan_branch() {
   if [ -n "$spec" ]; then
     kind=work
     sn=$(jq -r .number <<< "$spec")
-    sname=$sn; title=$(slug "$(jq -r .title <<< "$spec")"); [ -z "$title" ] || sname="$sn-$title"
+    title=$(jq -r .title <<< "$spec")
+    sname=$sn; ts=$(slug "$(spec_title "$title")"); [ -z "$ts" ] || sname="$sn-$ts"
+    # A feature branch named before "Spec:" was left out keeps it: its work units follow it
+    ts=$(slug "$title"); fb=$(feature_of "$sn")
+    if [ -n "$ts" ] && [ -n "$fb" ] && [[ "$fb" == *"$sn-$ts"* ]]; then sname="$sn-$ts"; fi
     ft=$(template feature)
     if [ -n "$ft" ] && ! template_ok feature "$ft"; then
       plan_error="the feature template of PEPPEC_BRANCHES must contain {spec} and not {n}: '$ft'"; return 1
