@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.18.2] - 2026-11-17
+
 ### Fixed
 
 - A specification whose feature you merged is closed even when the run of that merge was
@@ -746,7 +748,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.18.1...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.18.2...HEAD
+[2.18.2]: https://github.com/PeppeColi/peppec/compare/v2.18.1...v2.18.2
 [2.18.1]: https://github.com/PeppeColi/peppec/compare/v2.18.0...v2.18.1
 [2.18.0]: https://github.com/PeppeColi/peppec/compare/v2.17.0...v2.18.0
 [2.17.0]: https://github.com/PeppeColi/peppec/compare/v2.16.0...v2.17.0
