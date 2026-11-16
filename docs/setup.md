@@ -54,7 +54,7 @@ What stays manual, because it needs your login or a secret only you can generate
 
 `init` also writes the PEPPEC section of `CLAUDE.md`, which tells the planning sessions on your computer how to write issues PEPPEC can build: see [Planning work for the agents](planning.md#producing-the-issues-with-a-planning-session).
 
-`peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, `CHANGELOG.md`, the PEPPEC section of `CLAUDE.md`, the planning skills on your computer, branch protection, workflows that never start from an event, the speed of CI, the expiry of the Claude token. With `--key <app.pem>` it also checks that the app is installed on the repository.
+`peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, `CHANGELOG.md`, the PEPPEC section of `CLAUDE.md`, the planning skills on your computer, branch protection, workflows that never start from an event, the speed of CI, the expiry of the Claude token. It also checks that the app is installed on the repository, with the private key `init` saved in your home folder, or the one given with `--key <app.pem>`; `peppec bot` proposes the same saved key.
 
 For unattended use, `peppec init --yes` never asks: it keeps what is set, takes the defaults and reads the secrets from the environment.
 

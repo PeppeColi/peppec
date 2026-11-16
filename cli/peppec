@@ -127,6 +127,15 @@ open_url() {
 }
 var_of() { jq -r --arg n "$1" '.[] | select(.name == $n) | .value' <<< "$VARS_JSON"; }
 load_vars() { VARS_JSON=$(gh variable list -R "$REPO" --json name,value); }
+# The app's private key where init saved it (init_app), when it is still there
+saved_key_file() {
+  local login slug id f
+  login=$(var_of PEPPEC_APP_LOGIN); slug=${login%"[bot]"}; id=$(var_of PEPPEC_APP_ID)
+  [ -n "$slug" ] || return 0
+  for f in "$HOME/$slug.$id.private-key.pem" "$HOME/$slug.private-key.pem"; do
+    [ -f "$f" ] && { echo "$f"; return; }
+  done
+}
 set_var() { # set_var NAME VALUE: writes only when the value changes
   if [ "$(var_of "$1")" = "$2" ]; then ok "$1 = $2"; else
     gh variable set "$1" -R "$REPO" -b "$2" > /dev/null; ok "$1 = $2 (set)"
@@ -1154,6 +1163,10 @@ cmd_doctor() {
 
   step "GitHub App"
   local app_id; app_id=$(var_of PEPPEC_APP_ID)
+  if [ -z "$KEY_FILE" ]; then
+    KEY_FILE=$(saved_key_file)
+    [ -z "$KEY_FILE" ] || note "Key: $KEY_FILE (saved by init; --key <file> for another one)"
+  fi
   KEY_FILE="${KEY_FILE/#\~/$HOME}"
   if [ -n "$KEY_FILE" ] && [ -n "$app_id" ]; then
     [ -f "$KEY_FILE" ] || die "no such file: $KEY_FILE"
@@ -1162,7 +1175,7 @@ cmd_doctor() {
       [ "$APP_CLIENT_ID" = "$(var_of PEPPEC_APP_CLIENT_ID)" ] || bad "PEPPEC_APP_CLIENT_ID is '$(var_of PEPPEC_APP_CLIENT_ID)' but the app's Client ID is '$APP_CLIENT_ID'"
     fi
   else
-    warn "installation not checked: pass --key <the app's .pem file> to check it"
+    warn "installation not checked: no key found where init saves it; pass --key <the app's .pem file> to check it"
   fi
 
   step "Control panel"
@@ -1387,7 +1400,7 @@ cmd_bot() {
   [ -n "$token" ] && [ -n "$chat" ] || die "bot token and chat ID are required"
   telegram "$token" getMe | jq -e .ok > /dev/null 2>&1 || die "Telegram rejects the bot token"
   KEY_FILE="${KEY_FILE:-${PEPPEC_APP_KEY_FILE:-}}"
-  [ -n "$KEY_FILE" ] || ask KEY_FILE "Path of the app's private key (.pem)" ""
+  [ -n "$KEY_FILE" ] || ask KEY_FILE "Path of the app's private key (.pem)" "$(saved_key_file)"
   KEY_FILE="${KEY_FILE/#\~/$HOME}"
   [ -f "$KEY_FILE" ] || die "no such file: $KEY_FILE"
   for r in $REPO_LIST; do
