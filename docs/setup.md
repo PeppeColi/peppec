@@ -15,15 +15,17 @@ Follow the phases in order: each one assumes the previous ones are done. Replace
 
 `peppec init` automates Phases 1, 4 and 5 and the storing of the secrets of Phase 2. It is safe to run again: it keeps what is already set and only asks for what is missing.
 
-The simplest way to get it is the gh extension:
+Install it in one of two ways.
+
+**Option 1: gh extension (recommended).**
 
 ```bash
 gh extension install PeppeColi/gh-peppec
 ```
 
-Then type `gh peppec` wherever this guide says `peppec`. Each run downloads the command line of the engine version it installs (`v2`, or the one given with `--ref`), so there is nothing to update.
+Call it as `gh peppec`: type `gh peppec` wherever this guide says `peppec`. Each run downloads the command line of the engine version it installs (`v2`, or the one given with `--ref`), so there is nothing to update.
 
-Or install the script once, outside your projects, so it serves every repository and never ends up in a commit:
+**Option 2: script.** Install it once, outside your projects, so it serves every repository and never ends up in a commit:
 
 ```bash
 mkdir -p ~/.local/bin
@@ -31,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec -o ~
 chmod +x ~/.local/bin/peppec
 ```
 
-If `~/.local/bin` is not in your `PATH`, call the script with its full path. `peppec update` replaces it with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update. It never moves to a new major version by itself, which may need changes on your side: it tells you when one is out, and `PEPPEC_REF=v2 peppec update` moves a copy that still follows `v1`. To try it without installing anything: `bash <(curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec) init`.
+If `~/.local/bin` is not in your `PATH`, call the script with its full path. `peppec update` replaces it with the current version and names the release it comes from; it compares only the script, so a release that changes the workflows alone finds nothing to update. That is expected: the engine's workflows and scripts reach your repository by themselves, because its `agent.yml` calls them at `v2` on every run; the few files `init` writes in your repository change only when you run `peppec init` again, which asks before replacing each one that differs. It never moves to a new major version by itself, which may need changes on your side: it tells you when one is out, and `PEPPEC_REF=v2 peppec update` moves a copy that still follows `v1`. To try it without installing anything: `bash <(curl -fsSL https://raw.githubusercontent.com/PeppeColi/peppec/v2/cli/peppec) init`.
 
 > [!NOTE]
 > **Using Matt Pocock's skills?** Set them up before `peppec init`: type `/setup-matt-pocock-skills` in a Claude Code session (or your agent harness of choice) opened in the clone, and accept every suggested answer (GitHub as issue tracker, the default label names, single-context domain docs). `peppec init` then applies what PEPPEC needs: it maps their `ready-for-agent` label to `ready` and adds the PEPPEC section to `CLAUDE.md`. Run the setup inside the clone, where the remote tells it to propose GitHub: `init` does not change the issue tracker if you pick another one.
