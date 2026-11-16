@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- `peppec bot` prepares its folder in `~/peppec-bot` by default, outside any clone, instead of
+  the current directory: the app's key and the bot token never sit inside a repository.
+  `--out <dir>` still picks another folder.
+
 ### Fixed
 
 - With feature branches, an issue blocked by a work unit of another specification no longer starts

@@ -17,7 +17,8 @@ REPO_LIST=""
 KEY_FILE=""
 PRESET=""
 BASE_BRANCH=main
-OUT_DIR="peppec-bot"
+# Outside any clone by default: it holds the app's key and the bot token
+OUT_DIR="$HOME/peppec-bot"
 SECRETS="CLAUDE_CODE_OAUTH_TOKEN PEPPEC_AGENT_TOKEN PEPPEC_APP_PRIVATE_KEY PEPPEC_TELEGRAM_BOT_TOKEN PEPPEC_TELEGRAM_CHAT_ID"
 # Lines init adds to .gitignore: the working folders of the workflows, and the folder of
 # `peppec bot`, which holds the app's key and the bot token
@@ -1491,8 +1492,9 @@ cmd_bot() {
   ok "$OUT_DIR/ ready: docker-compose.yml, .env, data/app.pem (readable only by you)"
 
   step "Next steps"
+  local name; name=$(basename "$OUT_DIR")
   note "1. Copy it to the bot's machine:   scp -r $OUT_DIR <user>@<address>:~/"
-  note "2. Start the bot there:            cd ~/$OUT_DIR && docker compose up -d"
+  note "2. Start the bot there:            cd ~/$name && docker compose up -d"
   note "3. Send /status to the bot on Telegram."
   local n=4
   if [ -n "$dash_password" ]; then
@@ -1500,7 +1502,7 @@ cmd_bot() {
     note "     password: $dash_password (DASHBOARD_PASSWORD in .env). Never open that port to the internet."
     n=$((n + 1))
     note "$n. Optional, the Claude usage on the dashboard: log in to Claude Code once on the bot's machine"
-    note "     cd ~/$OUT_DIR && docker compose run --rm peppec-bot claude   (follow the link, then /exit)"
+    note "     cd ~/$name && docker compose run --rm peppec-bot claude   (follow the link, then /exit)"
     note "     then: docker compose up -d"
     n=$((n + 1))
   fi
@@ -1593,6 +1595,7 @@ Usage:
 Options:
   --key <file>  The private key (.pem) of an app you already have. Not needed for a new
                 app: init creates it in the browser and saves its key in your home folder
+  --out <dir>   The folder peppec bot prepares (default: ~/peppec-bot, outside your clones)
   --ref <ref>   Engine version to install (default: $REF)
   --yes         Never ask: keep what is set, take the defaults, read secrets from the
                 environment (CLAUDE_CODE_OAUTH_TOKEN, PEPPEC_AGENT_TOKEN, PEPPEC_TELEGRAM_BOT_TOKEN,
