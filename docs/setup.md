@@ -365,7 +365,7 @@ git rm .github/workflows/wake.yml && git commit -m 'chore: remove wake.yml' && g
 
 ### Feature branches
 
-By default every issue gets a branch `agent/issue-N`, based on the base branch. Set `PEPPEC_BRANCHES` to name the branches your way and to give each specification its own integration branch:
+`peppec init` asks whether to give each specification its own feature branch: yes is the default on a first install, and on a repository already installed the earlier answer stays the default. Without feature branches every issue gets a branch `agent/issue-N`, based on the base branch. Set `PEPPEC_BRANCHES` to name the branches your way and to give each specification its own integration branch:
 
 ```bash
 gh variable set PEPPEC_BRANCHES -R "$R" -b 'feature=feature/{spec}/dev'

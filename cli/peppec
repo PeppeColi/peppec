@@ -621,7 +621,9 @@ base_vs_main() {
 init_feature_variables() {
   local value problems name question default=n
   value=$(var_of PEPPEC_BRANCHES)
-  [ -z "$value" ] || default=y
+  # Yes on a first install, and wherever they are on; a repository installed without them keeps
+  # its earlier no
+  if [ -n "$value" ] || [ "${FRESH:-false}" = true ]; then default=y; fi
   if ! confirm "Give each specification its own feature branch, merged by you into $BASE_BRANCH" "$default"; then
     for name in PEPPEC_BRANCHES PEPPEC_E2E_FEATURE PEPPEC_E2E_ALL; do del_var "$name"; done
     return
