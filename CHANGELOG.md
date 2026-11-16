@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-11-16
+
 ### Changed
 
 - The PEPPEC section of `CLAUDE.md` and `docs/planning.md` tell planning sessions to add `ready` only
@@ -603,7 +605,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.9.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.10.0...HEAD
+[2.10.0]: https://github.com/PeppeColi/peppec/compare/v2.9.0...v2.10.0
 [2.9.0]: https://github.com/PeppeColi/peppec/compare/v2.8.2...v2.9.0
 [2.8.2]: https://github.com/PeppeColi/peppec/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/PeppeColi/peppec/compare/v2.8.0...v2.8.1
