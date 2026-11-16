@@ -59,10 +59,13 @@ close_merged() {
 # feature branches. A variable and not .github/peppec.yml: a feature branch carries the
 # configuration of the day it was created, and would name the branches the old way
 BRANCH_DEFAULTS='feature=feature/{spec}/dev
-work=feature/{spec}/parte-{n}
+work=feature/{spec}/unit-{n}
 hotfix=feature/{spec}/hotfix-{n}
 sync=feature/{spec}/sync-{n}
-single=fix/{n}-{slug}'
+single=fix/{n}-{slug}
+old_work=feature/{spec}/parte-{n}'
+# old_work: the default name of a work unit's branch before 2.12.0, still recognised so that a
+# work unit started before the upgrade is finished on its branch. Never used for a new branch
 template() {
   if [ -z "${PEPPEC_BRANCHES:-}" ]; then
     [ "$1" = feature ] || echo 'agent/issue-{n}'
@@ -110,7 +113,7 @@ is_agent_branch() {
   [ -n "${PEPPEC_BRANCHES:-}" ] || return 1
   is_feature_branch "$1" && return 1
   local k t re
-  for k in work hotfix sync single; do
+  for k in work hotfix sync single old_work; do
     t=$(template "$k"); template_ok "$k" "$t" || continue
     re=$(template_regex "$t")
     [[ "$1" =~ $re ]] && return 0
@@ -122,7 +125,7 @@ issue_of_branch() {
   [[ "$1" =~ ^agent/issue-([0-9]+)$ ]] && { echo "${BASH_REMATCH[1]}"; return; }
   is_agent_branch "$1" || return 0
   local k t re
-  for k in work hotfix sync single; do
+  for k in work hotfix sync single old_work; do
     t=$(template "$k"); template_ok "$k" "$t" || continue
     re=$(template_regex "$t")
     [[ "$1" =~ $re ]] && { echo "${BASH_REMATCH[1]}"; return; }
