@@ -93,6 +93,10 @@ _Avoid_: auto-merge (GitHub's own feature, not used)
 **Schedule**
 `always` (new issues start at any hour, label `schedule: always`, default) or `nightly` (new issues start only in the work window, label `schedule: nightly`).
 
+**Ping**
+The bot starting the agent workflow every `PING_MINUTES` on a repository with something to move, and the summary workflow once a day at `SUMMARY_HOUR`. GitHub's cron is not used.
+_Avoid_: heartbeat, wake-up
+
 **Work window**
 The hours between `PEPPEC_WORK_START_HOUR` and `PEPPEC_WORK_END_HOUR` in which new issues start on the nightly schedule.
 

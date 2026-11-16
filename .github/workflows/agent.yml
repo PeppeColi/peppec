@@ -17,6 +17,10 @@ on:
         description: Ignore the work window
         type: boolean
         default: false
+      ping:
+        description: Started by the bot's ping; a failure then rings only in the first quarter of an hour
+        type: boolean
+        default: false
       ci_check:
         description: Name of the check run that must pass before the review
         type: string
@@ -105,10 +109,11 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}
       - if: failure()
         run: |
-          [ "$GITHUB_EVENT_NAME" != schedule ] || [ "$(date +%-M)" -lt 15 ] || exit 0
+          [ "$PING" != true ] || [ "$(date +%-M)" -lt 15 ] || exit 0
           source "$CTL/lib.sh"
           notify "The decide step failed: $RUN_URL"
         env:
+          PING: ${{ inputs.ping }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}
 

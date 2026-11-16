@@ -59,9 +59,8 @@ PEPPEC_LARGE_FROM_ROUND|3|Review round from which the model of size L takes over
 PEPPEC_MAX_CI_ATTEMPTS|5|Attempts to fix the checks, per review round
 PEPPEC_MAX_ISSUE_MINUTES|120|Agent working time per issue, in minutes
 PEPPEC_STALL_MINUTES|120|Minutes a pull request may wait for a CI result
-PEPPEC_QUOTA_RETRY_MINUTES|60|Minutes between retries when the Claude quota is exhausted
-PEPPEC_SUMMARY_HOUR|9|Hour of the daily summary (0-23)'
-VARIABLES="PEPPEC_CONTROL_ISSUE PEPPEC_OWNER_LOGIN PEPPEC_APP_ID PEPPEC_APP_CLIENT_ID PEPPEC_APP_LOGIN PEPPEC_AGENT_GIT_NAME PEPPEC_AGENT_GIT_EMAIL PEPPEC_TZ_NAME PEPPEC_WORK_START_HOUR PEPPEC_WORK_END_HOUR PEPPEC_MAX_REVIEW_ROUNDS PEPPEC_LARGE_FROM_ROUND PEPPEC_MAX_CI_ATTEMPTS PEPPEC_MAX_ISSUE_MINUTES PEPPEC_STALL_MINUTES PEPPEC_QUOTA_RETRY_MINUTES PEPPEC_SUMMARY_HOUR PEPPEC_CLAUDE_TOKEN_EXPIRES"
+PEPPEC_QUOTA_RETRY_MINUTES|60|Minutes between retries when the Claude quota is exhausted'
+VARIABLES="PEPPEC_CONTROL_ISSUE PEPPEC_OWNER_LOGIN PEPPEC_APP_ID PEPPEC_APP_CLIENT_ID PEPPEC_APP_LOGIN PEPPEC_AGENT_GIT_NAME PEPPEC_AGENT_GIT_EMAIL PEPPEC_TZ_NAME PEPPEC_WORK_START_HOUR PEPPEC_WORK_END_HOUR PEPPEC_MAX_REVIEW_ROUNDS PEPPEC_LARGE_FROM_ROUND PEPPEC_MAX_CI_ATTEMPTS PEPPEC_MAX_ISSUE_MINUTES PEPPEC_STALL_MINUTES PEPPEC_QUOTA_RETRY_MINUTES PEPPEC_CLAUDE_TOKEN_EXPIRES"
 
 # ---------- output ----------
 if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=""; G=""; Y=""; R=""; N=""; fi
@@ -175,25 +174,6 @@ system_tz() {
   local link; link=$(readlink /etc/localtime 2> /dev/null || true)
   if [ -n "$link" ]; then echo "${link##*zoneinfo/}"; elif [ -f /etc/timezone ]; then cat /etc/timezone; else echo UTC; fi
 }
-# Minutes east of UTC of a time zone on a given day
-tz_offset() {
-  local z
-  z=$(TZ="$1" date -d "$2 12:00" +%z 2> /dev/null || TZ="$1" date -j -f "%Y-%m-%d %H" "$2 12" +%z)
-  local sign=1; [ "${z:0:1}" = "-" ] && sign=-1
-  echo $(( sign * (10#${z:1:2} * 60 + 10#${z:3:2}) ))
-}
-# UTC hours at which the local hour equals $2, in winter and in summer
-summary_cron() {
-  local hours="" off h
-  for day in 2026-01-15 2026-07-15; do
-    off=$(tz_offset "$1" "$day")
-    h=$(( ( ($2 * 60 - off + 59 + 1440) / 60 ) % 24 ))
-    hours="$hours $h"
-  done
-  # shellcheck disable=SC2086
-  echo "0 $(printf '%s\n' $hours | sort -n | uniq | paste -sd, -) * * *"
-}
-
 # ---------- GitHub App ----------
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 app_jwt() { # app_jwt APP_ID KEY_FILE
@@ -589,7 +569,6 @@ init_variables() {
     ask value "$question" "${value:-$default}"
     is_number "$value" || die "$name must be a number"
     set_var "$name" "$value"
-    if [ "$name" = PEPPEC_SUMMARY_HOUR ]; then SUMMARY_HOUR="$value"; fi
   done 3<<< "$NUMBERS"
 }
 
@@ -607,7 +586,7 @@ init_base_branch() {
   fi
 }
 # In an empty repository, GitHub never starts from an event the workflows that arrive with the first
-# push: no CI, no agent schedule. A starting commit without workflows goes first, on main and the base
+# push: no CI, no agent run after a review. A starting commit without workflows goes first, on main and the base
 # branch together (docs/setup.md, "Empty repository").
 init_first_commit() {
   local names=main refs=HEAD:main what="an empty starting commit"
@@ -840,7 +819,7 @@ init_project_manifest() {
 
 init_files() {
   step "Files"
-  local presets detected=none content f line cron current=""
+  local presets detected=none content f line current=""
   presets=$(gh api "repos/$ENGINE/contents/presets?ref=$REF" --jq '.[].name')
   [ -f .github/peppec.yml ] && current=$(preset_of < .github/peppec.yml)
   [ -n "$PRESET" ] || PRESET=$current
@@ -858,13 +837,11 @@ init_files() {
   [ "$PRESET" != none ] || warn "preset none: the agent builds nothing until you run peppec init --preset <name>"
   init_project_manifest
 
-  cron=$(summary_cron "$TZ_NAME" "$SUMMARY_HOUR")
   # CI runs on the pushes to main and to the base branch, where the merges land
   local pushed="main"; [ "$BASE_BRANCH" = main ] || pushed="main, $BASE_BRANCH"
   for f in agent ci summary; do
     content=$(engine_file "examples/$f.yml" | sed -e '/^# Copy to /d' \
       -e "s|\\.yml@v2\$|.yml@$REF|" -e "s|engine_ref: v2|engine_ref: $REF|" \
-      -e "s|cron: '0 7,8 \\* \\* \\*'|cron: '$cron'|" \
       -e "s|branches: \\[main, dev\\]|branches: [$pushed]|")
     keep_own_workflow "$f"
     write_file ".github/workflows/$f.yml" "$content"
@@ -1263,13 +1240,20 @@ cmd_doctor() {
     if [ -z "$ref" ]; then bad "$f.yml does not call the engine's workflow"
     elif [ "$ref" != "$eref" ]; then bad "$f.yml: the ref after '@' is '$ref' but engine_ref is '$eref'"
     else ok "$f.yml calls the engine at $ref"; fi
+    # The bot starts the workflows: a cron of GitHub left in place runs them again, hours late
+    if grep -q '^  schedule:' <<< "$content"; then
+      warn "$f.yml still has a GitHub cron (schedule:): the bot starts it now (PING_MINUTES, SUMMARY_HOUR); run peppec init again"
+    fi
+    if [ "$f" = agent ] && ! grep -q '^      ping:' <<< "$content"; then
+      warn "agent.yml has no ping input: its failures started by the bot's ping ring every time; run peppec init again"
+    fi
     state=$(sed -n "s#^\\.github/workflows/$f\\.yml|##p" <<< "$states")
     case "$state" in
       active|"") ;;
       *) bad "the '$f' workflow is disabled ($state): gh workflow enable $f.yml -R $REPO";;
     esac
   done
-  # GitHub takes the workflow files from the default branch for scheduled and manual runs,
+  # GitHub takes the workflow files from the default branch for manual runs (the bot's ping),
   # and from the base branch for the runs a pull request starts: they must not differ
   if [ "$BASE_BRANCH" != "$default_branch" ]; then
     for f in agent ci summary; do
@@ -1408,14 +1392,14 @@ cmd_doctor() {
     esac
   done
   # Workflows that came with the first push of an empty repository never start from an event: only
-  # by hand. Half an hour covers a push just made and the first run of the agent's schedule.
+  # by hand (the bot's ping is a manual start too). Half an hour covers a push just made.
   local events age where=main
   [ "$BASE_BRANCH" = main ] || where="main and $BASE_BRANCH"
   events=$(gh run list -R "$REPO" --limit 50 --json event --jq '[.[] | select(.event != "workflow_dispatch")] | length' 2> /dev/null || true)
   if [ "$events" = 0 ]; then
     age=$(api "repos/$REPO/commits/main" --jq '(now - (.commit.committer.date | fromdateiso8601)) / 60 | floor' 2> /dev/null || true)
     if is_number "$age" && [ "$age" -ge 30 ]; then
-      bad "no workflow has ever started from an event (push, pull request, schedule): GitHub has not woken them up"
+      bad "no workflow has ever started from an event (push, pull request): GitHub has not woken them up"
       note "Push to $where a commit that adds a new workflow file (any name), then remove it; changing an existing one is not enough (docs/setup.md, \"Empty repository\")."
     elif is_number "$age"; then
       note "no workflow has started from an event yet: the last push to main is less than half an hour old"
@@ -1440,7 +1424,7 @@ cmd_doctor() {
 # ---------- bot ----------
 cmd_bot() {
   preflight
-  local app_id="" id control token chat repos="" r
+  local app_id="" id control token chat repos="" r tz=""
   if [ -z "$REPO_LIST" ]; then resolve_repo; REPO_LIST="$REPO"; fi
   # One bot follows several repositories, as long as they share the app
   for r in $REPO_LIST; do
@@ -1453,6 +1437,7 @@ cmd_bot() {
       || die "$REPO uses another GitHub App ($id instead of $app_id): a bot follows repositories that share the app"
     app_id="$id"
     repos="${repos:+$repos,}$REPO#$control"
+    [ -n "$tz" ] || tz=$(var_of PEPPEC_TZ_NAME)
   done
   [ -e "$OUT_DIR" ] && die "$OUT_DIR already exists: remove it or pass --out <dir>"
   printf '%sPEPPEC bot%s for %s%s%s → %s/\n' "$B" "$N" "$B" "${repos//,/, }" "$N" "$OUT_DIR"
@@ -1472,6 +1457,15 @@ cmd_bot() {
     check_app "$app_id" "$KEY_FILE" || die "the key is not valid for app $app_id"
   done
 
+  step "Ping and summary"
+  note "GitHub's cron runs hours late, so the workflows have none: the bot starts them."
+  local ping summary_hour
+  [ -n "$tz" ] || tz=$(system_tz)
+  ask ping "Minutes between two pings of the agent workflow" 15
+  is_number "$ping" && [ "$ping" -ge 1 ] || die "the minutes must be a number from 1"
+  ask summary_hour "Hour of the daily summary (0-23, time zone $tz)" 9
+  is_number "$summary_hour" && [ "$summary_hour" -le 23 ] || die "the hour must be a number from 0 to 23"
+
   step "Dashboard"
   local dash_password=""
   if confirm "Turn on the dashboard (a web page on port 8737 of the bot's machine, for your local network)" y; then
@@ -1483,8 +1477,8 @@ cmd_bot() {
     mkdir -p "$OUT_DIR/data"
     keep_out_of_git "$OUT_DIR"
     cp "$KEY_FILE" "$OUT_DIR/data/app.pem"
-    printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\nAPP_ID=%s\nREPOS=%s\n' \
-      "$token" "$chat" "$app_id" "$repos" > "$OUT_DIR/.env"
+    printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\nAPP_ID=%s\nREPOS=%s\nTZ=%s\nPING_MINUTES=%s\nSUMMARY_HOUR=%s\n' \
+      "$token" "$chat" "$app_id" "$repos" "$tz" "$ping" "$summary_hour" > "$OUT_DIR/.env"
     if [ -n "$dash_password" ]; then
       printf 'DASHBOARD_PASSWORD=%s\nDASHBOARD_PORT=8737\n' "$dash_password" >> "$OUT_DIR/.env"
     fi )

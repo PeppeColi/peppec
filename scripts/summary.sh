@@ -1,7 +1,6 @@
 # scripts/summary.sh
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
-if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$(TZ=$TZ_NAME date +%-H)" != "$SUMMARY_HOUR" ]; then exit 0; fi
 since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
 list() { jq -r '.[] | "- #\(.number) \(.title)"'; }
 merged=$(gh pr list -R "$REPO" --state merged --search "merged:>=$since" --json number,title | list)

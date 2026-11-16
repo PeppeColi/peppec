@@ -40,7 +40,6 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           REPO: ${{ github.repository }}
           TZ_NAME: ${{ vars.PEPPEC_TZ_NAME }}
-          SUMMARY_HOUR: ${{ vars.PEPPEC_SUMMARY_HOUR }}
           CLAUDE_TOKEN_EXPIRES: ${{ vars.PEPPEC_CLAUDE_TOKEN_EXPIRES }}
           AGENT_TOKEN_EXPIRES: ${{ vars.PEPPEC_AGENT_TOKEN_EXPIRES }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
