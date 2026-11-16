@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.18.0] - 2026-11-16
+
 ### Added
 
 - The smart queue: with feature branches, the planning session proposes the blockers between
@@ -729,7 +731,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.17.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.18.0...HEAD
+[2.18.0]: https://github.com/PeppeColi/peppec/compare/v2.17.0...v2.18.0
 [2.17.0]: https://github.com/PeppeColi/peppec/compare/v2.16.0...v2.17.0
 [2.16.0]: https://github.com/PeppeColi/peppec/compare/v2.15.0...v2.16.0
 [2.15.0]: https://github.com/PeppeColi/peppec/compare/v2.14.0...v2.15.0
