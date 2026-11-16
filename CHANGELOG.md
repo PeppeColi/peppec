@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- The branch of a work unit with feature branches is `feature/{spec}/unit-{n}` by default (it was
+  `feature/{spec}/parte-{n}`). A work unit already in progress keeps the branch it started on, and
+  branches with the old name are still recognised as the engine's.
+
 ## [2.11.0] - 2026-11-16
 
 ### Changed

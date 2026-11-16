@@ -374,7 +374,7 @@ The variable holds one `kind=template` per line; a kind left out takes its defau
 | Kind | Default | Based on | What |
 | --- | --- | --- | --- |
 | `feature` | `feature/{spec}/dev` | the base branch | The integration branch of a specification |
-| `work` | `feature/{spec}/parte-{n}` | its feature branch | A work unit of the specification |
+| `work` | `feature/{spec}/unit-{n}` | its feature branch | A work unit of the specification |
 | `hotfix` | `feature/{spec}/hotfix-{n}` | its feature branch | A problem reported with Report a problem |
 | `sync` | `feature/{spec}/sync-{n}` | its feature branch | Resolving the conflicts between the base branch and the feature |
 | `single` | `fix/{n}-{slug}` | the base branch | An issue without a specification |
