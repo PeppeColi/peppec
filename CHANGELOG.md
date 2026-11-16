@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- The PEPPEC section of `CLAUDE.md` and `docs/planning.md` ask planning sessions to check each work unit
+  on the tracker (title, body, size, blockers) before adding `ready`, and to push the files they wrote
+  to the base branch before the work units get `ready`.
+
 ## [2.10.0] - 2026-11-16
 
 ### Changed
