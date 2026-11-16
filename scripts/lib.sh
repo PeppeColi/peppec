@@ -308,6 +308,24 @@ delete_agent_branch() {
 # A feature branch you have merged into the base branch: the specification is done. Closes the
 # specification (GitHub closes issues only on merges into the default branch) and removes the
 # branch, unless a pull request still starts from it or goes into it
+# Features merged while the run of their merge event was lost: GitHub keeps one pending run per
+# concurrency group, and a later event cancels the one waiting. So every run also reads the state:
+# an open specification with no open sub-issue whose feature pull request into the base branch is
+# merged gets what that run would have done (finish_feature). A specification you reopened and
+# gave a new work unit has an open sub-issue, and stays open
+close_merged_features() {
+  [ -n "$(template feature)" ] || return 0
+  local done_specs head sn
+  done_specs=$(gh api --paginate "repos/$REPO/issues?state=open&per_page=100" --jq '.[] | select(.pull_request | not)
+    | select((.sub_issues_summary.total // 0) > 0 and .sub_issues_summary.total == .sub_issues_summary.completed) | .number')
+  [ -n "$done_specs" ] || return 0
+  gh pr list -R "$REPO" --base "${BASE_BRANCH:-main}" --state merged --limit 30 --json headRefName,body,isCrossRepository \
+    --jq '.[] | select(.isCrossRepository | not) | select((.body // "") | contains("<!-- peppec:feature="))
+          | "\(.headRefName) \(.body | capture("<!-- peppec:feature=(?<n>[0-9]+) -->").n)"' \
+    | while read -r head sn; do
+        if grep -qx "$sn" <<< "$done_specs"; then finish_feature "$head"; fi
+      done
+}
 finish_feature() {
   local branch=$1 spec
   is_feature_branch "$branch" || return 0
