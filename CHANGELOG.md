@@ -9,6 +9,11 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Added
+
+- Each version tag publishes a GitHub release, with that version's section of this changelog as
+  its notes.
+
 ## [2.15.0] - 2026-11-16
 
 ### Changed

@@ -1,4 +1,5 @@
-# Publishes the Telegram bot image to GHCR when a version tag is pushed.
+# When a version tag is pushed: publishes the Telegram bot image to GHCR, and the GitHub release
+# with that version's section of CHANGELOG.md as its notes.
 # v1.2.3 produces the image tags 1.2.3, 1.2 and 1.
 name: release
 on:
@@ -10,6 +11,25 @@ permissions:
   packages: write
 
 jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create the release from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          # The lines between "## [x.y.z]" and the next "## [" heading
+          awk -v h="## [$version]" 'index($0, h) == 1 { on = 1; next } on && /^## \[/ { exit } on' \
+            CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "::error::No section for $version in CHANGELOG.md"; exit 1; }
+          gh release view "$TAG" > /dev/null 2>&1 && { echo "Release $TAG already exists"; exit 0; }
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md
+
   bot-image:
     runs-on: ubuntu-latest
     steps:
