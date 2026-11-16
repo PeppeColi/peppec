@@ -11,6 +11,10 @@ history when this file was created.
 
 ### Changed
 
+- `peppec doctor` and `peppec bot` find the app's private key where `peppec init` saved it
+  (`~/<app>.private-key.pem`): doctor checks the app's installation without `--key`, and bot
+  proposes that path. `--key` still picks another file.
+
 - The `git add` that `peppec init` suggests also takes `docs/agents` when it holds files not yet
   in git, such as those written by `/setup-matt-pocock-skills`.
 
