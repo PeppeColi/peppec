@@ -109,6 +109,9 @@ _Avoid_: iteration, attempt (an attempt is one try at making the checks pass, `c
 **Carried approval**
 CodeRabbit's previous approval standing for a new commit that holds nothing it reviews (a lockfile, a deleted file).
 
+**Full review**
+CodeRabbit reviewing the whole pull request again (`@coderabbitai full review`), asked once for a commit that got no verdict and has no approval to carry over.
+
 **Question**
 What the agent asks when an issue is unclear, with the answer it recommends. The issue gets `question open`; the owner replies or presses Accept.
 _Avoid_: clarification, blocker
