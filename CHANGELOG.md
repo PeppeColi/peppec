@@ -17,6 +17,9 @@ history when this file was created.
 
 ### Fixed
 
+- `peppec init` no longer accepts a `PEPPEC_AGENT_TOKEN` that cannot reach a public repository:
+  it checks the token with a real write (a blob tied to nothing) instead of the push permission
+  GitHub reports, which is your role on the repository and is true for any token there.
 - A pull request no longer waits forever when CodeRabbit answers the review request of a new commit
   with "Review finished" but no verdict, and its previous verdict asked for changes: the workflow
   asks once for a full review (`@coderabbitai full review`), which ends with a verdict.
