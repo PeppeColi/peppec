@@ -9,6 +9,13 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- A specification whose feature you merged is closed even when the run of that merge was
+  cancelled: GitHub keeps one waiting run per concurrency group, and a later event replaced it.
+  The specification stayed open, and the work units it blocks never started. Every run now closes
+  the open specifications with no open sub-issue whose feature pull request is merged.
+
 ## [2.18.1] - 2026-11-16
 
 ### Fixed

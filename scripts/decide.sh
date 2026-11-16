@@ -43,6 +43,7 @@ if [ "$EVENT_NAME" = pull_request ] && [ "$EVENT_MERGED" = true ]; then
   delete_agent_branch "$EVENT_HEAD_REF"
   finish_feature "$EVENT_HEAD_REF"
 fi
+close_merged_features
 
 ctrl=$(labels_of "$CONTROL_ISSUE")
 # "paused" on the control panel stops only new issues: the issue in progress goes on to its merge
