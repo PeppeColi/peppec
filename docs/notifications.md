@@ -6,6 +6,7 @@ Every message starts with the repository it comes from, as in `[owner/name]`. On
 | --- | --- | --- |
 | Queue stopped on #N (no CI result, checks still failing, no CodeRabbit review, review not passed, time budget used up, branch not valid) | Fix it, then press Unblock or Hint | 🔔 |
 | The agent is blocked on #N (agent error, no changes, protected files changed, conflict markers left, changes not applicable) | Press Unblock or Hint | 🔔 |
+| #N needs another feature, but names none of the open ones, or its feature branch already holds work ([smart queue](architecture.md#smart-queue)) | Add the blocker or bring that code in, then press Unblock | 🔔 |
 | Claude token rejected | Run `claude setup-token` and update the secret | 🔔 |
 | Question on #N | Reply, or press Accept for the recommended answer | 🔔 |
 | PR #N is ready to merge (manual mode) | Merge it | 🔔 |
@@ -21,6 +22,7 @@ Every message starts with the repository it comes from, as in `[owner/name]`. On
 | Merged PR #N (automatic mode) | Nothing | 🔕 |
 | Claude quota exhausted: will retry automatically | Nothing | 🔕 |
 | The agent changed nothing and answered CodeRabbit | Nothing | 🔕 |
+| #N waits for #M, whose code it needs (smart queue): the queue goes on | Nothing | 🔕 |
 | The base branch is back: the queue goes on | Nothing | 🔕 |
 | The end-to-end tests failed: #M will fix them | Nothing | 🔕 |
 | The base branch and a feature conflict: #M will resolve it | Nothing | 🔕 |

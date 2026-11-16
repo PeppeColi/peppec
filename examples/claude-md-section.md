@@ -53,16 +53,35 @@ labelled `ready`. When you create one:
 - Create all the work units first and set every blocker. Then check each one on the tracker
   (title, body, size label, blockers) and only then add `ready`, from the oldest issue to the
   newest: a work unit labelled before its blockers are set can start too early.
-- When it needs the code of another specification that is not on the base branch yet (it is
-  still on that specification's feature branch, `PEPPEC_BRANCHES`), block it by that
-  specification, never by its work units: the specification is closed only when its feature
-  reaches the base branch.
 - Give it a size label: `size: S` for a small, mechanical change, `size: L` for one that crosses
   several parts of the code or needs design judgement, no size label otherwise.
 - Write it so that it stands on its own: do not point to other issues, files of this session or
   links for anything the agent needs.
 - Every acceptance criterion must be something an automated test can fail.
 - End with an "Out of scope" section.
+
+### Blockers between features (smart queue)
+
+When the repository has feature branches (`gh variable get PEPPEC_BRANCHES` prints a value),
+decide the blockers between the new specification and the other open ones yourself, before
+creating its work units:
+
+1. List the other open specifications: the open issues with sub-issues that the owner wrote.
+2. Find what each one adds. When its feature branch exists (`git fetch`, then `git branch -r`:
+   the name holds its number), read `git diff origin/<base branch>...origin/<feature branch> --stat`
+   and the files the new work would use; otherwise read its body.
+3. If any work unit of the new specification needs code that one of them adds and that is not
+   on the base branch yet, block every work unit of the new specification by that specification,
+   never by its work units. Its feature branch starts from the base branch when its first work
+   unit starts, so all of them need that code there; the specification is closed only when its
+   feature reaches the base branch. When only part of the work needs it, propose to make that
+   part a specification of its own. When in doubt, block: a missing blocker costs failed runs, an
+   extra one only a wait.
+4. Show the owner a table: each work unit, the specifications that block it, and why in one line.
+   Set the blockers only after the owner agrees.
+
+If a work unit still needs the code of another open feature, the agent stops before writing it
+and the workflow adds the blocker itself.
 
 When the specification lists end-to-end scenarios, add one more work unit, `size: L`, blocked
 by all the others: "Write the end-to-end tests of #N", where N is the specification. Tag or name

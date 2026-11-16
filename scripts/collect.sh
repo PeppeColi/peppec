@@ -13,7 +13,7 @@ while IFS= read -r p; do
 done <<< "${NEVER_COMMIT:-}"
 git reset -q -- "${skip[@]}" > /dev/null 2>&1
 git diff --cached --binary "$START" > "$RESULT/changes.patch"
-for f in question.md answer.md; do
+for f in question.md answer.md blocked-by.md; do
   if [ -s ".agent/$f" ]; then cp ".agent/$f" "$RESULT/$f"; fi
 done
 if [ -d .agent/replies ]; then cp -R .agent/replies "$RESULT/replies"; fi

@@ -9,6 +9,50 @@ B="${BRANCH:-agent/issue-$ISSUE}"
 BASE="${BASE:-${BASE_BRANCH:-main}}"
 REMOTE="https://x-access-token:${AGENT_TOKEN}@github.com/${REPO}.git"
 
+# The smart queue: the agent needs code that other open features add (task.sh listed them in
+# features.md). Only features from that list count. The work unit waits for them with nothing
+# pushed, and so does every open work unit of its specification: their feature branch starts from
+# the base branch, which must hold that code first. It is removed, since nothing is merged into
+# it yet, and created again from the base branch when the first of them starts again.
+smart_queue_block() {
+  local listed sn names="" why own ahead n id
+  listed=$(sed -nE 's/^- #([0-9]+) .*/\1/p' "$TASK_DIR/features.md" 2> /dev/null || true)
+  for sn in $(grep -oE '#[0-9]+' .agent/blocked-by.md | tr -d '#' | sort -un | head -n 5); do
+    grep -qx "$sn" <<< "$listed" || continue
+    [ "$(gh api "repos/$REPO/issues/$sn" --jq .state 2> /dev/null)" = open ] || continue
+    names="${names:+$names }#$sn"
+  done
+  why=$(head -c 600 .agent/blocked-by.md)
+  if [ -z "$names" ]; then
+    add_label "$ISSUE" "needs human"
+    notify_blocked "The agent says #$ISSUE needs another feature, but names none of the open ones, so nothing was pushed: $why"
+    return
+  fi
+  own=$(spec_of "$ISSUE" | jq -r '.number // empty')
+  ahead=$(gh api "repos/$REPO/compare/${BASE_BRANCH:-main}...$BASE" --jq .ahead_by 2> /dev/null || echo "")
+  if [ -z "$own" ] || [ -n "$(pr_from "$B")" ] || [ "$ahead" != 0 ]; then
+    # Work already done would be lost: that is yours to decide
+    add_label "$ISSUE" "needs human"
+    notify_blocked "#$ISSUE needs $names, whose code is not on ${BASE_BRANCH:-main} yet, but $BASE already holds work: nothing was pushed. Bring that code in, or close the issue and plan it again. $why"
+    return
+  fi
+  for n in $(gh api "repos/$REPO/issues/$own/sub_issues?per_page=100" --jq '.[] | select(.state == "open") | .number'); do
+    for sn in $names; do
+      id=$(gh api "repos/$REPO/issues/${sn#\#}" --jq .id)
+      gh api -X POST "repos/$REPO/issues/$n/dependencies/blocked_by" -F issue_id="$id" > /dev/null 2>&1 || true
+    done
+  done
+  rm_label "$ISSUE" "in progress"
+  add_label "$ISSUE" ready
+  GH_TOKEN="$APP_TOKEN" marker_set "$ISSUE" minutes 0
+  if is_feature_branch "$BASE"; then
+    GH_TOKEN="$APP_TOKEN" gh api -X DELETE "repos/$REPO/git/refs/heads/$BASE" > /dev/null 2>&1 || true
+  fi
+  printf 'Waits for %s: %s\n\nThe agent needs code that %s adds, and that is not on %s yet: every open work unit of #%s is now blocked by it, and starts again once it is merged there. Added by PEPPEC (smart queue).\n' \
+    "$names" "$why" "$names" "${BASE_BRANCH:-main}" "$own" | gh issue comment "$ISSUE" -R "$REPO" --body-file - > /dev/null
+  notify_info "#$ISSUE waits for $names, whose code it needs (smart queue): the queue goes on with the next issue. https://github.com/$REPO/issues/$ISSUE"
+}
+
 # Time budget: add this run's working minutes to the issue counter
 used=$(GH_TOKEN="$APP_TOKEN" marker_get "$ISSUE" minutes)
 spent=$(( ($(date +%s) - CLAUDE_START) / 60 + 1 ))
@@ -40,7 +84,7 @@ fi
 # The agent's files: the question, the answer, the replies. The review being answered comes from
 # the prepare job, not from the agent
 rm -rf .agent; mkdir -p .agent
-for f in question.md answer.md; do
+for f in question.md answer.md blocked-by.md; do
   if [ -f "$RESULT/$f" ] && [ ! -L "$RESULT/$f" ]; then cp "$RESULT/$f" ".agent/$f"; fi
 done
 if [ -d "$RESULT/replies" ] && [ ! -L "$RESULT/replies" ]; then
@@ -61,6 +105,11 @@ if [ "$OUTCOME" != success ]; then
     add_label "$ISSUE" "needs human"
     notify_blocked "Agent error on #$ISSUE: $RUN_URL"
   fi
+  exit 0
+fi
+
+if [ -s .agent/blocked-by.md ]; then
+  smart_queue_block
   exit 0
 fi
 

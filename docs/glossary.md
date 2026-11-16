@@ -66,6 +66,10 @@ A planning map charted with the wayfinder skill on the owner's computer, with `w
 The open issues labelled `ready`, oldest first, minus those blocked by an open issue. One is worked on at a time.
 _Avoid_: backlog, pipeline
 
+**Smart queue**
+The blockers between features: the planning session proposes them from what the other open specifications add, and the agent, on the first round of a work unit, names an open feature whose code it needs so that the workflow blocks the specification's work units by it.
+_Avoid_: auto-dependencies, smart blockers
+
 **`ready`**
 The label that puts an issue in the queue. Pocock's triage role `ready-for-agent` maps to it.
 _Avoid_: `ready-for-agent`, approved, todo
