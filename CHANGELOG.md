@@ -9,6 +9,14 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Added
+
+- `peppec init` starts with "Use default values?". With yes it takes and shows the default of every
+  question that has one (numeric parameters, time zone, base branch, commit name and email, feature
+  branches, token expiry dates, `CLAUDE.md` section, label map, hook), and still asks the app on a
+  first install, an unrecognised preset, the secrets, and every step that changes GitHub or
+  overwrites something.
+
 ## [2.16.0] - 2026-11-16
 
 ### Added
