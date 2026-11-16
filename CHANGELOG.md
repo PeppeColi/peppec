@@ -9,6 +9,15 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- The PEPPEC section of `CLAUDE.md` and `docs/planning.md` tell planning sessions to add `ready` only
+  after every blocker is set, oldest issue first, so that no work unit starts before its blockers
+  exist; and, with feature branches, to block work that needs another feature by that specification,
+  never by its work units. A work unit blocked by the last work unit of another feature could start
+  from a base branch that did not have that feature yet. Hosts get the new section at their next
+  `peppec init`.
+
 ## [2.9.0] - 2026-11-15
 
 ### Changed

@@ -49,6 +49,13 @@ A work unit is an issue the agent builds in one pull request: a sub-issue of a s
 labelled `ready`. When you create one:
 
 - Set its blockers with the native "blocked by" relationship, never as text in the body.
+- Create all the work units first, set every blocker, and only then add `ready`, from the
+  oldest issue to the newest: a work unit labelled before its blockers are set can start too
+  early.
+- When it needs the code of another specification that is not on the base branch yet (it is
+  still on that specification's feature branch, `PEPPEC_BRANCHES`), block it by that
+  specification, never by its work units: the specification is closed only when its feature
+  reaches the base branch.
 - Give it a size label: `size: S` for a small, mechanical change, `size: L` for one that crosses
   several parts of the code or needs design judgement, no size label otherwise.
 - Write it so that it stands on its own: do not point to other issues, files of this session or
