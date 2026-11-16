@@ -11,6 +11,8 @@ set -euo pipefail
 ENGINE="${PEPPEC_ENGINE:-PeppeColi/peppec}"
 REF="${PEPPEC_REF:-v2}"
 YES=false
+# "Use default values?" answered yes: the questions that have a sensible default take it, and say so
+DEFAULTS=false
 HOOK=false
 REPO=""
 REPO_LIST=""
@@ -91,6 +93,24 @@ ask_hidden() {
   local answer=""
   if [ "$YES" = false ]; then read -r -s -p "  $2: " answer; echo; fi
   printf -v "$1" '%s' "$answer"
+}
+# ask_default VAR "question" "default" [empty-ok]: as ask, but with default values the default is
+# taken and shown. An empty default is still asked, unless empty-ok (empty then means "skip")
+ask_default() {
+  if [ "$DEFAULTS" = true ] && { [ -n "$3" ] || [ -n "${4:-}" ]; }; then
+    printf -v "$1" '%s' "$3"
+    ok "$2: ${3:-not set} (default)"
+    return
+  fi
+  ask "$1" "$2" "$3"
+}
+# confirm_default "question" default(y|n): as confirm, but with default values the default is taken
+confirm_default() {
+  if [ "$DEFAULTS" = true ]; then
+    if [ "$2" = y ]; then ok "$1: yes (default)"; return 0; fi
+    ok "$1: no (default)"; return 1
+  fi
+  confirm "$1" "$2"
 }
 confirm() { # confirm "question" default(y|n)
   local answer=""
@@ -499,14 +519,14 @@ init_app() {
   fi
   if [ -z "$APP_ID" ]; then
     note "To create it by hand follow docs/setup.md, Phase 2."
-    ask APP_ID "App ID" "${PEPPEC_APP_ID:-$current}"
+    ask_default APP_ID "App ID" "${PEPPEC_APP_ID:-$current}"
   fi
   is_number "$APP_ID" || { bad "no App ID: set it later with 'gh variable set PEPPEC_APP_ID'"; APP_ID=""; return; }
   local has_key=false
   grep -qx PEPPEC_APP_PRIVATE_KEY <<< "$SECRET_NAMES" && has_key=true
   if [ -z "$KEY_FILE" ] && [ "$YES" = false ]; then
     if [ "$has_key" = true ]; then
-      ask KEY_FILE "Path of the app's private key (.pem), empty to keep the stored one" ""
+      ask_default KEY_FILE "Path of the app's private key (.pem), empty to keep the stored one" "" empty-ok
     else
       ask KEY_FILE "Path of the app's private key (.pem)" ""
     fi
@@ -527,12 +547,12 @@ init_app() {
   fi
   if [ -z "$APP_SLUG" ]; then
     current=$(var_of PEPPEC_APP_LOGIN)
-    ask APP_SLUG "App short name, as in its URL" "${current%\[bot\]}"
+    ask_default APP_SLUG "App short name, as in its URL" "${current%\[bot\]}"
   fi
   if [ -z "$APP_CLIENT_ID" ]; then
     # Read from the app when the key is at hand; otherwise the one stored, or asked
     current=$(var_of PEPPEC_APP_CLIENT_ID)
-    ask APP_CLIENT_ID "App Client ID (on the app's page, it starts with Iv)" "${PEPPEC_APP_CLIENT_ID:-$current}"
+    ask_default APP_CLIENT_ID "App Client ID (on the app's page, it starts with Iv)" "${PEPPEC_APP_CLIENT_ID:-$current}"
   fi
 }
 
@@ -547,18 +567,18 @@ init_variables() {
   else bad "PEPPEC_APP_CLIENT_ID not set: the workflows cannot act as the app (run init again with --key <file>)"; fi
   if [ -n "$APP_SLUG" ]; then set_var PEPPEC_APP_LOGIN "${APP_SLUG}[bot]"; else bad "PEPPEC_APP_LOGIN not set: the app's short name is unknown"; fi
   name=$(var_of PEPPEC_AGENT_GIT_NAME); email=$(var_of PEPPEC_AGENT_GIT_EMAIL)
-  ask value "Name on the agent's commits" "${name:-$(jq -r '.name // .login' <<< "$me")}"
+  ask_default value "Name on the agent's commits" "${name:-$(jq -r '.name // .login' <<< "$me")}"
   set_var PEPPEC_AGENT_GIT_NAME "$value"
-  ask value "Email on the agent's commits" "${email:-$(jq -r '"\(.id)+\(.login)@users.noreply.github.com"' <<< "$me")}"
+  ask_default value "Email on the agent's commits" "${email:-$(jq -r '"\(.id)+\(.login)@users.noreply.github.com"' <<< "$me")}"
   set_var PEPPEC_AGENT_GIT_EMAIL "$value"
   value=$(var_of PEPPEC_TZ_NAME)
-  ask TZ_NAME "Time zone" "${value:-$(system_tz)}"
+  ask_default TZ_NAME "Time zone" "${value:-$(system_tz)}"
   TZ="$TZ_NAME" date > /dev/null 2>&1 || die "unknown time zone: $TZ_NAME"
   set_var PEPPEC_TZ_NAME "$TZ_NAME"
   # A new installation gets dev from day one; an existing one without the variable has been on main
   value=$(var_of PEPPEC_BASE_BRANCH)
   [ -n "$value" ] || { if [ "$FRESH" = true ]; then value=dev; else value=main; fi; }
-  ask BASE_BRANCH "Branch the agent starts from and its pull requests are merged into" "$value"
+  ask_default BASE_BRANCH "Branch the agent starts from and its pull requests are merged into" "$value"
   git check-ref-format --branch "$BASE_BRANCH" > /dev/null 2>&1 || die "not a branch name: $BASE_BRANCH"
   set_var PEPPEC_BASE_BRANCH "$BASE_BRANCH"
   init_base_branch
@@ -566,7 +586,7 @@ init_variables() {
   # The list is read on descriptor 3, so the questions can still read the terminal
   while IFS='|' read -r name default question <&3; do
     value=$(var_of "$name")
-    ask value "$question" "${value:-$default}"
+    ask_default value "$question" "${value:-$default}"
     is_number "$value" || die "$name must be a number"
     set_var "$name" "$value"
   done 3<<< "$NUMBERS"
@@ -624,7 +644,7 @@ init_feature_variables() {
   # Yes on a first install, and wherever they are on; a repository installed without them keeps
   # its earlier no
   if [ -n "$value" ] || [ "${FRESH:-false}" = true ]; then default=y; fi
-  if ! confirm "Give each specification its own feature branch, merged by you into $BASE_BRANCH" "$default"; then
+  if ! confirm_default "Give each specification its own feature branch, merged by you into $BASE_BRANCH" "$default"; then
     for name in PEPPEC_BRANCHES PEPPEC_E2E_FEATURE PEPPEC_E2E_ALL; do del_var "$name"; done
     return
   fi
@@ -635,7 +655,7 @@ init_feature_variables() {
   note "Branch names: see \"Feature branches\" in docs/setup.md to change them."
   while IFS='|' read -r name question <&3; do
     value=$(var_of "$name")
-    ask value "$question (leave empty to skip, - to remove)" "$value"
+    ask_default value "$question (leave empty to skip, - to remove)" "$value" empty-ok
     # "none" is no command: taken as empty, as the old wording of the question invited
     if [ "$value" = none ]; then warn "'none' read as empty: $name not set"; value=""; fi
     if [ -z "$value" ] || [ "$value" = - ]; then del_var "$name"; else
@@ -661,7 +681,7 @@ explain_agent_token() {
   note "  Permissions:        Contents, Issues, Pull requests → Read and write; Actions → Read-only"
   note "                      (leave Workflows out: the agent must not change them)"
   note "  Expiration:         one year; when it expires the queue stops until you replace it"
-  if confirm "Open the link in the browser now?" y; then open_url "$url" || note "Could not open a browser: copy the link."; fi
+  if confirm_default "Open the link in the browser now?" y; then open_url "$url" || note "Could not open a browser: copy the link."; fi
 }
 
 init_secrets() {
@@ -725,7 +745,7 @@ init_secrets() {
   if [ "${NEW_AGENT_TOKEN:-false}" = true ] || [ -z "$expires" ]; then
     local proposal="$expires"
     if [ "${NEW_AGENT_TOKEN:-false}" = true ]; then proposal=$(next_year); fi
-    ask expires "Expiry date of PEPPEC_AGENT_TOKEN, as shown by GitHub (YYYY-MM-DD, empty if it never expires)" "$proposal"
+    ask_default expires "Expiry date of PEPPEC_AGENT_TOKEN, as shown by GitHub (YYYY-MM-DD, empty if it never expires)" "$proposal"
   fi
   if [ -z "$expires" ]; then warn "PEPPEC_AGENT_TOKEN_EXPIRES not set: no warning before the personal token expires"
   elif epoch_of "$expires" > /dev/null; then set_var PEPPEC_AGENT_TOKEN_EXPIRES "$expires"
@@ -736,7 +756,7 @@ init_secrets() {
   elif [ -n "$expires" ]; then
     ok "PEPPEC_CLAUDE_TOKEN_EXPIRES = $expires"
   else
-    ask expires "Expiry date of the Claude token (YYYY-MM-DD, one year after it was generated)" "$(next_year)"
+    ask_default expires "Expiry date of the Claude token (YYYY-MM-DD, one year after it was generated)" "$(next_year)"
     set_var PEPPEC_CLAUDE_TOKEN_EXPIRES "$expires"
   fi
 }
@@ -807,7 +827,7 @@ init_project_manifest() {
     warn "no $file, and $tool is not on this computer: run '$cmd' before the first push, or CI will fail"
     return 0
   fi
-  if confirm "No $file: create a minimal one with '$cmd'" y; then
+  if confirm_default "No $file: create a minimal one with '$cmd'" y; then
     # shellcheck disable=SC2086 # cmd holds the command and its options
     if $cmd > /dev/null 2>&1 && [ -f "$file" ]; then
       ok "$file (created by $cmd)"; MANIFEST_PATHS=$created
@@ -829,7 +849,8 @@ init_files() {
     [ -f composer.json ] && detected=php-v1
     note "Available presets: $(echo $presets)"
     [ "$detected" != none ] || note "none: the language is not chosen yet; the agent builds nothing until you change it"
-    ask PRESET "Preset" "$detected"
+    # A language not recognised is always asked: "none" builds nothing
+    if [ "$detected" = none ]; then ask PRESET "Preset" "$detected"; else ask_default PRESET "Preset" "$detected"; fi
   fi
   grep -qx "$PRESET" <<< "$presets" || die "unknown preset '$PRESET'"
   if [ -n "$current" ] && [ "$PRESET" != "$current" ]; then change_preset "$current" "$PRESET"; fi
@@ -871,7 +892,7 @@ init_planning() {
     # Claude Code reads CLAUDE.md, not AGENTS.md: an import keeps the instructions that are already there
     text="$section"
     [ -f AGENTS.md ] && text="@AGENTS.md"$'\n\n'"$section"
-    if confirm "Create CLAUDE.md with the rules planning sessions need to write issues PEPPEC builds?" y; then
+    if confirm_default "Create CLAUDE.md with the rules planning sessions need to write issues PEPPEC builds?" y; then
       printf '%s\n' "$text" > CLAUDE.md
       if [ -f AGENTS.md ]; then ok "CLAUDE.md (written: imports AGENTS.md, then the PEPPEC section)"; else ok "CLAUDE.md (written)"; fi
     else
@@ -882,7 +903,7 @@ init_planning() {
     if [ "$current" = "$section" ]; then
       ok "CLAUDE.md: PEPPEC section up to date"
     elif [ -z "$current" ]; then
-      if confirm "Add the PEPPEC section at the end of CLAUDE.md (rules for planning sessions)?" y; then
+      if confirm_default "Add the PEPPEC section at the end of CLAUDE.md (rules for planning sessions)?" y; then
         printf '\n%s\n' "$section" >> CLAUDE.md
         ok "CLAUDE.md (PEPPEC section added at the end)"
       else
@@ -918,7 +939,7 @@ init_planning() {
     mapped) ok "$TRIAGE_FILE: ready-for-agent is the label ready";;
     none) warn "$TRIAGE_FILE has no row for ready-for-agent: add one that maps it to the label ready";;
     other)
-      if confirm "$TRIAGE_FILE: map ready-for-agent to the label ready, the one PEPPEC builds?" y; then
+      if confirm_default "$TRIAGE_FILE: map ready-for-agent to the label ready, the one PEPPEC builds?" y; then
         tmp=$(mktemp)
         awk -F'|' 'BEGIN { OFS = "|" }
           $2 ~ /`ready-for-agent`/ { cell = " `ready`"; while (length(cell) < length($3)) cell = cell " "; $3 = cell }
@@ -939,7 +960,7 @@ init_skills_hook() {
   current=$(cat "$f" 2> /dev/null || echo '{}')
   jq -e . <<< "$current" > /dev/null 2>&1 || { warn "$f is not valid JSON: hook not added"; return; }
   if [ -n "$(hook_of <<< "$current")" ]; then ok "$f: the planning skills are checked when a session starts"; return; fi
-  confirm "Add a hook to $f that checks the planning skills when Claude Code starts here?" y \
+  confirm_default "Add a hook to $f that checks the planning skills when Claude Code starts here?" y \
     || { warn "no hook: a change in the planning skills shows only in peppec doctor"; return; }
   mkdir -p .claude; tmp=$(mktemp)
   jq --arg c "$SKILLS_HOOK" '.hooks.SessionStart = ((.hooks.SessionStart // []) + [{matcher: "startup", hooks: [{type: "command", command: $c, timeout: 30}]}])' \
@@ -1059,6 +1080,11 @@ cmd_init() {
   init_default_branch
   printf '%sPEPPEC%s on %s%s%s, engine %s@%s\n' "$B" "$N" "$B" "$REPO" "$N" "$ENGINE" "$REF"
   load_vars
+  if [ "$YES" = false ]; then
+    note "With default values only the app, the tokens and what changes GitHub are asked;"
+    note "the rest takes what is already set, or the default. Run init again to change a value."
+    if confirm "Use default values?" y; then DEFAULTS=true; fi
+  fi
   FRESH=false; [ -n "$(var_of PEPPEC_CONTROL_ISSUE)" ] || FRESH=true
   SECRET_NAMES=$(gh secret list -R "$REPO" --json name --jq '.[].name')
   [ "$FRESH" = false ] || init_ready_issues
@@ -1574,7 +1600,9 @@ Usage:
   peppec init [--preset <name>] [--key <app.pem>] [--yes]
       Install PEPPEC on the repository of the current clone: labels, settings, control
       panel, variables, secrets, workflow files, the PEPPEC section of CLAUDE.md, branch
-      protection. Safe to run again. Run it in a terminal: it asks questions.
+      protection. Safe to run again. Run it in a terminal: it asks questions, the first
+      being "Use default values?" (yes asks only the app, the secrets and the steps that
+      change GitHub; every other value is shown with "(default)").
   peppec doctor [-R owner/repo] [--key <app.pem>]
       Check an installation and list what is missing or wrong.
   peppec bot [-R owner/repo]... [--key <app.pem>] [--out <dir>]

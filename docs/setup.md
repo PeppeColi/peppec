@@ -56,6 +56,8 @@ What stays manual, because it needs your login or a secret only you can generate
 
 `peppec doctor` checks the result at any time: labels, variables, secrets, workflows, configuration, `CHANGELOG.md`, the PEPPEC section of `CLAUDE.md`, the planning skills on your computer, branch protection, workflows that never start from an event, the speed of CI, the expiry of the Claude token. It also checks that the app is installed on the repository, with the private key `init` saved in your home folder, or the one given with `--key <app.pem>`; `peppec bot` proposes the same saved key.
 
+`init` starts with one question, **Use default values?** (yes by default). With yes, every question that has a sensible default takes it and shows it with "(default)": the numeric parameters, the time zone, the base branch `dev`, the name and email of the agent's commits, feature branches, the token expiry dates, the `CLAUDE.md` section, the label map and the hook. A value already set counts as the default, so running `init` again keeps it. The end-to-end test commands keep their value, none on a first install: answer no to type them. Still asked: the GitHub App and its key on a first install, the preset when the language is not recognised, the secrets, and every step that changes GitHub or overwrites something (the push of a starting commit, renaming the default branch, removing `ready`, replacing a secret, a file or the `CLAUDE.md` section that differs). Answer no to be asked everything, or run `init` again to change one value.
+
 For unattended use, `peppec init --yes` never asks: it keeps what is set, takes the defaults and reads the secrets from the environment.
 
 The rest of this guide describes every step in detail, and is the reference for doing them by hand.
