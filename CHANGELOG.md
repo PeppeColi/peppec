@@ -11,6 +11,9 @@ history when this file was created.
 
 ### Changed
 
+- The end-to-end questions of `peppec init` say "leave empty to skip" (they said "empty: none",
+  which read like an invitation to type `none`), and a typed `none` is taken as empty.
+
 - `peppec init` proposes feature branches by default on a first install. A repository already
   installed without them keeps no as the default.
 

@@ -635,7 +635,9 @@ init_feature_variables() {
   note "Branch names: see \"Feature branches\" in docs/setup.md to change them."
   while IFS='|' read -r name question <&3; do
     value=$(var_of "$name")
-    ask value "$question (empty: none, - to remove)" "$value"
+    ask value "$question (leave empty to skip, - to remove)" "$value"
+    # "none" is no command: taken as empty, as the old wording of the question invited
+    if [ "$value" = none ]; then warn "'none' read as empty: $name not set"; value=""; fi
     if [ -z "$value" ] || [ "$value" = - ]; then del_var "$name"; else set_var "$name" "$value"; fi
   done 3<<< 'PEPPEC_E2E_FEATURE|End-to-end tests of one feature, {spec} = its specification
 PEPPEC_E2E_ALL|End-to-end tests of the whole project'
