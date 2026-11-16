@@ -18,12 +18,15 @@ A good work unit, the issue the agent builds in one pull request, is the smalles
 
 1. **The specification is the parent issue.** Write it yourself: the problem, the solution, the decisions already taken, what is out of scope. It does not get the `ready` label. If it gets it by mistake once it has sub-issues, the queue skips it and tells you once on Telegram; a specification without sub-issues yet cannot be told apart from a work unit, and would be built in one run.
 2. **Each work unit is a sub-issue** of the specification, labelled `ready` and with its size. The agent receives the specification as background and builds only its own work unit.
-3. **Order comes from "blocked by".** Mark each issue as blocked by the ones it needs: an issue starts only when its blockers are closed. Create them all at once; the queue sorts itself out.
+3. **Order comes from "blocked by".** Mark each issue as blocked by the ones it needs: an issue starts only when its blockers are closed. Create all the work units first, set every blocker, and only then add `ready`, from the oldest issue to the newest: a work unit that has `ready` before its blockers are set can start too early.
 
 ```bash
-gh issue create --parent <SPEC> --label ready --label "size: S" --title "..." --body "..."
-gh issue edit <ISSUE> --add-blocked-by <BLOCKER>
+gh issue create --parent <SPEC> --label "size: S" --title "..." --body "..."   # every work unit, no ready yet
+gh issue edit <ISSUE> --add-blocked-by <BLOCKER>                              # every blocker
+gh issue edit <ISSUE> --add-label ready                                       # oldest issue first
 ```
+
+   **Work that needs another feature.** With [feature branches](setup.md#feature-branches), a work unit that needs the code of another specification still on its feature branch is blocked by that specification, never by its work units. Closing the last work unit only merges it into the feature branch; the specification is closed by the workflow when you merge the feature into the base branch, which is when its code is there. The feature branch of the new specification is created from the base branch only when its first work unit starts, so it starts from that code. Without feature branches the work units are merged straight into the base branch, and a blocker that is a work unit is enough.
 
 These options need `gh` 2.94 or later.
 
