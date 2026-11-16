@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-11-16
+
 ### Changed
 
 - `peppec bot` prepares its folder in `~/peppec-bot` by default, outside any clone, instead of
@@ -680,7 +682,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.14.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.15.0...HEAD
+[2.15.0]: https://github.com/PeppeColi/peppec/compare/v2.14.0...v2.15.0
 [2.14.0]: https://github.com/PeppeColi/peppec/compare/v2.13.0...v2.14.0
 [2.13.0]: https://github.com/PeppeColi/peppec/compare/v2.12.0...v2.13.0
 [2.12.0]: https://github.com/PeppeColi/peppec/compare/v2.11.0...v2.12.0
