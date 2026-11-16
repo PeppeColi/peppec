@@ -78,6 +78,23 @@ STARTED = time.time()  # a job that ended before the bot started brings no event
 EVENTS_EVERY = 60  # seconds between two readings of the jobs
 
 
+def number_env(name, default, low, high):
+    value = os.environ.get(name, "").strip() or str(default)
+    if not value.isdigit() or not low <= int(value) <= high:
+        raise SystemExit(f"{name}: '{value}' is not a number from {low} to {high}")
+    return int(value)
+
+
+# The ping: GitHub's cron is not used. Every PING_MINUTES the bot starts the agent workflow of each
+# repository that has something to move and no run started meanwhile; once a day, from SUMMARY_HOUR
+# (in the time zone TZ of the container), the summary workflow
+PING_MINUTES = number_env("PING_MINUTES", 15, 1, 1440)
+SUMMARY_HOUR = number_env("SUMMARY_HOUR", 9, 0, 23)
+SUMMARY_FILE = STATE.with_name("summary")  # the day of the last summary, kept across restarts
+# The labels of the issue in progress that wait for you: a run would change nothing
+WAITS_FOR_YOU = {"needs human", "question open"}
+
+
 class UserError(Exception):
     """A message for the user: wrong usage, unknown repository."""
 
@@ -92,6 +109,7 @@ class Repo:
         self._token = ""
         self._expires = 0.0
         self._runs = {}  # run id -> (its updated_at once all its jobs are read, the jobs read)
+        self._pinged = 0.0  # when the ping last looked at this repository
 
     def token(self):
         """Installation token of the GitHub App, renewed 5 minutes before it expires."""
@@ -187,8 +205,45 @@ class Repo:
     def comment(self, n, body):
         self.gh("POST", f"/issues/{n}/comments", json={"body": body})
 
-    def dispatch(self):
-        self.gh("POST", "/actions/workflows/agent.yml/dispatches", json={"ref": "main"})
+    def dispatch(self, workflow="agent.yml", inputs=None):
+        body = {"ref": "main", **({"inputs": inputs} if inputs else {})}
+        self.gh("POST", f"/actions/workflows/{workflow}/dispatches", json=body)
+
+    def has_work(self):
+        """Something a run of the agent workflow may move: the issue in progress, unless it waits
+        for you (blocked, a question, a pull request ready for your merge in manual mode), or a
+        ready issue that no open issue blocks. Same reading as decide.sh, in short."""
+        active = self.issues("in progress")
+        if active:
+            n = active[0]["number"]
+            if {x["name"] for x in active[0]["labels"]} & WAITS_FOR_YOU:
+                return False
+            pr = self.agent_pr(n)
+            return not (pr and "ready to merge" in self.labels(pr)
+                        and merge_mode(self.labels(self.control)) == "manual")
+        return any(not (i.get("issue_dependencies_summary") or {}).get("blocked_by") for i in self.queue())
+
+    def ping(self):
+        """Starts the agent workflow when it has something to move and no run of it started in the
+        last PING_MINUTES (or one is still going). Returns what it did, or None."""
+        if time.time() - self._pinged < PING_MINUTES * 60:
+            return None
+        self._pinged = time.time()
+        if not self.has_work():
+            return None
+        runs = self.gh("GET", "/actions/workflows/agent.yml/runs", params={"per_page": 1})["workflow_runs"]
+        if runs and (runs[0]["status"] != "completed"
+                     or time.time() - stamp(runs[0]["created_at"]) < PING_MINUTES * 60):
+            return None
+        try:
+            self.dispatch(inputs={"ping": "true"})
+        except requests.HTTPError as e:
+            if e.response.status_code != 422:
+                raise
+            # An agent.yml from before the ping input: started anyway, its failures ring every time
+            self.dispatch()
+            return "agent workflow started (agent.yml has no ping input: copy examples/agent.yml again)"
+        return "agent workflow started"
 
     def issues(self, label):
         params = {"state": "open", "labels": label, "per_page": 100, "sort": "created", "direction": "asc"}
@@ -451,6 +506,45 @@ def watch_events():
             except Exception as e:  # one repository that cannot be read does not stop the others
                 print(f"events of {r.name}: {explain(e)}", flush=True)
         time.sleep(EVENTS_EVERY)
+
+
+def watch_ping():
+    while True:
+        for r in REPOS:
+            try:
+                with LOCK:
+                    done = r.ping()
+                if done:
+                    print(f"ping {r.name}: {done}", flush=True)
+            except Exception as e:  # one repository that cannot be read does not stop the others
+                print(f"ping {r.name}: {explain(e)}", flush=True)
+        try:
+            daily_summary()
+        except Exception as e:
+            print(f"summary: {explain(e)}", flush=True)
+        time.sleep(60)
+
+
+def daily_summary():
+    """Starts the summary workflow of every repository once a day, from SUMMARY_HOUR on: a bot
+    that was off at that hour sends it when it starts again, never twice the same day."""
+    now = time.localtime()
+    today = time.strftime("%Y-%m-%d", now)
+    try:
+        last = SUMMARY_FILE.read_text().strip()
+    except OSError:
+        last = ""
+    if now.tm_hour < SUMMARY_HOUR or last == today:
+        return
+    SUMMARY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SUMMARY_FILE.write_text(today)  # written first: a failure is not retried every minute
+    for r in REPOS:
+        try:
+            with LOCK:
+                r.dispatch("summary.yml")
+            print(f"summary {r.name}: started", flush=True)
+        except Exception as e:
+            print(f"summary {r.name}: {explain(e)}", flush=True)
 
 
 def events_after(after):
@@ -936,7 +1030,9 @@ def main():
     print(f"peppec-bot {VERSION}, repositories: {names()}", flush=True)
     if not USERS:
         print("TELEGRAM_CHAT_ID is a group: set TELEGRAM_USER_IDS, or the bot obeys nobody", flush=True)
+    print(f"ping every {PING_MINUTES} min, summary from {SUMMARY_HOUR}:00 ({time.strftime('%Z')})", flush=True)
     start_dashboard()
+    threading.Thread(target=watch_ping, daemon=True).start()
     tg("setMyCommands", commands=[{"command": c, "description": d} for c, d in COMMANDS])
     offset = load_offset()
     while True:

@@ -240,7 +240,6 @@ gh variable set PEPPEC_MAX_CI_ATTEMPTS -R "$R" -b 5
 gh variable set PEPPEC_MAX_ISSUE_MINUTES -R "$R" -b 120
 gh variable set PEPPEC_STALL_MINUTES -R "$R" -b 120
 gh variable set PEPPEC_QUOTA_RETRY_MINUTES -R "$R" -b 60
-gh variable set PEPPEC_SUMMARY_HOUR -R "$R" -b 9
 gh variable set PEPPEC_CLAUDE_TOKEN_EXPIRES -R "$R" -b "<one year after claude setup-token, YYYY-MM-DD>"
 gh variable set PEPPEC_AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the personal token, YYYY-MM-DD>"
 ```
@@ -251,7 +250,6 @@ gh variable set PEPPEC_AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the perso
 | `PEPPEC_MAX_ISSUE_MINUTES` | The agent's total working time per issue. Waits for quota, CI and CodeRabbit do not count |
 | `PEPPEC_STALL_MINUTES` | How long a pull request may wait for a CI result; a review may take twice as long |
 | `PEPPEC_LARGE_FROM_ROUND` | Review round from which the model of size L takes over |
-| `PEPPEC_SUMMARY_HOUR` | Hour of the daily summary, in `PEPPEC_TZ_NAME` |
 | `PEPPEC_BASE_BRANCH` | The branch the agent starts from and its pull requests are merged into. `main` when not set; `peppec init` proposes `dev` on a new installation. See [The base branch `dev`](#the-base-branch-dev) |
 | `PEPPEC_BRANCHES` | Optional: the names of the agent's branches, and a feature branch for each specification. See [Feature branches](#feature-branches) |
 | `PEPPEC_E2E_FEATURE`, `PEPPEC_E2E_ALL` | Optional, with feature branches: the end-to-end tests of one feature and of the whole project. See [End-to-end tests](#end-to-end-tests) |
@@ -270,7 +268,7 @@ curl -fsSL "$base/peppec.yml" -o .github/peppec.yml
 
 2. In `.github/peppec.yml` choose the [preset](../presets) for your project. Each preset's README lists what it installs and checks; any default can be overridden.
 3. If the tests need something the preset does not install, add your own setup action as described below.
-4. In `summary.yml`, adjust the cron hours to your time zone as explained in the file. In `ci.yml`, the `push` branches are `main` and the base branch: with `main` as base branch, remove `dev`.
+4. The workflows have no GitHub cron: the bot starts them (Phase 6). In `ci.yml`, the `push` branches are `main` and the base branch: with `main` as base branch, remove `dev`.
 5. Commit, and push the same commit to `main` and to the base branch from your account (`git push --atomic origin HEAD:main HEAD:dev`, see [the base branch](#the-base-branch-dev)). Check that the `ci` workflow passes.
 6. Go back to the ruleset of Phase 1 and add **`ci / ci`** to "Require status checks to pass".
 
@@ -340,14 +338,14 @@ What changes:
 
 - **Issues are closed by the workflow.** GitHub closes an issue by itself only when its pull request reaches the default branch. A closed issue therefore means "merged into `dev`", not "on `main`".
 - **The configuration is read from `dev`.** `.github/peppec.yml` and your setup action travel with the code they check, and reach `main` together with it. `peppec doctor` warns when the configuration differs between the two branches.
-- **The workflow files must be the same on both branches.** GitHub runs the scheduled and manual runs from the copy on `main`, and the runs started by a pull request (review submitted, pull request closed) from the copy on `dev`. A change to them, such as an [upgrade](#upgrading), goes to `main` first and is then merged into `dev`. `peppec doctor` reports a difference as a problem.
+- **The workflow files must be the same on both branches.** GitHub runs the manual runs (the bot's ping and commands) from the copy on `main`, and the runs started by a pull request (review submitted, pull request closed) from the copy on `dev`. A change to them, such as an [upgrade](#upgrading), goes to `main` first and is then merged into `dev`. `peppec doctor` reports a difference as a problem.
 - **CI runs on every push to `dev`**, as on `main`: each merge is checked where it lands, so a `dev` broken by two merges together, or by a push of yours, shows up at once instead of in the agent's next pull request. It also keeps a fresh build cache for the pull requests into `dev`. The cost is one more CI run per merge. `init` writes both branches in `ci.yml`; `peppec doctor` warns when `dev` is missing there.
 - **Bringing `dev` to `main` is yours to do**, with a pull request merged with a merge commit. A squash would leave the two branches with different histories, and the next pull request between them would conflict. A fix made directly on `main` must be merged back into `dev`. `dev` stays after the merge: GitHub does not delete merged branches here (Phase 1), on any plan. Do not press "Delete branch" on that pull request. The second ruleset makes the button fail; the first one does not, because admins bypass it. Where rulesets are not available and `dev` was deleted by mistake, "Restore branch" on the same pull request brings it back.
 - **Without `dev` the queue stops.** If the branch is missing, nothing is started and you get one Telegram message; the queue goes on by itself when the branch is back (see [Merge modes](architecture.md#merge-modes)).
 
 ### Empty repository
 
-In an empty repository, GitHub does not start the workflows that arrive with the very first push from any event: no CI on pushes and pull requests, no runs of the agent's schedule. They look active, and only a manual start works. Nothing warns you, and the queue never moves.
+In an empty repository, GitHub does not start the workflows that arrive with the very first push from any event: no CI on pushes and pull requests, no agent run after a review. They look active, and only a manual start works. Nothing warns you, and the queue never moves.
 
 So the first push must not carry the workflows. On an empty repository `peppec init` offers to push a starting commit first, to `main` and `dev` together: an empty commit, or the commits already in your clone when they hold no `.github/workflows`. The install commit then goes as the second push. By hand:
 
@@ -415,6 +413,8 @@ gh variable set PEPPEC_E2E_ALL -R "$R" -b 'npx playwright test'
 
 ## Phase 6 — Telegram bot
 
+The bot is required: besides the commands, it starts the agent workflow every `PING_MINUTES` and the daily summary at `SUMMARY_HOUR`, since GitHub's cron is not used (see [Ping](architecture.md#ping)). Run it on a machine that stays on.
+
 The bot is a container that keeps asking Telegram for new messages. It answers only your chat, and only you in it: in a private chat that is automatic; in a group chat set `TELEGRAM_USER_IDS` in `.env` to the Telegram user ids allowed to command it, comma separated, or it obeys nobody. It acts on GitHub as the app, with one-hour tokens it generates from the app's private key.
 
 1. On the bot's machine create the folder, then copy the key into it from your computer and protect it:
@@ -446,6 +446,8 @@ docker compose logs -f
 
    `REPOS` lists the repositories the bot controls, as `owner/name#N` where `N` is the number of the control panel issue. To make the same bot follow more repositories, separate them with commas: they must be installed with the same app, Telegram bot and chat. After changing `.env`, run `docker compose up -d` again.
 
+   `TZ` is the bot's time zone (for example `Europe/Rome`), in which `SUMMARY_HOUR` is read. `PING_MINUTES` (15 by default) is how often it looks for work to wake the agent workflow; `SUMMARY_HOUR` (9 by default) the hour of the daily summary.
+
 4. Send `/status` to the bot: it answers with mode, pause and queue.
 5. Optional: the dashboard, a web page with the state of the queues and the same actions as the bot. `peppec bot` asks whether to turn it on, and then writes both lines below with a generated password and prints it. By hand: in `.env` set `DASHBOARD_PASSWORD` to a long password and `DASHBOARD_PORT=8737`, run `docker compose up -d` again and open `http://<address of the machine>:8737` from a device in the same network. Do not expose that port to the internet: see [Dashboard](architecture.md#dashboard).
 6. Optional: the Claude usage on the dashboard. Log in to Claude Code once inside the bot's container: `docker compose run --rm peppec-bot claude`, follow the link it prints, paste the code back, then leave with `/exit`. The login is kept in `~/peppec-bot/claude/`. Restart the bot with `docker compose up -d`.
@@ -462,7 +464,8 @@ The final layout:
 ├── claude/         (optional: the Claude Code login, step 6)
 └── data/
     ├── app.pem
-    └── offset      (created by the bot)
+    ├── offset      (created by the bot)
+    └── summary     (the day of the last summary, created by the bot)
 ```
 
 ## Phase 7 — End-to-end test
@@ -488,6 +491,8 @@ The engine version is the ref after `@` in the three workflows, repeated in `eng
 
 The bot follows the same versions: `docker compose pull && docker compose up -d`, then `/version`.
 
+From 2.16.0 the workflows have no GitHub cron and the bot starts them: add `TZ`, `PING_MINUTES` and `SUMMARY_HOUR` to its `.env` (see [`bot/.env.example`](../bot/.env.example)), and take the new `agent.yml` and `summary.yml` (`peppec init` again). `peppec doctor` warns while the old ones are in place.
+
 ## Security notes
 
 What the engine does about security is in [architecture.md](architecture.md#security). Three things depend on your choices:
@@ -500,5 +505,4 @@ What the engine does about security is in [architecture.md](architecture.md#secu
 
 - **Claude token**: it lasts one year. Run `claude setup-token` again, then update the `CLAUDE_CODE_OAUTH_TOKEN` secret and the `PEPPEC_CLAUDE_TOKEN_EXPIRES` variable.
 - **Personal token**: regenerate it on GitHub before it expires, then update the `PEPPEC_AGENT_TOKEN` secret and the `PEPPEC_AGENT_TOKEN_EXPIRES` variable. Running `peppec init` again does both: answer yes when it asks whether to replace the token.
-- **Scheduled workflows**: on public repositories GitHub disables them after 60 days without activity. Re-enable `agent` and `summary` from the Actions tab.
 - **App permissions**: if a step fails with "Resource not accessible by integration", add the missing permission on the app's page and accept the change in the installation settings.

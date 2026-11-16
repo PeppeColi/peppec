@@ -13,6 +13,26 @@ history when this file was created.
 
 - Each version tag publishes a GitHub release, with that version's section of this changelog as
   its notes.
+- The ping: the bot starts the agent workflow every `PING_MINUTES` (15 by default) on each
+  repository with something to move (an issue in progress that does not wait for you, or a ready
+  issue no open issue blocks) and no run in the meantime, and the summary workflow once a day from
+  `SUMMARY_HOUR` (9 by default) in its time zone `TZ`. `peppec bot` asks for both and writes `TZ`.
+- `peppec doctor` warns about a GitHub cron left in `agent.yml` or `summary.yml`, and about an
+  `agent.yml` without the `ping` input.
+
+### Changed
+
+- GitHub's cron is not used any more: it ran the workflows hours late and the queue stood still.
+  `examples/agent.yml` and `examples/summary.yml` have no `schedule`, and `agent.yml` passes the new
+  `ping` input; run `peppec init` again, or copy them, then restart the bot with the new `.env`
+  lines. The bot is now required on every host.
+- A failure of the decide step rings only in the first quarter of an hour for runs started by the
+  ping, instead of for scheduled runs.
+
+### Removed
+
+- The `PEPPEC_SUMMARY_HOUR` variable and the hour check of the summary: the summary is sent
+  whenever its workflow runs, and the bot picks the hour.
 
 ## [2.15.0] - 2026-11-16
 

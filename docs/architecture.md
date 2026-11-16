@@ -20,7 +20,7 @@ Two repositories are involved:
 | Telegram bot | Any always-on machine, long polling | Forwards notifications and questions, receives commands and answers; acts on GitHub as the app |
 | Your GitHub account | — | Owns the host and authors the agent's commits and pull requests |
 
-The bot uses long polling, so it needs no public address and no open ports. Notifications are sent from GitHub Actions, so they arrive even if the bot is down.
+The bot uses long polling, so it needs no public address and no open ports. Notifications are sent from GitHub Actions, so they arrive even if the bot is down. The bot is required all the same: it is what wakes the workflows ([ping](#ping)).
 
 Only the notifications that need your action make the phone ring: a stopped queue or a blocked issue, a question, a pull request ready to merge (manual mode), a feature ready to be tried, a missing base branch, a wrong label, end-to-end tests the hotfixes could not fix, a token about to expire. The others arrive silently, without sound or vibration: a merge in automatic mode, a quota retry, a hotfix or sync work unit opened by the queue, the base branch back, the agent answering CodeRabbit, the trace of a dashboard action. The daily summary is silent too, unless a token is about to expire, and it is not sent on a day with nothing merged, blocked, asked or in queue. The full list is in [notifications.md](notifications.md).
 
@@ -70,7 +70,7 @@ flowchart TD
 - **The base branch comes in only at the end.** GitHub's merge API brings it into the feature branch. On a conflict the workflow opens a sync work unit, makes the merge itself with the conflict markers in place, and the agent resolves them; markers left behind are never pushed, and the pull request is merged with a merge commit. If the base branch moves while a finished feature waits, it is brought in again.
 - **End-to-end tests run on the feature's pull request.** CI runs `PEPPEC_E2E_FEATURE` (`ci / e2e_feature`) and `PEPPEC_E2E_ALL` (`ci / e2e_all`) only there; elsewhere both succeed without running. A failing `e2e_feature` opens a hotfix work unit of size L; after two of them you are told instead. A specification whose "End-to-end" section starts with `None` needs no new tests: the workflow reads it when it opens the feature's pull request and leaves a marker in the body, so `e2e_feature` skips them, and the queue reads the specification again before judging the result. `e2e_all` always runs there and is meant to be required on the base branch, so a red suite blocks your merge. Nothing runs on the pull request into `main`.
 
-A single workflow wakes up every 15 minutes and on every relevant event: CI finished, review submitted, pull request closed, bot command. Each time it reads the state back from GitHub and picks exactly one move, so it can restart at any point. Only one run executes at a time.
+A single workflow wakes up on every relevant event (CI finished, review submitted, pull request closed, bot command) and on the bot's [ping](#ping). Each time it reads the state back from GitHub and picks exactly one move, so it can restart at any point. Only one run executes at a time.
 
 ## Presets and configuration
 
@@ -158,6 +158,15 @@ Pull requests are merged into the base branch: `main`, or the branch named by th
 If the base branch does not exist, the whole queue stops: no issue is started, continued or blocked. You get one Telegram message with the command that creates the branch again, and the control panel gets the `base missing` label. At the first run that finds the branch, the label goes, you are told, and the queue goes on from where it was. A pull request that was open when the branch disappeared was closed by GitHub: the agent's branch is still there, and the workflow opens a new pull request from it.
 
 The workflow merges only the pull requests of its own branches (`agent/issue-N`, or the work, hotfix, sync and single names of [`PEPPEC_BRANCHES`](setup.md#feature-branches)), and removes such a branch once its pull request is merged: right after an automatic merge, and at the run started by a merge done by hand. GitHub's own "Automatically delete head branches" stays off, because it would also delete the base branch each time it is brought to `main`; the only other branch the workflow deletes is a feature branch, once you have merged it into the base branch. A feature branch is never merged by the workflow. With a base branch other than `main`, the merge of the base branch into `main` is never automatic, whatever the mode: it is the owner's statement that the whole feature passed its end-to-end test (see [Planning a feature](planning.md)). With feature branches the machine runs the end-to-end tests first ([Feature branches](#feature-branches)); the last word is still yours, through the merge of each feature and of the base branch.
+
+## Ping
+
+GitHub's cron is not used: it runs scheduled workflows hours late, and a queue waiting for it stands still. The bot starts the workflows instead:
+
+- **The agent workflow**, every `PING_MINUTES` (15 by default), on each repository that has something to move: an issue in progress, or a ready issue that no open issue blocks. It skips a repository whose issue in progress waits for you (`needs human`, `question open`, or a pull request `ready to merge` in manual mode: your merge wakes it), and one where a run started in the last `PING_MINUTES` or is still going. The ping is what moves the waits that no event ends: a quota retry, a CI result that never comes, the time budget, the opening of the work window, a new ready issue.
+- **The summary workflow**, once a day from `SUMMARY_HOUR` (9 by default) in the bot's time zone `TZ`. A bot that was off at that hour sends it when it starts again, never twice the same day.
+
+A run started by the ping carries the `ping` input: when its decide step fails, the message rings only in the first quarter of an hour, not at every ping. With the bot down nothing new starts and no summary is sent; the pull requests still move on their events.
 
 ## Telegram bot
 

@@ -1,11 +1,7 @@
 # Copy to .github/workflows/summary.yml in your repository.
-# GitHub cron runs in UTC: list the UTC hours that can match SUMMARY_HOUR in your time zone
-# with and without daylight saving (07:00 and 08:00 UTC for 09:00 in Central Europe).
-# The script sends the summary only on the run that matches.
+# No cron: the bot starts it once a day, at SUMMARY_HOUR in its .env.
 name: summary
 on:
-  schedule:
-    - cron: '0 7,8 * * *'
   workflow_dispatch:
 
 permissions:
