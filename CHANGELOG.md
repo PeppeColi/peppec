@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- With feature branches, an issue blocked by a work unit of another specification no longer starts
+  before that feature reaches the base branch: the workflow adds the specification as a blocker,
+  with a comment on the issue.
+
 ## [2.14.0] - 2026-11-16
 
 ### Changed

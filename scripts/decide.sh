@@ -141,6 +141,27 @@ open_blockers() {
     --jq ".[] | select(.state == \"open\" and .number != ${2:-0}) | \"#\(.number)\"" | paste -sd' ' -
 }
 
+# With feature branches, an issue blocked by a work unit of another specification would start once
+# that work unit is merged into its feature branch, from a base branch still without the feature.
+# The specification itself is the blocker that holds until its feature reaches the base branch:
+# added here, once, with a comment (docs/planning.md, "Work units")
+block_on_specifications() {
+  local n=$1 own all b sp sn
+  own=$(spec_of "$n" | jq -r '.number // empty')
+  all=$(gh api --paginate "repos/$REPO/issues/$n/dependencies/blocked_by?per_page=100" --jq '.[].number')
+  for b in $all; do
+    sp=$(spec_of "$b"); [ -n "$sp" ] || continue
+    sn=$(jq -r .number <<< "$sp")
+    [ "$sn" != "$own" ] && [ "$(jq -r .state <<< "$sp")" = open ] || continue
+    grep -qx "$sn" <<< "$all" && continue
+    if gh api -X POST "repos/$REPO/issues/$n/dependencies/blocked_by" -F issue_id="$(jq -r .id <<< "$sp")" > /dev/null; then
+      all=$(printf '%s\n%s' "$all" "$sn")
+      echo "Issue #$n was blocked by #$b, a work unit of specification #$sn: #$sn added as a blocker"
+      gh issue comment "$n" -R "$REPO" --body "Blocked by #$sn as well: #$b is one of its work units, and this issue needs the whole feature on the base branch, which the merge of the specification's feature brings. Added by PEPPEC." > /dev/null
+    fi
+  done
+}
+
 active=$(active_issue) closed=""
 # An open issue whose pull request is merged: the base branch is not the default one, so
 # GitHub did not close it, and it was merged by hand or the run that merged it stopped early
@@ -211,6 +232,7 @@ if [ -z "$active" ]; then
     if [ "$paused" = true ] && [ "$(kind_of "$n")" = work ]; then
       echo "Issue #$n waits: the queue is paused, no new issue starts"; continue
     fi
+    [ -z "$(template feature)" ] || block_on_specifications "$n"
     blockers=$(open_blockers "$n" "$closed")
     if [ -n "$blockers" ]; then echo "Issue #$n waits for $blockers"; continue; fi
     [ -n "$first" ] || first=$n
