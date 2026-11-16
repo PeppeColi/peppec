@@ -11,6 +11,11 @@ history when this file was created.
 
 ### Changed
 
+- `docs/agents/e2e.md` carries a status line, "End-to-end tests per feature: on" or "off", that
+  `peppec init` keeps in step with `PEPPEC_E2E_FEATURE`: the PEPPEC section of `CLAUDE.md` now
+  follows that line, since planning sessions cannot read GitHub variables, and `peppec doctor`
+  warns when the two disagree. Run `peppec init` to update the section and write the line.
+
 - `peppec init` with `rust-v1` and no `Cargo.toml` offers to run `cargo init`, and the files it
   creates join the suggested commit; without cargo, or with `php-v1` and no `composer.json`, it
   warns that the first CI run will fail.

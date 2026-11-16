@@ -244,6 +244,17 @@ put_secret() { printf '%s' "$2" | gh secret set "$1" -R "$REPO" > /dev/null; ok 
 # /to-spec, /to-tickets). It lives between two markers, outside the block the skills' setup rewrites
 TRIAGE_FILE=docs/agents/triage-labels.md
 E2E_FILE=docs/agents/e2e.md
+# The line of $E2E_FILE that tells planning sessions whether PEPPEC_E2E_FEATURE is set: they read
+# files, not GitHub variables. init keeps it in step with the variable; the rest is yours
+E2E_STATUS_PREFIX='**End-to-end tests per feature:'
+e2e_status_line() { # e2e_status_line on|off
+  if [ "$1" = on ]; then
+    echo "$E2E_STATUS_PREFIX on.** \`PEPPEC_E2E_FEATURE\` is set: a specification decides them in its \"End-to-end\" section. Kept up to date by \`peppec init\`."
+  else
+    echo "$E2E_STATUS_PREFIX off.** \`PEPPEC_E2E_FEATURE\` is not set: specifications write no \"End-to-end\" section, and no work unit writes end-to-end tests. Kept up to date by \`peppec init\`."
+  fi
+}
+E2E_FEATURE=off
 claude_section() { engine_file examples/claude-md-section.md | sed '/^<!-- Copy /d'; }
 # The section found in a CLAUDE.md on stdin; empty when there is none
 section_of() { sed -n '/^<!-- peppec:start/,/^<!-- peppec:end -->/p'; }
@@ -647,7 +658,9 @@ init_feature_variables() {
     ask value "$question (leave empty to skip, - to remove)" "$value"
     # "none" is no command: taken as empty, as the old wording of the question invited
     if [ "$value" = none ]; then warn "'none' read as empty: $name not set"; value=""; fi
-    if [ -z "$value" ] || [ "$value" = - ]; then del_var "$name"; else set_var "$name" "$value"; fi
+    if [ -z "$value" ] || [ "$value" = - ]; then del_var "$name"; else
+      set_var "$name" "$value"; [ "$name" != PEPPEC_E2E_FEATURE ] || E2E_FEATURE=on
+    fi
   done 3<<< 'PEPPEC_E2E_FEATURE|End-to-end tests of one feature, {spec} = its specification
 PEPPEC_E2E_ALL|End-to-end tests of the whole project'
 }
@@ -783,6 +796,19 @@ change_preset() { # change_preset OLD NEW
   fi
 }
 
+# Writes the status line of $E2E_FILE: replaces it, or puts it under the first heading
+set_e2e_status() {
+  [ -f "$E2E_FILE" ] || return 0
+  local line tmp; line=$(e2e_status_line "$1"); tmp=$(mktemp)
+  if grep -qF "$E2E_STATUS_PREFIX" "$E2E_FILE"; then
+    awk -v p="$E2E_STATUS_PREFIX" -v l="$line" 'index($0, p) == 1 { print l; next } { print }' "$E2E_FILE" > "$tmp"
+  else
+    awk -v l="$line" '!done && /^# / { print; print ""; print l; done = 1; next } { print } END { if (!done) print l }' "$E2E_FILE" > "$tmp"
+  fi
+  if cmp -s "$tmp" "$E2E_FILE"; then ok "$E2E_FILE: end-to-end tests per feature $1"
+  else cat "$tmp" > "$E2E_FILE"; ok "$E2E_FILE: end-to-end tests per feature $1 (status line written)"; fi
+  rm -f "$tmp"
+}
 # The file the preset's CI starts from (Cargo.toml, composer.json): without it the first CI run
 # fails. For Rust init offers to create a minimal one; the files created join the install commit
 MANIFEST_PATHS=""
@@ -906,6 +932,7 @@ init_planning() {
   if [ -f "$E2E_FILE" ]; then ok "$E2E_FILE (kept)"; else
     write_file "$E2E_FILE" "$(engine_file examples/e2e.md | sed -e '/^<!-- Copy to /d')"
   fi
+  set_e2e_status "$E2E_FEATURE"
 
   # Written by the setup skill of mattpocock/skills: /to-tickets applies the label of this row
   [ -f "$TRIAGE_FILE" ] || return 0
@@ -1313,7 +1340,13 @@ cmd_doctor() {
       *) warn "$TRIAGE_FILE does not map ready-for-agent to ready: issues from /to-tickets will not be built (peppec init fixes it)";;
     esac
   fi
-  if host_file "$E2E_FILE" > /dev/null 2>&1; then ok "$E2E_FILE describes the end-to-end tests"
+  if content=$(host_file "$E2E_FILE" 2> /dev/null); then
+    ok "$E2E_FILE describes the end-to-end tests"
+    local said want=off; [ -z "$(var_of PEPPEC_E2E_FEATURE)" ] || want=on
+    said=$(grep -F "$E2E_STATUS_PREFIX" <<< "$content" | head -n 1 | sed -nE 's/.*per feature: (on|off).*/\1/p')
+    if [ "$said" != "$want" ]; then
+      warn "$E2E_FILE says end-to-end tests per feature ${said:-(no status line)}, but PEPPEC_E2E_FEATURE makes them $want: planning sessions follow the file (peppec init updates it)"
+    fi
   else note "no $E2E_FILE: planning sessions do not know how this repository writes end-to-end tests (peppec init creates it)"; fi
   HOOK=false cmd_skills
   if [ -n "$(host_file .claude/settings.json | hook_of)" ]; then ok ".claude/settings.json checks the planning skills when a session starts"

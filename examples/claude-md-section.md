@@ -36,7 +36,7 @@ the map reads them:
 ### Specifications
 
 - Include the scenarios, in given/when/then form, under a heading named "Scenarios".
-- If the repository has end-to-end tests per feature (the `PEPPEC_E2E_FEATURE` variable), add a
+- If `docs/agents/e2e.md` says "End-to-end tests per feature: on", add a
   section named "End-to-end" that decides whether this feature needs new end-to-end tests. The
   unit tests of its work units may be enough: then write `None: unit tests cover it.` and why,
   in one line. Otherwise list the scenarios the end-to-end tests must cover. Without the section
