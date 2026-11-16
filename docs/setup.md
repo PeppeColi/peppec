@@ -303,6 +303,8 @@ The action must live under `.github/`, so the agent cannot change it. Like the r
 
 A new project can start with the preset `none` (`peppec init` proposes it when there is neither `Cargo.toml` nor `composer.json`): CI passes, planning and issues can be written, and the agent builds nothing. The control panel carries the `no preset` label, `/status` and the dashboard say so, and the ready issues wait: each run tells you once about the ones not reported yet, in a single message.
 
+Choosing `rust-v1` where there is no `Cargo.toml` yet, `peppec init` offers to run `cargo init` (a minimal project whose checks pass) and adds the files it creates to the suggested commit; without cargo on your computer, or with a no, it warns that the first CI run will fail. With `php-v1` and no `composer.json` it only warns: the check runs `vendor/bin/phpunit`, so the project needs phpunit and a first test, which a bare `composer init` does not give.
+
 To choose the language later, or to move from one language to another:
 
 1. Pause the queue and let the issue in progress finish: its pull request would be checked with the new preset.

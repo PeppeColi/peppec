@@ -783,6 +783,34 @@ change_preset() { # change_preset OLD NEW
   fi
 }
 
+# The file the preset's CI starts from (Cargo.toml, composer.json): without it the first CI run
+# fails. For Rust init offers to create a minimal one; the files created join the install commit
+MANIFEST_PATHS=""
+init_project_manifest() {
+  local file tool cmd created
+  case "$PRESET" in
+    rust-v1) file=Cargo.toml tool=cargo cmd="cargo init" created="Cargo.toml src";;
+    # A bare composer.json would not be enough: the check runs vendor/bin/phpunit
+    php-v1)
+      [ -f composer.json ] || warn "no composer.json: provide one with phpunit and a first test before the first push, or CI will fail"
+      return 0;;
+    *) return 0;;
+  esac
+  [ ! -f "$file" ] || return 0
+  if ! command -v "$tool" > /dev/null 2>&1; then
+    warn "no $file, and $tool is not on this computer: run '$cmd' before the first push, or CI will fail"
+    return 0
+  fi
+  if confirm "No $file: create a minimal one with '$cmd'" y; then
+    # shellcheck disable=SC2086 # cmd holds the command and its options
+    if $cmd > /dev/null 2>&1 && [ -f "$file" ]; then
+      ok "$file (created by $cmd)"; MANIFEST_PATHS=$created
+    else bad "'$cmd' failed: run it yourself before the first push, or CI will fail"; fi
+  else
+    warn "no $file: provide it before the first push, or CI will fail"
+  fi
+}
+
 init_files() {
   step "Files"
   local presets detected=none content f line cron current=""
@@ -801,6 +829,7 @@ init_files() {
   if [ -n "$current" ] && [ "$PRESET" != "$current" ]; then change_preset "$current" "$PRESET"; fi
   ok "preset $PRESET"
   [ "$PRESET" != none ] || warn "preset none: the agent builds nothing until you run peppec init --preset <name>"
+  init_project_manifest
 
   cron=$(summary_cron "$TZ_NAME" "$SUMMARY_HOUR")
   # CI runs on the pushes to main and to the base branch, where the merges land
@@ -1047,6 +1076,7 @@ cmd_init() {
   [ -f .claude/settings.json ] && paths="$paths .claude/settings.json"
   [ -f "$TRIAGE_FILE" ] && paths="$paths $TRIAGE_FILE"
   [ -f "$E2E_FILE" ] && paths="$paths $E2E_FILE"
+  [ -z "$MANIFEST_PATHS" ] || paths="$paths $MANIFEST_PATHS"
   # Written before init by the setup skill of mattpocock/skills (issue-tracker.md, domain.md…)
   if [ -n "$(git ls-files --others --exclude-standard -- docs/agents 2> /dev/null)" ]; then
     paths="$paths docs/agents"

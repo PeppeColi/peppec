@@ -11,6 +11,10 @@ history when this file was created.
 
 ### Changed
 
+- `peppec init` with `rust-v1` and no `Cargo.toml` offers to run `cargo init`, and the files it
+  creates join the suggested commit; without cargo, or with `php-v1` and no `composer.json`, it
+  warns that the first CI run will fail.
+
 - `peppec bot` asks whether to turn on the dashboard: yes writes `DASHBOARD_PASSWORD` (generated)
   and `DASHBOARD_PORT` in `.env`, and the next steps give the address, the password and the
   optional Claude Code login for the Claude usage.
