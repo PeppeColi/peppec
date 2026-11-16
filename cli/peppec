@@ -699,7 +699,11 @@ init_secrets() {
         case "$value" in sk-ant-oat*) ;; *) warn "the value does not look like a token from 'claude setup-token'";; esac
         NEW_CLAUDE_TOKEN=true;;
       PEPPEC_AGENT_TOKEN)
-        if [ "$(GH_TOKEN="$value" gh api "repos/$REPO" --jq .permissions.push 2> /dev/null)" = true ]; then
+        # A real write: the push permission of GET repos/... is your role on the repository, true
+        # on a public one even for a token that cannot reach it. The blob is tied to nothing,
+        # and GitHub drops it by itself
+        if GH_TOKEN="$value" gh api -X POST "repos/$REPO/git/blobs" -f content=peppec-probe -f encoding=utf-8 \
+          --jq .sha > /dev/null 2>&1; then
           ok "the token can write to $REPO"
         else bad "PEPPEC_AGENT_TOKEN cannot write to $REPO: not stored. Check its repository access and permissions"; continue; fi
         NEW_AGENT_TOKEN=true;;
