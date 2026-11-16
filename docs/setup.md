@@ -160,7 +160,7 @@ Never write these values in a file of the repository, in an issue or in a note.
    - This is a token of your own account: not the app's key, and not the token `gh` uses on your computer. The workflow uses it to push the agent's commits and open pull requests in your name.
    - Name it `peppec workflow`, adding the repository name if you create one token per repository, so its purpose is clear in GitHub's list and in the email GitHub sends before it expires.
    - Expiration: one year is a reasonable choice. When the token expires the queue stops until you replace it. Note the date.
-6. Telegram bot: message `@BotFather`, send `/newbot` and follow the prompts; copy the token.
+6. Telegram bot: message `@BotFather`, send `/newbot` and follow the prompts; copy the token. What the bot will send you is in [notifications.md](notifications.md).
 7. Chat ID: send any message to your new bot, then:
 
 ```bash
