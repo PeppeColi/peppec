@@ -30,4 +30,9 @@ case "$ACTION" in
     GH_TOKEN="$AGENT_TOKEN" gh pr comment "$PR" -R "$REPO" --body "@coderabbitai review
 
 <!-- peppec:rerequest=$SHA -->";;
+  full_review)
+    # Reviews the whole pull request again, and ends with a verdict on its latest commit
+    GH_TOKEN="$AGENT_TOKEN" gh pr comment "$PR" -R "$REPO" --body "@coderabbitai full review
+
+<!-- peppec:full-review=$SHA -->";;
 esac

@@ -114,7 +114,7 @@ jobs:
 
   control:
     needs: decide
-    if: contains(fromJSON('["stop","merge","notify_ready","rerequest"]'), needs.decide.outputs.action)
+    if: contains(fromJSON('["stop","merge","notify_ready","rerequest","full_review"]'), needs.decide.outputs.action)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

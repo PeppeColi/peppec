@@ -290,22 +290,35 @@ state=$(jq -r --arg sha "$sha" '[.[] | select(.commit_id == $sha and (.state == 
 # - CodeRabbit submitted no review at all on this commit, and its latest verdict is an approval;
 # - it answered the request made for this commit with one of those two sentences.
 # If the wording of that reply ever changes, this simply stops matching and the queue waits.
+# The same reply also comes when its latest verdict asked for changes and the new commit holds
+# only what it reviews incrementally as already seen: then no verdict would ever come, and a
+# full review is asked once for the commit (see full_review below).
 # The comments of the pull request, read only when there is no verdict on this commit
 comments='[]'
 if [ "$state" = none ]; then
   comments=$(gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" \
     --jq '.[] | {login: .user.login, body, created_at}' | jq -s .)
 fi
-carried_approval() {
-  jq -e --arg sha "$sha" '
-    all(.[]; .commit_id != $sha)
-    and (([.[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")] | last | .state) == "APPROVED")' \
-    <<< "$reviews" > /dev/null || return 1
+# CodeRabbit answered the request made for this commit with one of those two sentences
+nothing_to_review() {
   jq -e --arg sha "$sha" --arg o "${OWNER_LOGIN:-}" '
     (map(select(.login == $o and (.body | contains("<!-- peppec:rerequest=" + $sha + " -->")))) | last | .created_at) as $asked
     | $asked != null
       and any(.[]; .login == "coderabbitai[bot]" and .created_at >= $asked
                    and (.body | test("Review finished|Path filters excluded [0-9]+ files? from this review"; "i")))' \
+    <<< "$comments" > /dev/null
+}
+carried_approval() {
+  jq -e --arg sha "$sha" '
+    all(.[]; .commit_id != $sha)
+    and (([.[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")] | last | .state) == "APPROVED")' \
+    <<< "$reviews" > /dev/null || return 1
+  nothing_to_review
+}
+# A full review was already asked for this commit
+full_review_asked() {
+  jq -e --arg sha "$sha" --arg o "${OWNER_LOGIN:-}" '
+    any(.[]; .login == $o and (.body | contains("<!-- peppec:full-review=" + $sha + " -->")))' \
     <<< "$comments" > /dev/null
 }
 if [ "$state" = none ] && carried_approval; then
@@ -315,6 +328,13 @@ fi
 
 case "$state" in
   none)
+    # Nothing to review in this commit and no approval to carry over: CodeRabbit gives a verdict
+    # on the whole pull request only when asked for a full review. Asked once per commit; its
+    # review then wakes the queue (pull_request_review)
+    if nothing_to_review && ! full_review_asked; then
+      echo "CodeRabbit found nothing new to review in $sha and its latest verdict is no approval: asking for a full review"
+      action=full_review; exit 0
+    fi
     # Reviews start only on request: ask as soon as the checks are green. CodeRabbit answers
     # every request with a comment within a minute or two: a request with no answer at all
     # was lost (CodeRabbit not installed yet, or down), so it is repeated, up to

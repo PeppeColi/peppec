@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- A pull request no longer waits forever when CodeRabbit answers the review request of a new commit
+  with "Review finished" but no verdict, and its previous verdict asked for changes: the workflow
+  asks once for a full review (`@coderabbitai full review`), which ends with a verdict.
+
 ## [2.12.0] - 2026-11-16
 
 ### Changed
