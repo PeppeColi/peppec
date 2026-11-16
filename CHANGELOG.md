@@ -9,6 +9,15 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Added
+
+- The smart queue: with feature branches, the planning session proposes the blockers between
+  the new specification and the other open ones, from what each adds, and sets them once you
+  approve its table (new part of the PEPPEC section of `CLAUDE.md`: run `peppec init` again). On
+  the first round of a work unit the agent also receives the other open features, and when it
+  needs code one of them adds it names it instead of writing it: the workflow blocks the
+  specification's work units by it, pushes nothing and moves on to the next issue.
+
 ## [2.17.0] - 2026-11-16
 
 ### Added

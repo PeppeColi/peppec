@@ -26,6 +26,14 @@ if parent=$(gh api "repos/$REPO/issues/$ISSUE/parent" 2> /dev/null) \
     echo; jq -r '.body // ""' <<< "$parent"
   } > .agent/spec.md
 fi
+# The smart queue: the other open features, so that the agent names the one whose code it needs
+# instead of writing that code again (after.sh). Only on the first round of a work unit built on a
+# feature branch: nothing is pushed yet, and its feature branch can still start again
+if [ "$ACTION" = start ] && [ -n "$(template feature)" ] && [ -s .agent/spec.md ] \
+   && [ "$(kind_of "$ISSUE")" = work ]; then
+  features_md "$(jq -r .number <<< "$parent")" > .agent/features.md
+  [ -s .agent/features.md ] || rm -f .agent/features.md
+fi
 I=$(gh api "repos/$REPO/issues/$ISSUE")
 # The queue builds only issues you or the app wrote (decide.sh): a second check, since the body
 # goes to the agent as it is

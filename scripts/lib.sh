@@ -253,6 +253,36 @@ plan_branch() {
   ensure_feature_branch "$base"
   marker_set "$n" branch "$branch:$base"
 }
+# The smart queue. The open specifications other than $1, written by the owner or the app and not
+# wayfinder maps: "number<TAB>title", one per line
+open_specs() {
+  gh api --paginate "repos/$REPO/issues?state=open&per_page=100" \
+    | jq -s -r --arg o "${OWNER_LOGIN:-}" --arg a "${APP_LOGIN:-}" --argjson own "${1:-0}" '
+      add // [] | .[] | select(.pull_request | not) | select((.sub_issues_summary.total // 0) > 0)
+      | select(.user.login == $o or .user.login == $a)
+      | select(any(.labels[].name; startswith("wayfinder:")) | not)
+      | select(.number != $own) | "\(.number)\t\(.title | gsub("[\r\n]"; " "))"'
+}
+# What the agent reads about the other open features (.agent/features.md): their number, title and
+# the files changed on their feature branch. Empty when there are none
+features_md() {
+  local specs n title fb files
+  specs=$(open_specs "$1" | head -n 30)
+  [ -n "$specs" ] || return 0
+  echo "# Other open features"
+  echo
+  echo "These specifications are open: their code is not on the base branch, so this repository does not have it yet."
+  echo
+  while IFS=$'\t' read -r n title <&3; do
+    fb=$(feature_of "$n") files=""
+    if [ -n "$fb" ]; then
+      files=$(gh api "repos/$REPO/compare/${BASE_BRANCH:-main}...$fb" --jq '.files[].filename' 2> /dev/null \
+        | head -n 40 | paste -sd, - | sed 's/,/, /g' || true)
+    fi
+    if [ -n "$files" ]; then echo "- #$n $title. Files changed on its feature branch: $files"
+    else echo "- #$n $title. No code written yet."; fi
+  done 3<<< "$specs"
+}
 # Creates a feature branch from the tip of BASE_BRANCH when it does not exist
 ensure_feature_branch() {
   [ "$1" != "${BASE_BRANCH:-main}" ] || return 0
