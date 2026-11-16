@@ -11,6 +11,10 @@ history when this file was created.
 
 ### Changed
 
+- `peppec bot` asks whether to turn on the dashboard: yes writes `DASHBOARD_PASSWORD` (generated)
+  and `DASHBOARD_PORT` in `.env`, and the next steps give the address, the password and the
+  optional Claude Code login for the Claude usage.
+
 - `peppec doctor` and `peppec bot` find the app's private key where `peppec init` saved it
   (`~/<app>.private-key.pem`): doctor checks the app's installation without `--key`, and bot
   proposes that path. `--key` still picks another file.

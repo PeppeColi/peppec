@@ -1408,13 +1408,22 @@ cmd_bot() {
     check_app "$app_id" "$KEY_FILE" || die "the key is not valid for app $app_id"
   done
 
+  step "Dashboard"
+  local dash_password=""
+  if confirm "Turn on the dashboard (a web page on port 8737 of the bot's machine, for your local network)" y; then
+    dash_password=$(openssl rand -base64 24 | tr -d '/+=')
+  fi
+
   step "Folder"
   ( umask 077
     mkdir -p "$OUT_DIR/data"
     keep_out_of_git "$OUT_DIR"
     cp "$KEY_FILE" "$OUT_DIR/data/app.pem"
     printf 'TELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\nAPP_ID=%s\nREPOS=%s\n' \
-      "$token" "$chat" "$app_id" "$repos" > "$OUT_DIR/.env" )
+      "$token" "$chat" "$app_id" "$repos" > "$OUT_DIR/.env"
+    if [ -n "$dash_password" ]; then
+      printf 'DASHBOARD_PASSWORD=%s\nDASHBOARD_PORT=8737\n' "$dash_password" >> "$OUT_DIR/.env"
+    fi )
   engine_file bot/docker-compose.yml | sed '/^# Copy to /d' > "$OUT_DIR/docker-compose.yml"
   ok "$OUT_DIR/ ready: docker-compose.yml, .env, data/app.pem (readable only by you)"
 
@@ -1422,7 +1431,17 @@ cmd_bot() {
   note "1. Copy it to the bot's machine:   scp -r $OUT_DIR <user>@<address>:~/"
   note "2. Start the bot there:            cd ~/$OUT_DIR && docker compose up -d"
   note "3. Send /status to the bot on Telegram."
-  note "${B}4. Delete the folder from this computer: it holds the key and the token.${N}"
+  local n=4
+  if [ -n "$dash_password" ]; then
+    note "$n. Open the dashboard from a device on the same network: http://<address>:8737"
+    note "     password: $dash_password (DASHBOARD_PASSWORD in .env). Never open that port to the internet."
+    n=$((n + 1))
+    note "$n. Optional, the Claude usage on the dashboard: log in to Claude Code once on the bot's machine"
+    note "     cd ~/$OUT_DIR && docker compose run --rm peppec-bot claude   (follow the link, then /exit)"
+    note "     then: docker compose up -d"
+    n=$((n + 1))
+  fi
+  note "${B}$n. Delete the folder from this computer: it holds the key and the tokens.${N}"
   note "     rm -rf $OUT_DIR"
   note "To follow one more repository later, add it to REPOS in the .env on the bot's machine"
   note "(owner/name#N, N being its control panel issue) and run 'docker compose up -d' again."
