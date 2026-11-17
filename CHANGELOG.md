@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- `peppec init` stopped at the labels: the description of `merge: automatic` was over the 100
+  characters GitHub allows. Both `merge:` descriptions are shorter now, and the engine's checks
+  refuse a label description over 100 characters.
+
 ## [2.21.0] - 2026-11-17
 
 ### Changed

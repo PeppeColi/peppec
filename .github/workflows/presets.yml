@@ -23,6 +23,10 @@ jobs:
           for f in scripts/*.sh cli/peppec; do bash -n "$f"; done
           shellcheck -S error -s bash scripts/*.sh cli/peppec
           bash cli/peppec help > /dev/null
+      # GitHub refuses a label description over 100 characters, and init stops there
+      - run: |
+          sed -n "/^LABELS='/,/'\$/p" cli/peppec | sed "s/^LABELS='//; s/'\$//" \
+            | awk -F'|' 'length($3) > 100 { print "label description over 100 characters: " $1; bad = 1 } END { exit bad }'
       - id: list
         run: echo "presets=$(ls presets | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
 
