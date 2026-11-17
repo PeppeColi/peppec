@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.21.2] - 2026-11-17
+
 ### Fixed
 
 - The feature review never started: the app opened the feature's pull request, and CodeRabbit skips
@@ -823,7 +825,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.21.1...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.21.2...HEAD
+[2.21.2]: https://github.com/PeppeColi/peppec/compare/v2.21.1...v2.21.2
 [2.21.1]: https://github.com/PeppeColi/peppec/compare/v2.21.0...v2.21.1
 [2.21.0]: https://github.com/PeppeColi/peppec/compare/v2.20.0...v2.21.0
 [2.20.0]: https://github.com/PeppeColi/peppec/compare/v2.19.0...v2.20.0
