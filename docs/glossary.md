@@ -111,8 +111,12 @@ The commands of the preset (or of `check` in `.github/peppec.yml`) that CI runs 
 _Avoid_: tests (only part of the checks), CI (CI runs the checks)
 
 **Review round**
-One pass of CodeRabbit's review and the agent's answer to it, counted by the `review N` labels and capped by `PEPPEC_MAX_REVIEW_ROUNDS`.
+One pass of CodeRabbit's review and the agent's answer to it, counted by the `review N` labels and capped by `PEPPEC_MAX_REVIEW_ROUNDS`. From the second round the model of size L builds. At the last round a review whose findings are all minor passes.
 _Avoid_: iteration, attempt (an attempt is one try at making the checks pass, `ci N`)
+
+**Severity**
+The level CodeRabbit writes at the head of each finding: Critical, Major, Minor, Trivial, or Nitpick. Minor, Trivial and Nitpick are the minor findings; any other severity, or none, is blocking.
+_Avoid_: priority, importance
 
 **Carried approval**
 CodeRabbit's previous approval standing for a new commit that holds nothing it reviews (a lockfile, a deleted file).

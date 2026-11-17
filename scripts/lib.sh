@@ -361,6 +361,27 @@ host_preset() {
 }
 has() { grep -qxF -- "$2" <<< "$1"; }
 age_minutes() { echo $(( ($(date +%s) - $(date -d "$1" +%s)) / 60 )); }
+# CodeRabbit writes the severity at the head of each finding: "**<picture>…</picture> Minor** · …"
+# (Critical, Major, Minor, Trivial; Nitpick for the nitpicks of its review body)
+severities() { sed -nE 's/.*<\/picture> ([A-Za-z]+)\*\* .*/\1/p'; }
+minor_severity() { [ -n "$1" ] && [[ " Minor Trivial Nitpick " == *" $1 "* ]]; }
+# True when every finding of a CodeRabbit review is minor: $1 is the body of the review, stdin the
+# JSON array of the bodies of its inline comments (replies left out). Each inline comment has a
+# minor severity, their number is the "Actionable comments posted: N" of the body, and every
+# finding in the body itself (its nitpicks) is minor too. Anything else counts as blocking: a
+# finding outside the diff (counted in N, not an inline comment), a severity it does not name, a
+# new wording
+minor_findings_only() {
+  local body=$1 comments n i sev
+  comments=$(cat)
+  n=$(sed -nE 's/.*Actionable comments posted: ([0-9]+).*/\1/p' <<< "$body" | head -1)
+  [ -n "$n" ] && [ "$n" -gt 0 ] && [ "$(jq length <<< "$comments")" -eq "$n" ] || return 1
+  for ((i = 0; i < n; i++)); do
+    sev=$(jq -r ".[$i]" <<< "$comments" | severities | head -1)
+    minor_severity "$sev" || return 1
+  done
+  while IFS= read -r sev; do minor_severity "$sev" || return 1; done < <(severities <<< "$body")
+}
 # Hidden marker comments on an issue or PR: <!-- peppec:KEY=VALUE -->. The workflow writes them
 # with the app's token, and only the app's are read: on a public repository anyone can comment,
 # and a marker written by someone else could, for example, name the branch the agent pushes to

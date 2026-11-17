@@ -293,8 +293,8 @@ waited=$(age_minutes "$(gh api "repos/$REPO/commits/$sha" --jq .commit.committer
 pl=$(labels_of "$pr")
 round=$( { grep -oP '^review \K[0-9]+' <<< "$pl" || true; } | sort -n | tail -1); round=${round:-1}
 tries=$( { grep -oP '^ci \K[0-9]+' <<< "$pl" || true; } | sort -n | tail -1); tries=${tries:-0}
-# From this round on the largest model takes over, whatever the size of the issue
-size=$isize; [ "$round" -ge "$LARGE_FROM_ROUND" ] && size=l
+# From the second review round the largest model takes over, whatever the size of the issue
+size=$isize; [ "$round" -ge 2 ] && size=l
 
 # CI_CHECK is the name of the check run to wait for ("ci / ci" with the reusable CI workflow)
 ci=$(gh api -X GET "repos/$REPO/commits/$sha/check-runs" -f check_name="$CI_CHECK" \
@@ -408,8 +408,20 @@ case "$state" in
       echo "Waiting for CodeRabbit to weigh the agent's reply ($(age_minutes "$replied_at") min)"; exit 0
     fi
     if [ "$round" -ge "$MAX_REVIEW_ROUNDS" ]; then
+      # The last round: findings that are all minor (Minor, Trivial, Nitpick) let the review pass,
+      # with no follow-up issue; one blocking finding, or one whose severity is unknown, stops
+      body=$(jq -r --argjson id "$rid" '.[] | select(.id == $id) | .body' <<< "$reviews")
+      if gh api --paginate "repos/$REPO/pulls/$pr/reviews/$rid/comments?per_page=100" \
+           --jq '.[] | select(.user.login == "coderabbitai[bot]" and .in_reply_to_id == null) | {body}' \
+         | jq -s 'map(.body)' | minor_findings_only "$body"; then
+        reason="only minor findings left after $round review rounds"
+        echo "Review passed: $reason"
+        if [ "$mode" = automatic ]; then action=merge
+        elif ! has "$pl" "ready to merge"; then action=notify_ready; fi
+        exit 0
+      fi
       action=stop; reason="review not passed after $round rounds"; exit 0
     fi
-    round=$((round + 1)); size=$isize; [ "$round" -ge "$LARGE_FROM_ROUND" ] && size=l
+    round=$((round + 1)); size=$isize; [ "$round" -ge 2 ] && size=l
     action=fix_review; exit 0;;
 esac
