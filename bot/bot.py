@@ -109,7 +109,7 @@ class Repo:
         self._token = ""
         self._expires = 0.0
         self._runs = {}  # run id -> (its updated_at once all its jobs are read, the jobs read)
-        self._pinged = 0.0  # when the ping last looked at this repository
+        self._next_check = 0.0  # when the ping looks at this repository again
 
     def token(self):
         """Installation token of the GitHub App, renewed 5 minutes before it expires."""
@@ -229,15 +229,25 @@ class Repo:
     def ping(self):
         """Starts the agent workflow when it has something to move and no run of it started in the
         last PING_MINUTES (or one is still going). Returns what it did, or None."""
-        if time.time() - self._pinged < PING_MINUTES * 60:
+        now = time.time()
+        if now < self._next_check:
             return None
-        self._pinged = time.time()
+        self._next_check = now + PING_MINUTES * 60
         if not self.has_work():
             return None
         runs = self.gh("GET", "/actions/workflows/agent.yml/runs", params={"per_page": 1})["workflow_runs"]
-        if runs and (runs[0]["status"] != "completed"
-                     or time.time() - stamp(runs[0]["created_at"]) < PING_MINUTES * 60):
-            return None
+        if runs:
+            started = stamp(runs[0]["created_at"])
+            going = runs[0]["status"] != "completed"
+            if going or now - started < PING_MINUTES * 60:
+                # Looks again PING_MINUTES after that run started, not after this look: counting
+                # from the look made the wait up to twice PING_MINUTES. A run still going past
+                # that time is looked at again every minute
+                self._next_check = max(started + PING_MINUTES * 60, now + 60)
+                print(f"ping {self.name}: skipped, a run started {int((now - started) // 60)} min ago"
+                      f"{' and is still going' if going else ''}; next check at "
+                      f"{time.strftime('%H:%M', time.localtime(self._next_check))}", flush=True)
+                return None
         try:
             self.dispatch(inputs={"ping": "true"})
         except requests.HTTPError as e:
