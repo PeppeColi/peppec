@@ -25,6 +25,15 @@ if parent=$(gh api "repos/$REPO/issues/$ISSUE/parent" 2> /dev/null) \
     echo "# Specification: $(jq -r .title <<< "$parent") (#$(jq -r .number <<< "$parent"))"
     echo; jq -r '.body // ""' <<< "$parent"
   } > .agent/spec.md
+# A problem reported on a feature already merged (report in bot/bot.py): a single issue that names
+# the specification of that feature in a marker, given as background the same way
+elif sn=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.body // ""' | sed -nE 's/.*<!-- peppec:spec=([0-9]+) -->.*/\1/p' | head -1) \
+     && [ -n "$sn" ] && sp=$(gh api "repos/$REPO/issues/$sn" 2> /dev/null) \
+     && [ "$(jq -r .user.login <<< "$sp")" = "$OWNER_LOGIN" ]; then
+  {
+    echo "# Specification: $(jq -r .title <<< "$sp") (#$sn), already merged"
+    echo; jq -r '.body // ""' <<< "$sp"
+  } > .agent/spec.md
 fi
 # The smart queue: the other open features, so that the agent names the one whose code it needs
 # instead of writing that code again (after.sh). Only on the first round of a work unit built on a

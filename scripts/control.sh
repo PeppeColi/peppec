@@ -17,17 +17,8 @@ case "$ACTION" in
     # A sync work unit keeps the base branch as a parent: a squash would lose it (task.sh)
     method=--squash; [ "$(kind_of "$ISSUE")" != sync ] || method=--merge
     # Only the commit decide.sh judged: a push in between leaves the pull request unmerged
-    # REASON set: the review passed at its last round with minor findings only (decide.sh).
-    # CodeRabbit's requests for changes are dismissed with that reason: on the pull request it
-    # reads as a decision, not as findings ignored, and a branch rule cannot hold the merge on them
-    if [ -n "${REASON:-}" ]; then
-      for id in $(gh api "repos/$REPO/pulls/$PR/reviews?per_page=100" \
-                    --jq '.[] | select(.user.login == "coderabbitai[bot]" and .state == "CHANGES_REQUESTED") | .id'); do
-        gh api -X PUT "repos/$REPO/pulls/$PR/reviews/$id/dismissals" -f event=DISMISS \
-          -f message="PEPPEC: $REASON. They are left as they are, with no follow-up issue." > /dev/null \
-          || echo "Could not dismiss CodeRabbit's review $id"
-      done
-    fi
+    # REASON set: the review passed at its last round with minor findings only (decide.sh)
+    [ -z "${REASON:-}" ] || dismiss_changes_requested "$PR" "$REASON"
     gh pr merge "$PR" -R "$REPO" "$method" --match-head-commit "$SHA"
     delete_agent_branch "$head"
     close_merged "$ISSUE"

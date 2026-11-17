@@ -9,6 +9,27 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- `merge: automatic` now decides what enters the base branch, whole features included: with
+  feature branches, the app merges the pull request of a feature into the base branch (merge
+  commit) once its feature review and end-to-end tests pass, closes the specification and removes
+  the branch, and tells you silently to try it there. A line `Manual: <what to check>` in the
+  "End-to-end" section of the specification stops the feature at "ready to be tried" in both modes,
+  quoting the line. If GitHub refuses the merge, you are told why and the feature waits for you.
+  The merge of the base branch into `main` stays yours.
+- The PEPPEC section of `CLAUDE.md` tells planning sessions when to propose a manual check (the user
+  interface or visible text, stored data or migrations, security or permissions, external services
+  or payments) and to ask you first; it writes the "End-to-end" section for it even when end-to-end
+  tests per feature are off. Run `peppec init` to update the section.
+
+### Added
+
+- Report a problem on a feature already merged (its specification closed) opens a single issue on
+  the base branch, labelled `ready`, `size: S` and the new `reported` label, naming the
+  specification, which the agent receives as background. The dashboard lists the features the app
+  merged in the last 7 days, with the same button. Run `peppec init` to create the label.
+
 ## [2.20.0] - 2026-11-17
 
 ### Changed

@@ -91,7 +91,7 @@ The `paused` label on the control panel: no new issue starts; the one in progres
 _Avoid_: stop, freeze
 
 **Merge mode**
-Manual (the owner merges the pull requests of the agent branches into the base branch, label `merge: manual`, default) or automatic (the workflow merges them as the app once the review passes, label `merge: automatic`). Pull requests into a feature branch are merged by the app in both modes, once their checks pass. Feature branches and the base branch are always merged by the owner.
+Manual (the owner merges the pull requests of the agent branches into the base branch, label `merge: manual`, default) or automatic (the workflow merges them as the app once the review passes, label `merge: automatic`). The mode decides what enters the base branch, single issues and whole features alike: in automatic mode the app also merges a feature branch, once its feature review and end-to-end tests pass, unless its specification asks for a manual check. Pull requests into a feature branch are merged by the app in both modes, once their checks pass. The base branch is always merged into `main` by the owner.
 _Avoid_: auto-merge (GitHub's own feature, not used)
 
 **Schedule**
@@ -117,6 +117,14 @@ _Avoid_: iteration, attempt (an attempt is one try at making the checks pass, `c
 **Feature review**
 CodeRabbit's review of a whole feature, on the pull request of its feature branch into the base branch, once every work unit is merged there. The specification is the issue "in progress" meanwhile, and the agent's review rounds commit straight onto the feature branch. Work units merged into a feature branch get no review of their own.
 _Avoid_: final review, integration review
+
+**Manual check**
+A line `Manual: <what to check>` in the "End-to-end" section of a specification: what the owner checks by hand before the feature enters the base branch. With it the feature stops at "ready to be tried" even in automatic mode.
+_Avoid_: manual test, sign-off
+
+**`reported`**
+The label of an issue Report a problem opens on a feature already merged: a single issue on the base branch, naming the specification. Only shown; the queue does not read it.
+_Avoid_: hotfix (a hotfix work unit is something else)
 
 **Severity**
 The level CodeRabbit writes at the head of each finding: Critical, Major, Minor, Trivial, or Nitpick. Minor, Trivial and Nitpick are the minor findings; any other severity, or none, is blocking.
@@ -166,7 +174,7 @@ _Avoid_: topic branch, epic branch
 The branch of one issue: `agent/issue-N`, or a name from the `work`, `hotfix`, `sync` or `single` templates of `PEPPEC_BRANCHES`. The workflow merges and deletes only these.
 
 **Ready to be tried**
-A feature whose work units are all merged (and, with feature branches, whose base branch came in and end-to-end tests passed). The owner gets a message with Report a problem.
+A feature whose work units are all merged (and, with feature branches, whose base branch came in, feature review passed and end-to-end tests passed), waiting for the owner: in manual mode, or because of a manual check. The owner gets a message with Report a problem.
 _Avoid_: done, released
 
 **End-to-end tests**

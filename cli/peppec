@@ -36,6 +36,7 @@ in progress|1D76DB|An agent is working on this issue
 question open|FBCA04|The agent is waiting for an answer
 awaiting quota|FEF2C0|Paused until the Claude quota resets
 needs human|FBCA04|Limits exceeded, manual action required
+reported|FEF2C0|A problem reported on a feature already merged (Report a problem)
 ready to merge|0E8A16|Review passed, waiting for manual merge
 review 1|BFD4F2|Review round 1
 review 2|BFD4F2|Review round 2
@@ -251,7 +252,7 @@ e2e_status_line() { # e2e_status_line on|off
   if [ "$1" = on ]; then
     echo "$E2E_STATUS_PREFIX on.** \`PEPPEC_E2E_FEATURE\` is set: a specification decides them in its \"End-to-end\" section. Kept up to date by \`peppec init\`."
   else
-    echo "$E2E_STATUS_PREFIX off.** \`PEPPEC_E2E_FEATURE\` is not set: specifications write no \"End-to-end\" section, and no work unit writes end-to-end tests. Kept up to date by \`peppec init\`."
+    echo "$E2E_STATUS_PREFIX off.** \`PEPPEC_E2E_FEATURE\` is not set: specifications write an \"End-to-end\" section only for a manual check, and no work unit writes end-to-end tests. Kept up to date by \`peppec init\`."
   fi
 }
 E2E_FEATURE=off

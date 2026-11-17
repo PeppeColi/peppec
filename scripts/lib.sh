@@ -483,15 +483,63 @@ feature_review_passed() {
   [ "$(jq '.sub_issues_summary.completed // 0' <<< "$spec")" -eq "$total" ] || return 0
   if [ -n "${PEPPEC_E2E_FEATURE:-}" ]; then judge_features "$pn" "$why"; return 0; fi
   [ "$(marker_get "$pn" done)" != "$total" ] || return 0
-  ready_to_try "$pn" "$total" "$(jq -r .title <<< "$spec")" "$fb" "https://github.com/$REPO/pull/$pr" "$why"
+  feature_complete "$pn" "$total" "$spec" "$fb" "$pr" "$sha" "$why"
+}
+
+# A feature reviewed (and with its end-to-end tests passed, if any) on commit $6 of its pull request
+# $5 from feature branch $4; $3 the specification as JSON, $2 its sub-issues, $7 why its review
+# passed with findings left. In automatic mode, without a manual check, the app merges it into the
+# base branch (merge_feature); otherwise, or when GitHub refuses the merge, "ready to be tried"
+feature_complete() {
+  local pn=$1 total=$2 spec=$3 fb=$4 pr=$5 sha=$6 why=${7:-} title manual
+  title=$(jq -r .title <<< "$spec")
+  manual=$(manual_check "$(jq -r '.body // ""' <<< "$spec")")
+  if [ "${mode:-manual}" = automatic ] && [ -z "$manual" ] \
+     && merge_feature "$pn" "$total" "$title" "$fb" "$pr" "$sha" "$why"; then
+    return 0
+  fi
+  ready_to_try "$pn" "$total" "$title" "$fb" "https://github.com/$REPO/pull/$pr" "$why" "$manual"
+}
+
+# CodeRabbit's requests for changes on pull request $1, dismissed with the reason $2: the review
+# passed at its last round with minor findings only. On the pull request it reads as a decision,
+# not as findings ignored, and a branch rule cannot hold the merge on them
+dismiss_changes_requested() {
+  local id
+  for id in $(gh api "repos/$REPO/pulls/$1/reviews?per_page=100" \
+                --jq '.[] | select(.user.login == "coderabbitai[bot]" and .state == "CHANGES_REQUESTED") | .id'); do
+    gh api -X PUT "repos/$REPO/pulls/$1/reviews/$id/dismissals" -f event=DISMISS \
+      -f message="PEPPEC: $2. They are left as they are, with no follow-up issue." > /dev/null \
+      || echo "Could not dismiss CodeRabbit's review $id"
+  done
+}
+
+# The app merges the pull request $5 of feature branch $4 into the base branch, with a merge commit
+# and only at the commit judged ($6). The specification is closed and the branch removed
+# (finish_feature); you are told silently, with the Report a problem button, which then opens a new
+# issue on the base branch. Returns 1, after telling you, when GitHub refuses the merge
+merge_feature() {
+  local pn=$1 total=$2 title=$3 fb=$4 pr=$5 sha=$6 why=${7:-} out
+  [ -z "$why" ] || dismiss_changes_requested "$pr" "$why"
+  if ! out=$(gh pr merge "$pr" -R "$REPO" --merge --match-head-commit "$sha" 2>&1); then
+    notify "Could not merge the feature of #$pn into ${BASE_BRANCH:-main}: ${out:0:300}. It waits for your merge instead."
+    return 1
+  fi
+  echo "Merged the feature of #$pn (PR #$pr) into ${BASE_BRANCH:-main}"
+  marker_set "$pn" done "$total"
+  # Read by the bot: the dashboard lists the features merged by the app in the last days
+  marker_set "$pn" merged "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  finish_feature "$fb"
+  notify_info "The feature of #$pn \"$title\" is merged into ${BASE_BRANCH:-main} (all $total sub-issues${why:+; $why}): try it there. https://github.com/$REPO/pull/$pr" \
+    "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$pn|\"}]]}"
 }
 
 # The "ready to be tried" message, once per number of sub-issues ($2) of specification $1; $6,
-# optional, why its review passed with findings left
+# optional, why its review passed with findings left; $7, optional, its manual check
 ready_to_try() {
   marker_set "$1" done "$2"
   # The button asks the bot for one sentence and makes it a new sub-issue (report in bot/bot.py)
-  notify "All $2 sub-issues of #$1 \"$3\" are merged into $4: the feature is ready to be tried${6:+ ($6)}. $5" \
+  notify "All $2 sub-issues of #$1 \"$3\" are merged into $4: the feature is ready to be tried${6:+ ($6)}.${7:+ Manual check before your merge: $7.} $5" \
     "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$1|\"}]]}"
 }
 
@@ -518,9 +566,9 @@ start_feature_reviews() {
       # Reviewed on its latest commit, but not announced: a sub-issue opened during the review was
       # closed without a merge. With end-to-end tests judge_features reads them
       if [ "$(marker_get "$pn" reviewed)" = "$sha" ]; then
-        if [ -z "${PEPPEC_E2E_FEATURE:-}" ] && [ -n "$(pr_from "$fb" --base "${BASE_BRANCH:-main}")" ]; then
-          ready_to_try "$pn" "$total" "$(gh api "repos/$REPO/issues/$pn" --jq .title)" "$fb" \
-            "https://github.com/$REPO/pull/$(pr_from "$fb" --base "${BASE_BRANCH:-main}")" >&2
+        local fpr; fpr=$(pr_from "$fb" --base "${BASE_BRANCH:-main}")
+        if [ -z "${PEPPEC_E2E_FEATURE:-}" ] && [ -n "$fpr" ]; then
+          feature_complete "$pn" "$total" "$(gh api "repos/$REPO/issues/$pn")" "$fb" "$fpr" "$sha" >&2
         fi
         continue
       fi
@@ -581,7 +629,7 @@ judge_features() {
         if [ "$check" = none ]; then echo "Specification #$pn needs no new end-to-end tests"
         else echo "End-to-end tests of #$pn passed on $sha"; fi
         if [ "$(marker_get "$pn" done)" != "$total" ]; then
-          ready_to_try "$pn" "$total" "$(jq -r .title <<< "$spec")" "$head" "$url" "$why"
+          feature_complete "$pn" "$total" "$spec" "$head" "${url##*/}" "$sha" "$why"
         fi;;
       *)
         marker_set "$pn" e2e "$sha"
@@ -628,7 +676,7 @@ feature_pr() {
   local pn=$1 fb=$2 title=$3 decision=${4:-missing} pr body old
   # The end-to-end decision of the specification travels in the body, for the CI job e2e_feature
   # (scripts/e2e.sh), which cannot read issues. Kept current when the feature is finished again
-  body="Feature of specification #$pn. CodeRabbit reviews the whole feature here, and the agent answers on \`$fb\`. Once you are told it is ready, try it on \`$fb\`, then merge this pull request: the workflow closes the specification and removes the branch. Never merged automatically."
+  body="Feature of specification #$pn. CodeRabbit reviews the whole feature here, and the agent answers on \`$fb\`. In automatic mode the app merges it once the review and the end-to-end tests pass, unless the specification asks for a manual check; otherwise, once you are told it is ready, try it on \`$fb\`, then merge this pull request. The merge closes the specification and removes the branch."
   [ "$decision" != none ] || body+=$'\n\n'"The specification needs no new end-to-end tests: \`e2e_feature\` does not run them."
   body+=$'\n\n'"<!-- peppec:feature=$pn -->"
   [ "$decision" != none ] || body+=$'\n'"$E2E_NONE"
@@ -661,10 +709,30 @@ e2e_decision() {
     }
     s && NF {
       l = tolower($0); sub(/^[ \t]*([-*+][ \t]+)?/, "", l)
+      if (l ~ /^\**manual\**[ \t]*:/) next
       d = (l ~ /^none/) ? "none" : "tests"
       exit
     }
     END { print (d != "") ? d : (found ? "tests" : "missing") }'
+}
+# The manual check of a specification, from its body ($1): the text of a line "Manual: <what to
+# check>" in its "End-to-end" section. Empty without one. With it the feature always waits for you
+# at "ready to be tried", in both merge modes
+manual_check() {
+  tr -d '\r' <<< "$1" | awk '
+    /^#+[ \t]/ {
+      if (s) exit
+      h = tolower($0); sub(/^#+[ \t]+/, "", h); sub(/[ \t#]+$/, "", h)
+      if (h ~ /^(end[- ]to[- ]end|e2e)( tests)?$/) s = 1
+      next
+    }
+    s {
+      l = $0; sub(/^[ \t]*([-*+][ \t]+)?/, "", l)
+      if (tolower(l) ~ /^\**manual\**[ \t]*:/) {
+        sub(/^\**[Mm][Aa][Nn][Uu][Aa][Ll]\**[ \t]*:[ \t]*(\*\*)?[ \t]*/, "", l); sub(/[ \t]+$/, "", l)
+        if (l != "") { print l; exit }
+      }
+    }'
 }
 
 # Brings the base branch into feature branch $2 of specification $1, with a merge commit made by

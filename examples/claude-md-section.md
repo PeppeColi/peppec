@@ -42,6 +42,14 @@ the map reads them:
   in one line. Otherwise list the scenarios the end-to-end tests must cover. Without the section
   the tests are required. How this repository writes and runs them is in
   `docs/agents/e2e.md`.
+- Decide whether the owner must check the feature by hand before it reaches the base branch: in
+  automatic merge mode PEPPEC otherwise merges a reviewed and tested feature by itself. Propose a
+  manual check when the feature changes what only a person can judge: the user interface or text
+  people see, stored data or its migrations, security or permissions, external services or
+  payments. Say which criterion applies and ask the owner before writing it. If they agree, add
+  one line `Manual: <what to check>` to the "End-to-end" section, after its first line; write the
+  section for it even when end-to-end tests per feature are off, with only that line. Without the
+  line the feature needs no manual check.
 - Never label the specification itself `ready`: only its work units get it.
 
 ### Work units
