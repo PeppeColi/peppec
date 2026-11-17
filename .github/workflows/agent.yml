@@ -103,6 +103,9 @@ jobs:
           EVENT_MERGED: ${{ github.event.pull_request.merged }}
           EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           FORCE: ${{ inputs.force }}
+          # To open the pull request of a finished feature as you: CodeRabbit skips those of the app.
+          # No code of the repository runs in this job
+          AGENT_TOKEN: ${{ secrets.PEPPEC_AGENT_TOKEN }}
           # For the message sent when the last sub-issue of a feature is closed
           TELEGRAM_BOT_TOKEN: ${{ secrets.PEPPEC_TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.PEPPEC_TELEGRAM_CHAT_ID }}

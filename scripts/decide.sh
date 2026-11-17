@@ -294,7 +294,15 @@ if [ "$left" -le 0 ]; then action=stop; reason="time budget of $MAX_ISSUE_MINUTE
 minutes=$(( left + 10 ))
 if [ -z "$pr" ]; then
   if [ "$feature_review" = true ]; then
-    action=stop; reason="the feature review has no pull request: $branch into $base is not open"; exit 0
+    # Closed without a merge (by you, or to replace one CodeRabbit skipped): opened again, and its
+    # checks wake the queue. Stopped only when GitHub refuses it
+    spec=$(gh api "repos/$REPO/issues/$issue")
+    if fpr=$(feature_pr "$issue" "$branch" "$(jq -r .title <<< "$spec")" "$(e2e_decision "$(jq -r '.body // ""' <<< "$spec")")") \
+       && [ -n "$fpr" ]; then
+      echo "The feature review of #$issue had no pull request: opened again, $fpr"
+      exit 0
+    fi
+    action=stop; reason="the feature review has no pull request, and it could not be opened again: $branch into $base"; exit 0
   fi
   action=start; size=$isize; round=1; exit 0
 fi

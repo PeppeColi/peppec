@@ -9,6 +9,14 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- The feature review never started: the app opened the feature's pull request, and CodeRabbit skips
+  a pull request authored by a bot without a review seat. The workflow now opens it with your
+  token, like the pull requests of the work units.
+- A feature's pull request closed without a merge during its feature review stopped the queue: the
+  next run now opens it again. To replace one the app opened, close it.
+
 ## [2.21.1] - 2026-11-17
 
 ### Fixed
