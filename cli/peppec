@@ -46,8 +46,8 @@ ci 2|BFD4F2|Check fix attempt 2
 ci 3|BFD4F2|Check fix attempt 3
 ci 4|BFD4F2|Check fix attempt 4
 ci 5|BFD4F2|Check fix attempt 5
-merge: manual|006B75|You merge the pull requests of the agent branches into the base branch (control panel)
-merge: automatic|006B75|The app merges the pull requests of the agent branches into the base branch once reviewed (control panel)
+merge: manual|006B75|You merge pull requests of agent branches into the base branch (control panel)
+merge: automatic|006B75|The app merges pull requests of agent branches into the base branch once reviewed (control panel)
 schedule: always|006B75|New issues start at any hour (control panel)
 schedule: nightly|006B75|New issues start only in the work window (control panel)
 paused|B60205|No new issues start; the one in progress goes on (control panel)
