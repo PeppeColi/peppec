@@ -69,6 +69,11 @@ fi
       echo; echo "When this work unit writes end-to-end tests (for example the scenarios of the specification), make sure that command selects them, and that it still passes."
     fi
   fi
+  # The feature review: the specification itself is the issue, its work units are already built
+  if is_feature_branch "$B"; then
+    echo; echo "## Feature review"
+    echo "This issue is the specification of a whole feature. Its work units are already built and merged on \`$B\`, which is under review as one pull request into \`${BASE:-${BASE_BRANCH:-main}}\`. Change only what the findings below (or the failed checks) ask: build nothing else of the specification, and leave alone the code no finding names."
+  fi
   if [ "$ACTION" = fix_ci ]; then
     echo; echo "## Failed checks (last 200 lines)"
     run=$(gh run list -R "$REPO" --workflow "$CI_WORKFLOW" --branch "$B" --limit 1 --json databaseId --jq '.[0].databaseId')

@@ -201,6 +201,9 @@ for n in $(gh api "repos/$REPO/issues?state=open&labels=ready-for-agent&per_page
   notify "#$n has the label ready-for-agent but not ready: the queue never builds it. The planning skills did not use the label map PEPPEC needs: run peppec doctor (and peppec skills) on your computer, then label it ready. https://github.com/$REPO/issues/$n"
 done
 
+# A finished feature whose review should be under way: the specification becomes the issue in progress
+if [ -z "$active" ] && [ "$no_preset" = false ]; then active=$(start_feature_reviews); fi
+
 if [ -z "$active" ]; then
   ok=false
   # The schedule always: new issues start at any hour; nightly: only in the work window
@@ -282,11 +285,19 @@ isize=$(size_of "$il")
 # An issue already in progress keeps the branch it started on (agent/issue-N if it started before
 # branch names were remembered)
 bb=$(branch_of "$issue"); branch=${bb%%:*} base=${bb#*:}
+# A specification under feature review: its branch is its feature branch, its pull request the one
+# into the base branch. The agent's rounds commit on the feature branch
+feature_review=false; ! is_feature_branch "$branch" || feature_review=true
 pr=$(pr_from "$branch")
 left=$(budget "$issue")
 if [ "$left" -le 0 ]; then action=stop; reason="time budget of $MAX_ISSUE_MINUTES minutes used up"; exit 0; fi
 minutes=$(( left + 10 ))
-if [ -z "$pr" ]; then action=start; size=$isize; round=1; exit 0; fi
+if [ -z "$pr" ]; then
+  if [ "$feature_review" = true ]; then
+    action=stop; reason="the feature review has no pull request: $branch into $base is not open"; exit 0
+  fi
+  action=start; size=$isize; round=1; exit 0
+fi
 
 sha=$(gh pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)
 waited=$(age_minutes "$(gh api "repos/$REPO/commits/$sha" --jq .commit.committer.date)")
@@ -310,6 +321,14 @@ case "$ci" in
     fi
     action=fix_ci; ci_tries=$((tries + 1)); exit 0;;
 esac
+
+# A work unit, sync or hotfix work unit into a feature branch: green checks are enough, and the app
+# merges it in both merge modes. CodeRabbit reviews the whole feature once, on the pull request of
+# its feature branch into the base branch (the feature review)
+if [ "$base" != "${BASE_BRANCH:-main}" ] && is_feature_branch "$base"; then
+  echo "Checks green on $sha: merging into the feature branch $base, reviewed later with the whole feature"
+  action=merge; exit 0
+fi
 
 reviews=$(gh api "repos/$REPO/pulls/$pr/reviews?per_page=100" --jq '[.[] | select(.user.login == "coderabbitai[bot]")]')
 state=$(jq -r --arg sha "$sha" '[.[] | select(.commit_id == $sha and (.state == "APPROVED" or .state == "CHANGES_REQUESTED"))] | last | .state // "none"' <<< "$reviews")
@@ -392,6 +411,7 @@ case "$state" in
     fi
     exit 0;;
   APPROVED)
+    if [ "$feature_review" = true ]; then feature_review_passed "$issue" "$branch" "$pr" "$sha"; exit 0; fi
     if [ "$mode" = automatic ]; then action=merge
     elif ! has "$pl" "ready to merge"; then action=notify_ready; fi
     exit 0;;
@@ -416,6 +436,9 @@ case "$state" in
          | jq -s 'map(.body)' | minor_findings_only "$body"; then
         reason="only minor findings left after $round review rounds"
         echo "Review passed: $reason"
+        if [ "$feature_review" = true ]; then
+          feature_review_passed "$issue" "$branch" "$pr" "$sha" "$reason"; reason=""; exit 0
+        fi
         if [ "$mode" = automatic ]; then action=merge
         elif ! has "$pl" "ready to merge"; then action=notify_ready; fi
         exit 0

@@ -50,15 +50,19 @@ An issue can be a sub-issue of a larger one that holds the specification of a wh
 
 ### Feature branches
 
-With `PEPPEC_BRANCHES` set, each specification gets its own branch, created from the base branch when its first work unit starts. Its work units are merged into it; the base branch gets the feature only through a pull request you merge.
+With `PEPPEC_BRANCHES` set, each specification gets its own branch, created from the base branch when its first work unit starts. Its work units are merged into it as soon as their checks pass, by the app in both merge modes, with no CodeRabbit review of their own. CodeRabbit reviews the whole feature once, on the pull request of the feature branch into the base branch: the feature review. The base branch gets the feature only through that pull request, which you merge.
 
 ```mermaid
 flowchart TD
-    U[Last work unit merged into the feature branch] --> O[Workflow opens the pull request feature to base branch]
+    W[Work unit: checks green] --> U[Merged into the feature branch by the app]
+    U --> L{Last work unit?}
+    L -- no --> W
+    L -- yes --> O[Workflow opens the pull request feature to base branch]
     O --> S{Base branch merges in cleanly?}
     S -- no --> Y[Sync work unit: the agent resolves the conflict markers]
     Y --> S
-    S -- yes --> E{End-to-end tests of the feature pass?}
+    S -- yes --> R[Feature review: CodeRabbit reviews the whole feature, the agent commits on the feature branch]
+    R --> E{End-to-end tests of the feature pass?}
     E -- no --> H[Hotfix work unit, size L, with the log]
     H --> S
     E -- yes --> T[Ready to be tried: Telegram and dashboard]
@@ -66,10 +70,11 @@ flowchart TD
 ```
 
 - **One feature is built at a time.** Work units of a feature already started come first, and a sync work unit before anything else. A finished feature waits for you while the next one is built.
+- **The feature review.** When the last work unit is merged and the base branch is in, the specification becomes the issue in progress, on its feature branch: the workflow asks CodeRabbit for a review of the feature's pull request, and the agent answers it like the review of any issue, with the same limits, the `review N` labels on that pull request and the larger model from the second round. Its commits go straight onto the feature branch, and it changes only what the findings ask. A blocked review gets `needs human` on the specification. Once the review passes, the specification leaves "in progress" and the queue goes on with the next issue while the feature waits for its end-to-end tests and for you. A sync work unit with conflicts, a hotfix or a Report a problem changes the feature's code: once merged, the feature is reviewed again, and the round count of its pull request goes on from where it was. The base branch brought in without conflicts changes nothing of the feature: the review that passed stands. While the review is under way, the base branch is not brought in. Every run also starts, from the state, the review of a finished feature that should be under way and is not.
 - **Names are remembered.** Each issue keeps the branch it started on (a hidden marker on the issue); the feature branch is remembered on the specification. Markers are read only from the app's comments, and a remembered branch is used only if it is the agent's branch of that issue: anyone can comment on a public repository. The engine recognises its own branches by the templates of `PEPPEC_BRANCHES`, which must name the issue number: a template that does not is refused.
 - **The base branch comes in only at the end.** GitHub's merge API brings it into the feature branch. On a conflict the workflow opens a sync work unit, makes the merge itself with the conflict markers in place, and the agent resolves them; markers left behind are never pushed, and the pull request is merged with a merge commit. If the base branch moves while a finished feature waits, it is brought in again.
 - **Merging the feature closes its specification**, which unblocks the work that waits for it. Every run checks it from the state, not only the run of the merge: GitHub keeps one waiting run per concurrency group, so a later event can cancel the run of the merge.
-- **End-to-end tests run on the feature's pull request.** CI runs `PEPPEC_E2E_FEATURE` (`ci / e2e_feature`) and `PEPPEC_E2E_ALL` (`ci / e2e_all`) only there; elsewhere both succeed without running. A failing `e2e_feature` opens a hotfix work unit of size L; after two of them you are told instead. A specification whose "End-to-end" section starts with `None` needs no new tests: the workflow reads it when it opens the feature's pull request and leaves a marker in the body, so `e2e_feature` skips them, and the queue reads the specification again before judging the result. `e2e_all` always runs there and is meant to be required on the base branch, so a red suite blocks your merge. Nothing runs on the pull request into `main`.
+- **End-to-end tests run on the feature's pull request.** Their result is read once the feature review has passed on the same commit. CI runs `PEPPEC_E2E_FEATURE` (`ci / e2e_feature`) and `PEPPEC_E2E_ALL` (`ci / e2e_all`) only there; elsewhere both succeed without running. A failing `e2e_feature` opens a hotfix work unit of size L; after two of them you are told instead. A specification whose "End-to-end" section starts with `None` needs no new tests: the workflow reads it when it opens the feature's pull request and leaves a marker in the body, so `e2e_feature` skips them, and the queue reads the specification again before judging the result. `e2e_all` always runs there and is meant to be required on the base branch, so a red suite blocks your merge. Nothing runs on the pull request into `main`.
 
 ### Smart queue
 
@@ -156,7 +161,8 @@ The merge mode is the `merge: manual` (default) or `merge: automatic` label on t
 
 | Pull request | Manual (default) | Automatic |
 | --- | --- | --- |
-| Agent branch → base branch or feature branch | You | The app, once the review passes |
+| Agent branch → base branch | You | The app, once the review passes |
+| Agent branch → feature branch | The app, once the checks pass | The app, once the checks pass |
 | Feature branch → base branch | You | You |
 | Base branch → `main` | You | You |
 | Opened by anyone else | Never touched by the workflow | Never touched by the workflow |
@@ -208,7 +214,7 @@ With one repository, `repo` is never needed. With several:
 
 Only the Resume button lifts the pause. `/unblock`, the Unblock and Hint buttons and the answers act on the issue and leave the pause on, and their reply says so.
 
-The pause stops only new issues. While it is on, the issue in progress goes on: its checks are fixed, CodeRabbit reviews it, and it is merged (automatic mode) or marked ready to merge. A pull request you merge by hand is tidied up at once (issue closed, branch removed, "ready to be tried" message). A finished feature still gets the base branch, its end-to-end tests are read, and the sync and hotfix work units the queue opens for it start, Report a problem included: they finish work already built. To stop the issue in progress as well, label it `needs human`.
+The pause stops only new issues. While it is on, the issue in progress goes on: its checks are fixed, CodeRabbit reviews it, and it is merged (automatic mode) or marked ready to merge. A pull request you merge by hand is tidied up at once (issue closed, branch removed, "ready to be tried" message). A finished feature still gets its feature review and the base branch, its end-to-end tests are read, and the sync and hotfix work units the queue opens for it start, Report a problem included: they finish work already built. To stop the issue in progress as well, label it `needs human`.
 
 ## Dashboard
 
@@ -231,10 +237,10 @@ The dashboard speaks plain HTTP and can act on your repositories: keep it inside
 | --- | --- | --- | --- |
 | `ready` | Issue | You | The issue can be picked up |
 | `size: S` / `M` / `L` | Issue | You | Chooses the model |
-| `in progress` | Issue | Workflow | Issue being worked on |
+| `in progress` | Issue | Workflow | Issue being worked on; on a specification, its feature review |
 | `question open` | Issue | Workflow | Waiting for your answer |
 | `awaiting quota` | Issue | Workflow | Resumes when the quota is back |
-| `review 1`, `2`, `3` | Pull request | Workflow | Current review round |
+| `review 1`, `2`, `3` | Pull request | Workflow | Current review round (on a feature's pull request, of its feature review) |
 | `ci 1`–`5` | Pull request | Workflow | Attempts to make the checks pass |
 | `ready to merge` | Pull request | Workflow | Review passed, waiting for you |
 | `needs human` | Issue and pull request | Workflow | Limits exceeded, queue stopped |
@@ -246,7 +252,7 @@ The dashboard speaks plain HTTP and can act on your repositories: keep it inside
 
 The control panel always carries one `merge:` and one `schedule:` label. With neither, the default applies (`manual`, `always`) and the workflow adds its label back; with both (set by hand, or read while the bot switches them, since it adds the new label before removing the old one) the cautious value wins: `manual`, `nightly`. `peppec doctor` and `/status` point out both. `peppec init` gives the labels their colors: red for the labels that stop the queue (`paused`, `base missing`, `no preset`), yellow for those that wait for you (`question open`, `needs human`), teal for the settings of the control panel.
 
-The workflow keeps its own state in hidden comments (`<!-- peppec:KEY=VALUE -->`), written with the app's token and read only from the app: the minutes worked on an issue, the branch it started on, the feature branch of a specification, the end-to-end results already judged and how many hotfixes they caused, the number of sub-issues already announced as ready to be tried, the review requests already made for a commit, the replies posted to CodeRabbit, and which one-time warnings were already sent. Hotfix and sync work units, and the pull request of a feature, carry a marker in their body.
+The workflow keeps its own state in hidden comments (`<!-- peppec:KEY=VALUE -->`), written with the app's token and read only from the app: the minutes worked on an issue, the branch it started on, the feature branch of a specification, the end-to-end results already judged and how many hotfixes they caused, the number of sub-issues already announced as ready to be tried, the commit on which a feature review passed, the review requests already made for a commit, the replies posted to CodeRabbit, and which one-time warnings were already sent. Hotfix and sync work units, and the pull request of a feature, carry a marker in their body.
 
 ## Security
 

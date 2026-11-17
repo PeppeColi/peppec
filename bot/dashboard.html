@@ -289,7 +289,7 @@ function home() {
       el("div", {class: "label"}, "Ready to try · " + trying.length),
       el("div", {class: "card"}, trying.map(([r, f]) =>
         row("#/feature/" + r.key + "/" + f.number, short(r) + " #" + f.number + " " + f.title,
-          f.checking ? "Being checked: base branch, end-to-end tests" : "All " + f.total + " sub-issues merged")))),
+          f.checking ? "Being checked: review, base branch, end-to-end tests" : "All " + f.total + " sub-issues merged")))),
     el("div", {class: "group"}, el("div", {class: "label"}, "Repositories"),
       state.repos.map((r) => el("div", {class: "card"}, r.error
         ? row("#/repo/" + r.key, short(r), "Cannot be read", el("span", {class: "small warn-text"}, r.error))
@@ -428,7 +428,7 @@ function featurePage(repo, number) {
     messages(),
     el("div", {class: "card pad"}, feature.pr
       ? (feature.checking
-        ? "All " + feature.total + " sub-issues are merged into " + feature.pr.branch + ". The workflow is still bringing in the base branch or running the end-to-end tests: you get a message when it is ready."
+        ? "All " + feature.total + " sub-issues are merged into " + feature.pr.branch + ". CodeRabbit is still reviewing the whole feature, or the workflow is bringing in the base branch or running the end-to-end tests: you get a message when it is ready."
         : "All " + feature.total + " sub-issues are merged into " + feature.pr.branch + ". Try the feature there; when it works, merge its pull request into the base branch.")
       : "All " + feature.total + " sub-issues are merged into the base branch. " +
         "Try the feature there; when it works, bringing it to main is your merge."),

@@ -155,9 +155,14 @@ branch_of() {
   echo "${s:-agent/issue-$1:${BASE_BRANCH:-main}}"
 }
 # A remembered "branch:base" is used only when the branch is the agent's branch of issue $1 and the
-# base is the base branch or a feature branch: never main, the base branch or another issue's branch
+# base is the base branch or a feature branch: never main, the base branch or another issue's branch.
+# Or, for a specification under feature review, its feature branch into the base branch
 saved_branch_ok() {
   local b=${2%%:*} base=${2#*:}
+  # A specification under feature review: its own feature branch, into the base branch
+  if [ "$base" = "${BASE_BRANCH:-main}" ] && is_feature_branch "$b" && [ "$(feature_of "$1")" = "$b" ]; then
+    return 0
+  fi
   valid_branch "$b" && is_agent_branch "$b" && [ "$(issue_of_branch "$b")" = "$1" ] \
     && { [ "$base" = "${BASE_BRANCH:-main}" ] || is_feature_branch "$base"; } && [ "$b" != "$base" ]
 }
@@ -332,7 +337,7 @@ finish_feature() {
   spec=$(gh pr list -R "$REPO" --head "$branch" --state merged --json body,isCrossRepository --jq '[.[] | select(.isCrossRepository | not)][0].body // ""' \
     | sed -nE 's/.*<!-- peppec:feature=([0-9]+) -->.*/\1/p' | head -1)
   if [ -n "$spec" ] && [ "$(gh api "repos/$REPO/issues/$spec" --jq .state)" = open ]; then
-    gh api -X PATCH "repos/$REPO/issues/$spec" -f state=closed -f state_reason=completed > /dev/null
+    close_merged "$spec"
     echo "Closed specification #$spec: its feature branch is merged"
   fi
   [ -z "$(pr_from "$branch")" ] || return 0
@@ -421,41 +426,116 @@ notify_feature_done() {
   total=$(jq length <<< "$subs")
   open=$(jq --argjson n "$1" '[.[] | select(.state == "open" and .number != $n)] | length' <<< "$subs")
   [ "$open" -eq 0 ] || return 0
-  [ "$(marker_get "$pn" done)" != "$total" ] || return 0
-  local where="${BASE_BRANCH:-main}" link="https://github.com/$REPO/issues/$pn" fb pr synced decision
-  # With a feature branch, the pull request that brings it into the base branch: opened here,
-  # merged only by you, after trying the feature. Its merge closes the specification (finish_feature)
-  fb=$(feature_of "$pn")
-  if [ -n "$fb" ]; then
-    where=$fb
-    decision=$(e2e_decision "$(jq -r '.body // ""' <<< "$parent")")
-    pr=$(feature_pr "$pn" "$fb" "$(jq -r .title <<< "$parent")" "$decision")
-    [ -z "$pr" ] || link=$pr
-    # The base branch went on while the feature was built: it is brought in first, so what you try
-    # is what the merge will give. A conflict becomes a work unit, and this message waits for it
-    synced=$(sync_feature "$pn" "$fb") || return 0
-    [ "$synced" != conflict ] || return 0
-    # With end-to-end tests the message waits for their result on the pull request (judge_features),
-    # unless the specification decided it needs none
-    if [ -n "${PEPPEC_E2E_FEATURE:-}" ] && [ "$decision" != none ]; then
-      echo "Feature of #$pn finished: waiting for its end-to-end tests on $link"
-      return 0
-    fi
-  fi
-  ready_to_try "$pn" "$total" "$(jq -r .title <<< "$parent")" "$where" "$link"
+  feature_finished "$pn" "$total" "$parent"
 }
 
-# The "ready to be tried" message, once per number of sub-issues ($2) of specification $1
+# Every sub-issue of specification $1 is merged ($2 of them; $3 the specification as JSON).
+# Without a feature branch the feature is ready to be tried. With one, the pull request that brings
+# it into the base branch is opened, the base branch is brought in first (a conflict becomes a sync
+# work unit, and the feature is finished again once it is merged), and the feature review starts:
+# CodeRabbit reviews the whole feature on that pull request, with the specification "in progress"
+# (feature_review_start). Its merge, by you, closes the specification (finish_feature)
+feature_finished() {
+  local pn=$1 total=$2 parent=$3 fb pr synced decision
+  [ "$(marker_get "$pn" done)" != "$total" ] || return 0
+  fb=$(feature_of "$pn")
+  if [ -z "$fb" ]; then
+    ready_to_try "$pn" "$total" "$(jq -r .title <<< "$parent")" "${BASE_BRANCH:-main}" "https://github.com/$REPO/issues/$pn"
+    return 0
+  fi
+  decision=$(e2e_decision "$(jq -r '.body // ""' <<< "$parent")")
+  pr=$(feature_pr "$pn" "$fb" "$(jq -r .title <<< "$parent")" "$decision")
+  if [ -z "$pr" ]; then
+    notify "Could not open the pull request of the feature of #$pn ($fb into ${BASE_BRANCH:-main}): the next run tries again. ${RUN_URL:-}"
+    return 0
+  fi
+  # The base branch went on while the feature was built: it is brought in first, so what is
+  # reviewed and tried is what the merge will give
+  synced=$(sync_feature "$pn" "$fb") || return 0
+  [ "$synced" != conflict ] || return 0
+  feature_review_start "$pn" "$fb" "$total" "$pr"
+}
+
+# The feature review of specification $1 on feature branch $2 starts: the specification is the issue
+# in progress, on its feature branch into the base branch, and decide.sh moves it like any issue
+# (checks, review request, rounds in which the agent commits on the feature branch). The queue
+# starts nothing else meanwhile. The round count of the pull request goes on from where it was
+feature_review_start() {
+  local pn=$1 fb=$2 total=$3 pr=$4
+  marker_set "$pn" branch "$fb:${BASE_BRANCH:-main}"
+  has "$(labels_of "$pn")" "in progress" && return 0
+  add_label "$pn" "in progress"
+  notify_info "All $total sub-issues of #$pn are merged into $fb: CodeRabbit now reviews the whole feature. $pr"
+}
+
+# The feature review of specification $1 passed on commit $4 of its pull request $3 (feature branch
+# $2); $5, optional, why it passed with findings left. Remembered on the specification (marker
+# reviewed), which leaves "in progress": the queue goes on while you try the feature. Then its
+# end-to-end tests (judge_features), or "ready to be tried" straight away without them. A
+# sub-issue opened meanwhile (Report a problem) is built first, and the feature reviewed again
+feature_review_passed() {
+  local pn=$1 fb=$2 pr=$3 sha=$4 why=${5:-} spec total
+  marker_set "$pn" reviewed "$sha"
+  rm_label "$pn" "in progress"
+  echo "Feature review of #$pn passed on $sha${why:+: $why}"
+  spec=$(gh api "repos/$REPO/issues/$pn")
+  total=$(jq '.sub_issues_summary.total // 0' <<< "$spec")
+  [ "$(jq '.sub_issues_summary.completed // 0' <<< "$spec")" -eq "$total" ] || return 0
+  if [ -n "${PEPPEC_E2E_FEATURE:-}" ]; then judge_features "$pn" "$why"; return 0; fi
+  [ "$(marker_get "$pn" done)" != "$total" ] || return 0
+  ready_to_try "$pn" "$total" "$(jq -r .title <<< "$spec")" "$fb" "https://github.com/$REPO/pull/$pr" "$why"
+}
+
+# The "ready to be tried" message, once per number of sub-issues ($2) of specification $1; $6,
+# optional, why its review passed with findings left
 ready_to_try() {
   marker_set "$1" done "$2"
   # The button asks the bot for one sentence and makes it a new sub-issue (report in bot/bot.py)
-  notify "All $2 sub-issues of #$1 \"$3\" are merged into $4: the feature is ready to be tried. $5" \
+  notify "All $2 sub-issues of #$1 \"$3\" are merged into $4: the feature is ready to be tried${6:+ ($6)}. $5" \
     "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$1|\"}]]}"
+}
+
+# The finished features whose review should be under way and is not: every sub-issue merged, a
+# feature branch, no "ready to be tried" sent for these sub-issues, not stopped, and not reviewed
+# on the latest commit of their pull request (one reviewed there gets its "ready to be tried"). Usually started when the last sub-issue is merged;
+# read here from the state, so a run lost or stopped before that start does not leave the feature
+# waiting. Prints the specification whose review is in progress, if any
+start_feature_reviews() {
+  [ -n "$(template feature)" ] || return 0
+  local specs pn total fb sha l
+  specs=$(gh api --paginate "repos/$REPO/issues?state=open&per_page=100" --jq '.[] | select(.pull_request | not)
+    | select((.sub_issues_summary.total // 0) > 0 and .sub_issues_summary.total == .sub_issues_summary.completed)
+    | select(any(.labels[].name; startswith("wayfinder:")) | not) | "\(.number) \(.sub_issues_summary.total)"')
+  while read -r pn total; do
+    [ -n "$pn" ] || continue
+    fb=$(feature_of "$pn"); [ -n "$fb" ] || continue
+    [ "$(marker_get "$pn" done)" != "$total" ] || continue
+    l=$(labels_of "$pn")
+    has "$l" "needs human" && continue
+    if ! has "$l" "in progress"; then
+      sha=$(gh api "repos/$REPO/branches/$fb" --jq .commit.sha 2> /dev/null || true)
+      [ -n "$sha" ] || continue
+      # Reviewed on its latest commit, but not announced: a sub-issue opened during the review was
+      # closed without a merge. With end-to-end tests judge_features reads them
+      if [ "$(marker_get "$pn" reviewed)" = "$sha" ]; then
+        if [ -z "${PEPPEC_E2E_FEATURE:-}" ] && [ -n "$(pr_from "$fb" --base "${BASE_BRANCH:-main}")" ]; then
+          ready_to_try "$pn" "$total" "$(gh api "repos/$REPO/issues/$pn" --jq .title)" "$fb" \
+            "https://github.com/$REPO/pull/$(pr_from "$fb" --base "${BASE_BRANCH:-main}")" >&2
+        fi
+        continue
+      fi
+      echo "Feature of #$pn finished, its review not started: starting it" >&2
+      feature_finished "$pn" "$total" "$(gh api "repos/$REPO/issues/$pn")" >&2
+      has "$(labels_of "$pn")" "in progress" || continue
+    fi
+    echo "$pn"; return 0
+  done <<< "$specs"
 }
 
 # The end-to-end tests of the finished features. CI runs them on the pull request of each feature
 # branch into the base branch (job e2e_feature of the reusable CI workflow, PEPPEC_E2E_FEATURE);
-# here their result on the latest commit is read, once per commit (marker e2e):
+# here their result on the latest commit is read, once per commit (marker e2e), once the feature
+# review passed on that commit ($1, optional: the specification whose review just passed, $2 why):
 # - passed: "ready to be tried", if not sent yet for these sub-issues;
 # - failed: a hotfix work unit of size L with the end of the log, as a sub-issue, so the feature
 #   is finished again only once it is merged. After E2E_HOTFIXES of them the tests still fail:
@@ -465,16 +545,20 @@ ready_to_try() {
 E2E_CHECK="${CI_CHECK:-ci / ci}"; E2E_CHECK="${E2E_CHECK% / *} / e2e_feature"; E2E_HOTFIXES=2
 judge_features() {
   [ -n "${PEPPEC_E2E_FEATURE:-}" ] && [ -n "$(template feature)" ] || return 0
-  local prs head sha pn spec total check fails log url
+  local passed=${1:-} why_passed=${2:-} why prs head sha pn spec total check fails log url
   prs=$(gh pr list -R "$REPO" --base "${BASE_BRANCH:-main}" --state open --json url,headRefName,headRefOid,body,isCrossRepository \
     --jq '.[] | select(.isCrossRepository | not) | select(.body | contains("<!-- peppec:feature=")) | "\(.headRefName) \(.headRefOid) \(.url) \(.body | capture("<!-- peppec:feature=(?<n>[0-9]+) -->").n)"')
   while read -r head sha url pn; do
     [ -n "$pn" ] && is_feature_branch "$head" || continue
     # Only the pull request of the feature branch remembered on the specification
     [ "$(feature_of "$pn")" = "$head" ] || continue
+    why=""; [ "$pn" != "$passed" ] || why=$why_passed
     spec=$(gh api "repos/$REPO/issues/$pn")
     total=$(jq '.sub_issues_summary.total // 0' <<< "$spec")
     [ "$(jq '.sub_issues_summary.completed // 0' <<< "$spec")" -eq "$total" ] || continue
+    # Only once the feature review passed on this commit (feature_review_passed)
+    jq -e 'any(.labels[].name; . == "in progress")' <<< "$spec" > /dev/null && continue
+    [ "$(marker_get "$pn" reviewed)" = "$sha" ] || continue
     [ "$(marker_get "$pn" e2e)" != "$sha" ] || continue
     # Read from the specification itself, which may have changed after CI ran on this commit
     if [ "$(e2e_decision "$(jq -r '.body // ""' <<< "$spec")")" = none ]; then
@@ -497,7 +581,7 @@ judge_features() {
         if [ "$check" = none ]; then echo "Specification #$pn needs no new end-to-end tests"
         else echo "End-to-end tests of #$pn passed on $sha"; fi
         if [ "$(marker_get "$pn" done)" != "$total" ]; then
-          ready_to_try "$pn" "$total" "$(jq -r .title <<< "$spec")" "$head" "$url"
+          ready_to_try "$pn" "$total" "$(jq -r .title <<< "$spec")" "$head" "$url" "$why"
         fi;;
       *)
         marker_set "$pn" e2e "$sha"
@@ -544,7 +628,7 @@ feature_pr() {
   local pn=$1 fb=$2 title=$3 decision=${4:-missing} pr body old
   # The end-to-end decision of the specification travels in the body, for the CI job e2e_feature
   # (scripts/e2e.sh), which cannot read issues. Kept current when the feature is finished again
-  body="Feature of specification #$pn. Try it on \`$fb\`, then merge this pull request: the workflow closes the specification and removes the branch. Never merged automatically."
+  body="Feature of specification #$pn. CodeRabbit reviews the whole feature here, and the agent answers on \`$fb\`. Once you are told it is ready, try it on \`$fb\`, then merge this pull request: the workflow closes the specification and removes the branch. Never merged automatically."
   [ "$decision" != none ] || body+=$'\n\n'"The specification needs no new end-to-end tests: \`e2e_feature\` does not run them."
   body+=$'\n\n'"<!-- peppec:feature=$pn -->"
   [ "$decision" != none ] || body+=$'\n'"$E2E_NONE"
@@ -552,6 +636,8 @@ feature_pr() {
     --jq '[.[] | select(.isCrossRepository | not)][0] // empty')
   if [ -z "$old" ]; then
     pr=$(gh pr create -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --title "$title (#$pn)" --body "$body") || pr=""
+    # The feature review counts its rounds on this pull request
+    [ -z "$pr" ] || add_label "${pr##*/}" "review 1"
   else
     pr=$(jq -r .url <<< "$old")
     [ "$(jq -r '.body // ""' <<< "$old")" = "$body" ] \
@@ -588,7 +674,16 @@ sync_feature() {
   local pn=$1 fb=$2 out
   if out=$(gh api -X POST "repos/$REPO/merges" -f base="$fb" -f head="${BASE_BRANCH:-main}" \
              -f commit_message="Merge ${BASE_BRANCH:-main} into $fb" --jq '.sha // empty' 2>&1); then
-    if [ -n "$out" ]; then echo "Merged ${BASE_BRANCH:-main} into $fb" >&2; echo merged; else echo current; fi
+    if [ -n "$out" ]; then
+      echo "Merged ${BASE_BRANCH:-main} into $fb" >&2
+      # A merge without conflicts adds nothing of the feature: a feature review that passed on the
+      # commit before it stands for the merge too
+      local reviewed; reviewed=$(marker_get "$pn" reviewed)
+      if [ -n "$reviewed" ] && [ "$(gh api "repos/$REPO/commits/$out" --jq '.parents[0].sha' 2> /dev/null)" = "$reviewed" ]; then
+        marker_set "$pn" reviewed "$out"
+      fi
+      echo merged
+    else echo current; fi
     return 0
   fi
   if grep -q "HTTP 409" <<< "$out"; then
@@ -632,7 +727,8 @@ ${log:-- (not available)}
 
 # The base branch went on (another feature merged, a single issue) while a finished feature waits
 # for you: it is brought into the feature again, so what you try stays what the merge will give.
-# Only features whose pull request is open and that have no open sub-issue
+# Only features whose pull request is open, that have no open sub-issue and whose feature review is
+# not under way. A conflict opens a sync work unit: once it is merged, the feature is reviewed again
 resync_features() {
   local prs pn head ahead synced
   [ -n "$(template feature)" ] || return 0
@@ -642,6 +738,9 @@ resync_features() {
     [ -n "$pn" ] && is_feature_branch "$head" || continue
     [ "$(feature_of "$pn")" = "$head" ] || continue
     [ "$(gh api "repos/$REPO/issues/$pn" --jq '(.sub_issues_summary.total // 0) - (.sub_issues_summary.completed // 0)')" -eq 0 ] || continue
+    # Not during its feature review: a merge would ask CodeRabbit to look at the base branch's code
+    # too. Brought in once the review has passed, which stands for a merge without conflicts
+    has "$(labels_of "$pn")" "in progress" && continue
     ahead=$(gh api "repos/$REPO/compare/$head...${BASE_BRANCH:-main}" --jq .ahead_by 2> /dev/null || echo 0)
     [ "${ahead:-0}" -gt 0 ] || continue
     synced=$(sync_feature "$pn" "$head") || continue
