@@ -9,6 +9,11 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- The "ready to be tried" message ended with two periods when the line `Manual:` of the
+  specification ends with one.
+
 ## [2.21.2] - 2026-11-17
 
 ### Fixed

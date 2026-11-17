@@ -539,7 +539,7 @@ merge_feature() {
 ready_to_try() {
   marker_set "$1" done "$2"
   # The button asks the bot for one sentence and makes it a new sub-issue (report in bot/bot.py)
-  notify "All $2 sub-issues of #$1 \"$3\" are merged into $4: the feature is ready to be tried${6:+ ($6)}.${7:+ Manual check before your merge: $7.} $5" \
+  notify "All $2 sub-issues of #$1 \"$3\" are merged into $4: the feature is ready to be tried${6:+ ($6)}.${7:+ Manual check before your merge: ${7%.}.} $5" \
     "{\"inline_keyboard\":[[{\"text\":\"Report a problem\",\"callback_data\":\"report|$1|\"}]]}"
 }
 
