@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.19.0] - 2026-11-17
+
 ### Changed
 
 - The model of size L takes over from the second review round, whatever the size of the issue.
@@ -767,7 +769,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.18.3...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.19.0...HEAD
+[2.19.0]: https://github.com/PeppeColi/peppec/compare/v2.18.3...v2.19.0
 [2.18.3]: https://github.com/PeppeColi/peppec/compare/v2.18.2...v2.18.3
 [2.18.2]: https://github.com/PeppeColi/peppec/compare/v2.18.1...v2.18.2
 [2.18.1]: https://github.com/PeppeColi/peppec/compare/v2.18.0...v2.18.1
