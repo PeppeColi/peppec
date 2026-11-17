@@ -9,6 +9,13 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- The bot's ping waited up to twice `PING_MINUTES`: a look skipped because a run had started
+  shortly before restarted the wait from that look. It now looks again `PING_MINUTES` after the
+  run started (every minute while the run is still going), and logs each skipped look with the
+  time of the next one.
+
 ## [2.18.2] - 2026-11-17
 
 ### Fixed
