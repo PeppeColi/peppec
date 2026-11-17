@@ -683,7 +683,10 @@ feature_pr() {
   old=$(gh pr list -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --state open --json url,body,isCrossRepository \
     --jq '[.[] | select(.isCrossRepository | not)][0] // empty')
   if [ -z "$old" ]; then
-    pr=$(gh pr create -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" --title "$title (#$pn)" --body "$body") || pr=""
+    # Opened with your token, like the pull requests of the work units: CodeRabbit skips a pull
+    # request authored by a bot without a review seat, the app included
+    pr=$(GH_TOKEN="${AGENT_TOKEN:-$GH_TOKEN}" gh pr create -R "$REPO" --head "$fb" --base "${BASE_BRANCH:-main}" \
+      --title "$title (#$pn)" --body "$body") || pr=""
     # The feature review counts its rounds on this pull request
     [ -z "$pr" ] || add_label "${pr##*/}" "review 1"
   else
