@@ -90,7 +90,9 @@ def number_env(name, default, low, high):
 # (in the time zone TZ of the container), the summary workflow
 PING_MINUTES = number_env("PING_MINUTES", 15, 1, 1440)
 SUMMARY_HOUR = number_env("SUMMARY_HOUR", 9, 0, 23)
-SUMMARY_FILE = STATE.with_name("summary")  # the day of the last summary, kept across restarts
+SUMMARY_FILE = STATE.with_name("summary")
+# How long the dashboard lists a feature the app merged into the base branch
+MERGED_DAYS = 7  # the day of the last summary, kept across restarts
 # The labels of the issue in progress that wait for you: a run would change nothing
 WAITS_FOR_YOU = {"needs human", "question open"}
 
@@ -364,6 +366,29 @@ class Repo:
         out["queue"] = [{"number": i["number"], "title": i["title"], "size": size_of([x["name"] for x in i["labels"]])}
                         for i in self.queue() if not any(x["name"] == "in progress" for x in i["labels"])]
         out["trying"] = [self.trying(i, prs) for prs in [self.feature_prs()] for i in self.features_done()]
+        out["merged"] = self.features_merged()
+        return out
+
+    def features_merged(self):
+        """The features the app merged into the base branch in the last MERGED_DAYS days: closed
+        specifications with <!-- peppec:merged=TIME --> from the app (merge_feature in
+        scripts/lib.sh). Report a problem on them opens a new issue on the base branch."""
+        since = time.time() - MERGED_DAYS * 86400
+        params = {"state": "closed", "since": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(since)),
+                  "per_page": 100, "sort": "updated", "direction": "desc"}
+        out = []
+        for i in self.gh("GET", "/issues", params=params):
+            if "pull_request" in i or not (i.get("sub_issues_summary") or {}).get("total"):
+                continue
+            merged = None
+            for c in self.gh("GET", f"/issues/{i['number']}/comments", params={"per_page": 100}):
+                m = re.match(r"<!-- peppec:merged=(\S+) -->", c["body"])
+                if m and from_app(c):
+                    merged = m.group(1)
+            if merged and stamp(merged) >= since:
+                out.append({"number": i["number"], "title": i["title"], "merged_at": merged,
+                            "total": i["sub_issues_summary"]["total"],
+                            "url": f"https://github.com/{self.name}/issues/{i['number']}"})
         return out
 
     def feature_prs(self):
@@ -402,13 +427,27 @@ class Repo:
 
     def report(self, spec, text):
         """A problem found while trying a feature: a new sub-issue of its specification, size S,
-        in the queue. Labelled only once linked, so the agent never starts it without the spec."""
+        in the queue. Labelled only once linked, so the agent never starts it without the spec.
+        On a feature already merged (its specification closed, its branch gone): a single issue on
+        the base branch instead, labelled reported, naming the specification in a marker that
+        task.sh reads to give it as background."""
         parent = self.gh("GET", f"/issues/{spec}")
-        if parent.get("state") != "open" or "pull_request" in parent:
-            raise UserError(f"{self.name}#{spec} is not an open issue.")
+        if "pull_request" in parent:
+            raise UserError(f"{self.name}#{spec} is not an issue.")
         text = text.strip()
+        if not text:
+            raise UserError("Write what does not work.")
         first = text.splitlines()[0].strip()
         title = first if len(first) <= 80 else first[:79].rstrip() + "…"
+        if parent.get("state") != "open":
+            body = (f"Found while trying the feature of #{spec}, already merged into the base branch, "
+                    f"reported from the bot:\n\n{text}\n\nThe specification of that feature is #{spec}.\n\n"
+                    f"<!-- peppec:spec={spec} -->")
+            issue = self.gh("POST", "/issues", json={"title": title, "body": body})
+            self.gh("POST", f"/issues/{issue['number']}/labels", json={"labels": ["ready", "size: S", "reported"]})
+            self.dispatch()
+            return (f"Reported as {self.name}#{issue['number']}, a new issue on the base branch "
+                    f"(#{spec} is already merged), size S, in the queue.")
         body = (f"Found while trying the feature of #{spec} on the base branch, reported from the bot:\n\n"
                 f"{text}\n\nThe specification, with its scenarios, is the parent issue.\n\n"
                 # Its branch is a hotfix branch of the feature (kind_of in scripts/lib.sh)

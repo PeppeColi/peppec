@@ -10,7 +10,8 @@ Every message starts with the repository it comes from, as in `[owner/name]`. On
 | Claude token rejected | Run `claude setup-token` and update the secret | 🔔 |
 | Question on #N | Reply, or press Accept for the recommended answer | 🔔 |
 | PR #N is ready to merge (manual mode), with "only minor findings left after N review rounds" when the last round passed on [minor findings](architecture.md#checks-review-and-limits) | Merge it | 🔔 |
-| The feature of #N is ready to be tried (with feature branches: after its feature review; with "only minor findings left…" when it passed on minor findings) | Try it, merge it, or press Report a problem | 🔔 |
+| The feature of #N is ready to be tried (with feature branches: after its feature review; with "only minor findings left…" when it passed on minor findings; with "Manual check before your merge: …" when the specification asks for one) | Try it, merge it, or press Report a problem | 🔔 |
+| Could not merge the feature of #N into the base branch: it waits for your merge instead | Read the reason, then merge it yourself | 🔔 |
 | The base branch does not exist | Create it again | 🔔 |
 | #N has `ready-for-agent` but not `ready` | Run `peppec doctor`, then label it `ready` | 🔔 |
 | #N has `ready` but is not a work unit | Move `ready` to its sub-issues | 🔔 |
@@ -20,6 +21,7 @@ Every message starts with the repository it comes from, as in `[owner/name]`. On
 | The decide step failed | Open the run | 🔔 |
 | Daily summary with a token about to expire | Renew the token | 🔔 |
 | All N sub-issues of #M are merged into the feature branch: CodeRabbit now reviews the whole feature | Nothing | 🔕 |
+| The feature of #N is merged into the base branch: try it there (automatic mode, no manual check) | Try it when you like, or press Report a problem (a new issue labelled `reported`) | 🔕 |
 | Merged PR #N (automatic mode, or into a feature branch), with "only minor findings left after N review rounds" when the last round passed on minor findings | Nothing | 🔕 |
 | Claude quota exhausted: will retry automatically | Nothing | 🔕 |
 | The agent changed nothing and answered CodeRabbit | Nothing | 🔕 |
