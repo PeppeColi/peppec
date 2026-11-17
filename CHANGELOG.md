@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.21.0] - 2026-11-17
+
 ### Changed
 
 - `merge: automatic` now decides what enters the base branch, whole features included: with
@@ -805,7 +807,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.20.0...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.21.0...HEAD
+[2.21.0]: https://github.com/PeppeColi/peppec/compare/v2.20.0...v2.21.0
 [2.20.0]: https://github.com/PeppeColi/peppec/compare/v2.19.0...v2.20.0
 [2.19.0]: https://github.com/PeppeColi/peppec/compare/v2.18.3...v2.19.0
 [2.18.3]: https://github.com/PeppeColi/peppec/compare/v2.18.2...v2.18.3
