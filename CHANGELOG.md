@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.18.3] - 2026-11-17
+
 ### Fixed
 
 - The bot's ping waited up to twice `PING_MINUTES`: a look skipped because a run had started
@@ -755,7 +757,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.18.2...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.18.3...HEAD
+[2.18.3]: https://github.com/PeppeColi/peppec/compare/v2.18.2...v2.18.3
 [2.18.2]: https://github.com/PeppeColi/peppec/compare/v2.18.1...v2.18.2
 [2.18.1]: https://github.com/PeppeColi/peppec/compare/v2.18.0...v2.18.1
 [2.18.0]: https://github.com/PeppeColi/peppec/compare/v2.17.0...v2.18.0
