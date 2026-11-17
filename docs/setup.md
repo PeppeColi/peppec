@@ -123,8 +123,8 @@ ci 2|BFD4F2|Check fix attempt 2
 ci 3|BFD4F2|Check fix attempt 3
 ci 4|BFD4F2|Check fix attempt 4
 ci 5|BFD4F2|Check fix attempt 5
-merge: manual|006B75|You merge the pull requests of the agent branches (control panel)
-merge: automatic|006B75|The app merges the pull requests of the agent branches once reviewed (control panel)
+merge: manual|006B75|You merge the pull requests of the agent branches into the base branch (control panel)
+merge: automatic|006B75|The app merges the pull requests of the agent branches into the base branch once reviewed (control panel)
 schedule: always|006B75|New issues start at any hour (control panel)
 schedule: nightly|006B75|New issues start only in the work window (control panel)
 paused|B60205|No new issues start; the one in progress goes on (control panel)
@@ -186,7 +186,7 @@ Keep the `.pem` file until Phase 6, where the bot needs it, then delete it from 
 1. Go to coderabbit.ai, sign in with GitHub and install the app on `<REPO>` only.
 2. Copy [`examples/coderabbit.yaml`](../examples/coderabbit.yaml) to `.coderabbit.yaml` in the root of your repository, commit and push.
 
-CodeRabbit approves a pull request once its comments are resolved, and the workflow uses that approval as the "review passed" signal. Automatic reviews are switched off: the workflow asks for one review per commit, as soon as the checks are green. If CodeRabbit does not answer the request at all, for example because it was installed after the first pull request, the workflow asks again after 20 minutes. On public repositories with few stars CodeRabbit does not start on its own anyway, and this avoids spending the review allowance on commits that do not pass CI.
+CodeRabbit approves a pull request once its comments are resolved, and the workflow uses that approval as the "review passed" signal. With feature branches it reviews the pull request of each feature into the base branch, not the work units merged into the feature branch. Automatic reviews are switched off: the workflow asks for one review per commit, as soon as the checks are green. If CodeRabbit does not answer the request at all, for example because it was installed after the first pull request, the workflow asks again after 20 minutes. On public repositories with few stars CodeRabbit does not start on its own anyway, and this avoids spending the review allowance on commits that do not pass CI.
 
 ## Phase 4 — Control panel and variables
 
@@ -203,7 +203,7 @@ Change the state from the Telegram bot or the dashboard; editing the labels by h
 | Label | Meaning |
 |---|---|
 | `merge: manual` | You merge the pull requests of the agent branches (default) |
-| `merge: automatic` | The app merges the pull requests of the agent branches once the review passes |
+| `merge: automatic` | The app merges the pull requests of the agent branches into the base branch once the review passes. Into a feature branch the app merges them in both modes, once the checks pass |
 | `schedule: always` | New issues start at any hour (default) |
 | `schedule: nightly` | New issues start only in the work window (`PEPPEC_WORK_START_HOUR`–`PEPPEC_WORK_END_HOUR`) |
 | `paused` 🔴 | No new issue starts; the one in progress goes on. Only Resume lifts it |
@@ -385,11 +385,11 @@ The variable holds one `kind=template` per line; a kind left out takes its defau
 
 How it works:
 
-- **The feature branch is created by the workflow** from the base branch, when the first work unit of the specification starts. The work units are merged into it, as they would be into the base branch.
+- **The feature branch is created by the workflow** from the base branch, when the first work unit of the specification starts. The work units are merged into it by the app as soon as their checks pass, in both merge modes, with no CodeRabbit review of their own: CodeRabbit reviews the whole feature at the end.
 - **Names are kept.** Each issue remembers its branch when it starts: renaming the issue or the specification, or changing the variable, never moves work already under way. Issues started before the variable keep `agent/issue-N`.
 - **One feature is built at a time.** The work units of a feature already started come first; a finished feature waits for you while the agent starts the next one.
-- **When the last work unit is merged** the workflow opens a pull request from the feature branch into the base branch, brings the base branch into the feature (see below) and sends the "ready to be tried" message with the link of the pull request. Try the feature on its branch, then merge that pull request yourself: the workflow never merges it. The merge closes the specification and removes the feature branch.
-- **The feature follows the base branch only at the end.** While it is built the feature branch is left alone. When it is finished the workflow merges the base branch into it. If the two conflict, it opens a sync work unit, a sub-issue of the specification: the workflow makes the merge, the agent resolves the conflict markers, and its pull request is merged with a merge commit (in manual mode, merge it that way yourself: a squash would bring the conflict back). The "ready to be tried" message comes once that work unit is merged. If the base branch moves again while a finished feature waits for you, the workflow merges it in again and tells you, or opens a new sync work unit.
+- **When the last work unit is merged** the workflow opens a pull request from the feature branch into the base branch, brings the base branch into the feature (see below), and starts the feature review: the specification is the issue in progress, CodeRabbit reviews the whole feature on that pull request, and the agent answers on the feature branch (see [Feature branches](architecture.md#feature-branches)). Once the review and the end-to-end tests pass, you get the "ready to be tried" message with the link of the pull request. Try the feature on its branch, then merge that pull request yourself: the workflow never merges it. The merge closes the specification and removes the feature branch.
+- **The feature follows the base branch only at the end.** While it is built the feature branch is left alone. When it is finished the workflow merges the base branch into it. If the two conflict, it opens a sync work unit, a sub-issue of the specification: the workflow makes the merge, the agent resolves the conflict markers, and the app merges its pull request with a merge commit (a squash would bring the conflict back). The feature review starts once that work unit is merged. If the base branch moves again while a finished feature waits for you, the workflow merges it in again and tells you (the review that passed stands), or opens a new sync work unit (the feature is then reviewed again).
 - **Setup.** `peppec init` asks whether you want feature branches (it sets `PEPPEC_BRANCHES` to `feature=feature/{spec}/dev`, which you can change afterwards) and the two end-to-end commands below. Where rulesets exist it creates a ruleset "feature branches" that forbids force pushes on them, and adds `ci / e2e_all` to the required checks of a ruleset it creates. `peppec doctor` checks the templates and warns when `ci / e2e_all` is not required on the base branch.
 - **On the dashboard and in `/status`** every finished feature is listed under "Ready to try", with the link of its pull request; "Being checked" means the workflow is still bringing in the base branch or running its end-to-end tests.
 - **A variable, not `.github/peppec.yml`:** a feature branch carries the configuration of the day it was created.

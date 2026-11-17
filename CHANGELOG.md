@@ -9,6 +9,19 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- With feature branches, CodeRabbit reviews the whole feature once, on the pull request of its
+  feature branch into the base branch (the feature review), instead of each work unit. Work unit,
+  sync and hotfix pull requests into a feature branch are merged by the app as soon as their checks
+  pass, in both merge modes. When the last work unit is merged and the base branch is in, the
+  specification becomes the issue in progress: the agent answers the review with commits on the
+  feature branch, changing only what the findings ask, with the same limits as any issue. Once the
+  review passes, the end-to-end tests are read and the feature is ready to be tried; the queue goes
+  on meanwhile. A sync work unit with conflicts, a hotfix or a Report a problem brings a new review;
+  the base branch brought in without conflicts keeps the review that passed. The feature is still
+  always merged by you.
+
 ## [2.19.0] - 2026-11-17
 
 ### Changed

@@ -22,7 +22,7 @@ flowchart LR
 - **One move at a time.** A workflow wakes up on every relevant event and whenever the Telegram bot pings it (every 15 minutes while there is work), reads the state back from GitHub labels and picks exactly one move. It can restart at any point without losing track.
 - **Hard limits.** Review rounds, attempts to fix the checks and working time per issue are capped. From the second review round the largest model takes over; at the last one, findings that are all minor let the review pass. Past a limit the queue stops and you get a Telegram message.
 - **Questions instead of guesses.** If an issue is unclear, the agent asks, and says which answer it recommends. Press Accept or reply to the Telegram message, and the work resumes.
-- **Features on their own branch, if you want.** Each specification can get an integration branch: the agent builds its work units there, brings the base branch in at the end (an agent resolves the conflicts), runs your end-to-end tests, and opens a pull request that only you merge. See [Feature branches](docs/setup.md#feature-branches).
+- **Features on their own branch, if you want.** Each specification can get an integration branch: the agent builds its work units there (merged as soon as their checks pass), brings the base branch in at the end (an agent resolves the conflicts), opens a pull request that CodeRabbit reviews as a whole feature, runs your end-to-end tests, and leaves that pull request for you to merge. See [Feature branches](docs/setup.md#feature-branches).
 - **Any language.** Everything language-specific lives in a [preset](presets): the toolchain setup, the check commands, the tools the agent may use.
 
 The full picture is in [docs/architecture.md](docs/architecture.md).

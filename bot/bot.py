@@ -378,8 +378,8 @@ class Repo:
         return prs
 
     def trying(self, issue, prs):
-        """A finished feature. With a feature branch it may still be checked (the base branch being
-        brought in, its end-to-end tests): it is ready once the workflow has sent "ready to be tried",
+        """A finished feature. With a feature branch it may still be checked (its feature review, the
+        base branch being brought in, its end-to-end tests): it is ready once the workflow has sent "ready to be tried",
         which it remembers on the specification as <!-- peppec:done=N --> with N its sub-issues."""
         n, total = issue["number"], issue["sub_issues_summary"]["total"]
         pr = prs.get(n)

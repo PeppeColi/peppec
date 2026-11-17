@@ -91,7 +91,7 @@ The `paused` label on the control panel: no new issue starts; the one in progres
 _Avoid_: stop, freeze
 
 **Merge mode**
-Manual (the owner merges the pull requests of the agent branches, label `merge: manual`, default) or automatic (the workflow merges them as the app once the review passes, label `merge: automatic`). Feature branches and the base branch are always merged by the owner.
+Manual (the owner merges the pull requests of the agent branches into the base branch, label `merge: manual`, default) or automatic (the workflow merges them as the app once the review passes, label `merge: automatic`). Pull requests into a feature branch are merged by the app in both modes, once their checks pass. Feature branches and the base branch are always merged by the owner.
 _Avoid_: auto-merge (GitHub's own feature, not used)
 
 **Schedule**
@@ -111,8 +111,12 @@ The commands of the preset (or of `check` in `.github/peppec.yml`) that CI runs 
 _Avoid_: tests (only part of the checks), CI (CI runs the checks)
 
 **Review round**
-One pass of CodeRabbit's review and the agent's answer to it, counted by the `review N` labels and capped by `PEPPEC_MAX_REVIEW_ROUNDS`. From the second round the model of size L builds. At the last round a review whose findings are all minor passes.
+One pass of CodeRabbit's review and the agent's answer to it, counted by the `review N` labels and capped by `PEPPEC_MAX_REVIEW_ROUNDS`. From the second round the model of size L builds. At the last round a review whose findings are all minor passes. With feature branches the rounds happen in the feature review.
 _Avoid_: iteration, attempt (an attempt is one try at making the checks pass, `ci N`)
+
+**Feature review**
+CodeRabbit's review of a whole feature, on the pull request of its feature branch into the base branch, once every work unit is merged there. The specification is the issue "in progress" meanwhile, and the agent's review rounds commit straight onto the feature branch. Work units merged into a feature branch get no review of their own.
+_Avoid_: final review, integration review
 
 **Severity**
 The level CodeRabbit writes at the head of each finding: Critical, Major, Minor, Trivial, or Nitpick. Minor, Trivial and Nitpick are the minor findings; any other severity, or none, is blocking.

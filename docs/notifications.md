@@ -10,7 +10,7 @@ Every message starts with the repository it comes from, as in `[owner/name]`. On
 | Claude token rejected | Run `claude setup-token` and update the secret | 🔔 |
 | Question on #N | Reply, or press Accept for the recommended answer | 🔔 |
 | PR #N is ready to merge (manual mode), with "only minor findings left after N review rounds" when the last round passed on [minor findings](architecture.md#checks-review-and-limits) | Merge it | 🔔 |
-| The feature of #N is ready to be tried | Try it, merge it, or press Report a problem | 🔔 |
+| The feature of #N is ready to be tried (with feature branches: after its feature review; with "only minor findings left…" when it passed on minor findings) | Try it, merge it, or press Report a problem | 🔔 |
 | The base branch does not exist | Create it again | 🔔 |
 | #N has `ready-for-agent` but not `ready` | Run `peppec doctor`, then label it `ready` | 🔔 |
 | #N has `ready` but is not a work unit | Move `ready` to its sub-issues | 🔔 |
@@ -19,7 +19,8 @@ Every message starts with the repository it comes from, as in `[owner/name]`. On
 | The base branch could not be brought into a feature | Merge it by hand | 🔔 |
 | The decide step failed | Open the run | 🔔 |
 | Daily summary with a token about to expire | Renew the token | 🔔 |
-| Merged PR #N (automatic mode), with "only minor findings left after N review rounds" when the last round passed on minor findings | Nothing | 🔕 |
+| All N sub-issues of #M are merged into the feature branch: CodeRabbit now reviews the whole feature | Nothing | 🔕 |
+| Merged PR #N (automatic mode, or into a feature branch), with "only minor findings left after N review rounds" when the last round passed on minor findings | Nothing | 🔕 |
 | Claude quota exhausted: will retry automatically | Nothing | 🔕 |
 | The agent changed nothing and answered CodeRabbit | Nothing | 🔕 |
 | #N waits for #M, whose code it needs (smart queue): the queue goes on | Nothing | 🔕 |

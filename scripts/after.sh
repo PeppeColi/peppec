@@ -255,7 +255,8 @@ The issue leaves the following out on purpose, usually because another issue cov
 $out"
     fi
     url=$(gh pr create -R "$REPO" --head "$B" --base "$BASE" --title "$TITLE" --body "$body")
-    add_label "${url##*/}" "review 1"
+    # Into a feature branch only the checks count: CodeRabbit reviews the whole feature later
+    [ "$BASE" != "${BASE_BRANCH:-main}" ] || add_label "${url##*/}" "review 1"
     exit 0
   fi
 fi
