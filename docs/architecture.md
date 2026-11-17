@@ -124,7 +124,7 @@ These are the defaults. A value is a model alias or a full model ID; you can set
 - **size: M**, or no size label → the `m` model.
 - **size: L** → the `l` model from the start.
 
-If the review still fails, the `l` model takes over from the round set in `PEPPEC_LARGE_FROM_ROUND`, whatever the size.
+If the first review asks for changes, the `l` model takes over from the second review round, whatever the size: a round that repeats a failed attempt with the same model costs more than the larger model.
 
 ## Checks, review and limits
 
@@ -132,10 +132,12 @@ A pull request reaches CodeRabbit only after CI passes. The review passes when C
 
 The agent does not have to agree with every finding. When it leaves one unchanged on purpose, for example because another issue of the feature covers it, it writes its reasons and the workflow posts them as a reply in the thread of that finding. CodeRabbit weighs the reply and approves when convinced. If it has not approved after 20 minutes, the next round starts and the agent reads CodeRabbit's answers. A round in which the agent neither changes the code nor replies stops the queue with `needs human`.
 
+CodeRabbit writes a severity at the head of each finding: Critical, Major, Minor, Trivial, or Nitpick for the nitpicks of its review body. At the last round (`PEPPEC_MAX_REVIEW_ROUNDS`), a review that asks for changes still passes when every finding of it is Minor, Trivial or Nitpick: the pull request is merged in automatic mode, or marked ready to merge in manual mode, and the findings are left as they are, with no follow-up issue. Before an automatic merge the workflow dismisses CodeRabbit's request for changes with that reason. The rule is cautious: a finding with another severity, one with no severity it recognises (a new wording, for example), or one outside the diff (counted by CodeRabbit but not written as an inline comment) stops the queue as before.
+
 | Limit | Variable | Past the limit |
 | --- | --- | --- |
 | Attempts to make the checks pass, per review round | `PEPPEC_MAX_CI_ATTEMPTS` | Queue stops, Telegram notification |
-| Review rounds, tracked with the `review N` labels | `PEPPEC_MAX_REVIEW_ROUNDS` | `needs human` label, queue stops, Telegram notification |
+| Review rounds, tracked with the `review N` labels | `PEPPEC_MAX_REVIEW_ROUNDS` | With minor findings only, the review passes; otherwise `needs human` label, queue stops, Telegram notification |
 | Agent working time per issue, summed over all runs | `PEPPEC_MAX_ISSUE_MINUTES` | Queue stops, Telegram notification |
 | Wait for a CI result, from the latest commit | `PEPPEC_STALL_MINUTES` | Queue stops |
 | Wait for a CodeRabbit review, from the latest commit | twice `PEPPEC_STALL_MINUTES` | Queue stops |

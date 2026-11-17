@@ -9,6 +9,16 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- The model of size L takes over from the second review round, whatever the size of the issue.
+  The variable `PEPPEC_LARGE_FROM_ROUND` is gone: `peppec doctor` warns when a host still has it.
+- At the last review round, a review that asks for changes passes when every finding of it is
+  Minor, Trivial or Nitpick, the severity CodeRabbit writes at its head: the pull request is merged
+  (automatic mode, after dismissing CodeRabbit's request for changes with the reason) or marked
+  ready to merge (manual mode), with no follow-up issue. A finding with any other severity, with no
+  severity, or outside the diff stops the queue as before. The notification says why it passed.
+
 ## [2.18.3] - 2026-11-17
 
 ### Fixed

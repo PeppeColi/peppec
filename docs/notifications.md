@@ -9,7 +9,7 @@ Every message starts with the repository it comes from, as in `[owner/name]`. On
 | #N needs another feature, but names none of the open ones, or its feature branch already holds work ([smart queue](architecture.md#smart-queue)) | Add the blocker or bring that code in, then press Unblock | 🔔 |
 | Claude token rejected | Run `claude setup-token` and update the secret | 🔔 |
 | Question on #N | Reply, or press Accept for the recommended answer | 🔔 |
-| PR #N is ready to merge (manual mode) | Merge it | 🔔 |
+| PR #N is ready to merge (manual mode), with "only minor findings left after N review rounds" when the last round passed on [minor findings](architecture.md#checks-review-and-limits) | Merge it | 🔔 |
 | The feature of #N is ready to be tried | Try it, merge it, or press Report a problem | 🔔 |
 | The base branch does not exist | Create it again | 🔔 |
 | #N has `ready-for-agent` but not `ready` | Run `peppec doctor`, then label it `ready` | 🔔 |
@@ -19,7 +19,7 @@ Every message starts with the repository it comes from, as in `[owner/name]`. On
 | The base branch could not be brought into a feature | Merge it by hand | 🔔 |
 | The decide step failed | Open the run | 🔔 |
 | Daily summary with a token about to expire | Renew the token | 🔔 |
-| Merged PR #N (automatic mode) | Nothing | 🔕 |
+| Merged PR #N (automatic mode), with "only minor findings left after N review rounds" when the last round passed on minor findings | Nothing | 🔕 |
 | Claude quota exhausted: will retry automatically | Nothing | 🔕 |
 | The agent changed nothing and answered CodeRabbit | Nothing | 🔕 |
 | #N waits for #M, whose code it needs (smart queue): the queue goes on | Nothing | 🔕 |

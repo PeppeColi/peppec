@@ -237,7 +237,6 @@ gh variable set PEPPEC_TZ_NAME -R "$R" -b "<your time zone, for example Europe/R
 gh variable set PEPPEC_WORK_START_HOUR -R "$R" -b 22
 gh variable set PEPPEC_WORK_END_HOUR -R "$R" -b 9
 gh variable set PEPPEC_MAX_REVIEW_ROUNDS -R "$R" -b 3
-gh variable set PEPPEC_LARGE_FROM_ROUND -R "$R" -b 3
 gh variable set PEPPEC_MAX_CI_ATTEMPTS -R "$R" -b 5
 gh variable set PEPPEC_MAX_ISSUE_MINUTES -R "$R" -b 120
 gh variable set PEPPEC_STALL_MINUTES -R "$R" -b 120
@@ -251,7 +250,6 @@ gh variable set PEPPEC_AGENT_TOKEN_EXPIRES -R "$R" -b "<expiry date of the perso
 | `PEPPEC_WORK_START_HOUR`, `PEPPEC_WORK_END_HOUR` | Hours between which new issues are started, in `PEPPEC_TZ_NAME`. The window may cross midnight. Ignored while the schedule is `always` |
 | `PEPPEC_MAX_ISSUE_MINUTES` | The agent's total working time per issue. Waits for quota, CI and CodeRabbit do not count |
 | `PEPPEC_STALL_MINUTES` | How long a pull request may wait for a CI result; a review may take twice as long |
-| `PEPPEC_LARGE_FROM_ROUND` | Review round from which the model of size L takes over |
 | `PEPPEC_BASE_BRANCH` | The branch the agent starts from and its pull requests are merged into. `main` when not set; `peppec init` proposes `dev` on a new installation. See [The base branch `dev`](#the-base-branch-dev) |
 | `PEPPEC_BRANCHES` | Optional: the names of the agent's branches, and a feature branch for each specification. See [Feature branches](#feature-branches) |
 | `PEPPEC_E2E_FEATURE`, `PEPPEC_E2E_ALL` | Optional, with feature branches: the end-to-end tests of one feature and of the whole project. See [End-to-end tests](#end-to-end-tests) |

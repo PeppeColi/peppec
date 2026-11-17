@@ -57,12 +57,11 @@ no preset|B60205|The preset is none: the agent builds nothing until a language i
 NUMBERS='PEPPEC_WORK_START_HOUR|22|Hour at which agents may start new issues (0-23)
 PEPPEC_WORK_END_HOUR|9|Hour at which agents stop starting new issues (0-23)
 PEPPEC_MAX_REVIEW_ROUNDS|3|Review rounds before the queue stops
-PEPPEC_LARGE_FROM_ROUND|3|Review round from which the model of size L takes over
 PEPPEC_MAX_CI_ATTEMPTS|5|Attempts to fix the checks, per review round
 PEPPEC_MAX_ISSUE_MINUTES|120|Agent working time per issue, in minutes
 PEPPEC_STALL_MINUTES|120|Minutes a pull request may wait for a CI result
 PEPPEC_QUOTA_RETRY_MINUTES|60|Minutes between retries when the Claude quota is exhausted'
-VARIABLES="PEPPEC_CONTROL_ISSUE PEPPEC_OWNER_LOGIN PEPPEC_APP_ID PEPPEC_APP_CLIENT_ID PEPPEC_APP_LOGIN PEPPEC_AGENT_GIT_NAME PEPPEC_AGENT_GIT_EMAIL PEPPEC_TZ_NAME PEPPEC_WORK_START_HOUR PEPPEC_WORK_END_HOUR PEPPEC_MAX_REVIEW_ROUNDS PEPPEC_LARGE_FROM_ROUND PEPPEC_MAX_CI_ATTEMPTS PEPPEC_MAX_ISSUE_MINUTES PEPPEC_STALL_MINUTES PEPPEC_QUOTA_RETRY_MINUTES PEPPEC_CLAUDE_TOKEN_EXPIRES"
+VARIABLES="PEPPEC_CONTROL_ISSUE PEPPEC_OWNER_LOGIN PEPPEC_APP_ID PEPPEC_APP_CLIENT_ID PEPPEC_APP_LOGIN PEPPEC_AGENT_GIT_NAME PEPPEC_AGENT_GIT_EMAIL PEPPEC_TZ_NAME PEPPEC_WORK_START_HOUR PEPPEC_WORK_END_HOUR PEPPEC_MAX_REVIEW_ROUNDS PEPPEC_MAX_CI_ATTEMPTS PEPPEC_MAX_ISSUE_MINUTES PEPPEC_STALL_MINUTES PEPPEC_QUOTA_RETRY_MINUTES PEPPEC_CLAUDE_TOKEN_EXPIRES"
 
 # ---------- output ----------
 if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'; else B=""; G=""; Y=""; R=""; N=""; fi
@@ -1176,6 +1175,9 @@ cmd_doctor() {
   while IFS='|' read -r name _ _; do
     local v; v=$(var_of "$name"); [ -z "$v" ] || is_number "$v" || bad "$name is not a number: $v"
   done <<< "$NUMBERS"
+  # Removed in 2.19.0: the model of size L always takes over from the second review round
+  [ -z "$(var_of PEPPEC_LARGE_FROM_ROUND)" ] \
+    || warn "PEPPEC_LARGE_FROM_ROUND is obsolete: the model of size L takes over from review round 2 (gh variable delete PEPPEC_LARGE_FROM_ROUND -R $REPO)"
   # Not in the list above: without it the base branch is main
   BASE_BRANCH=$(var_of PEPPEC_BASE_BRANCH); BASE_BRANCH="${BASE_BRANCH:-main}"
   local default_branch; default_branch=$(gh api "repos/$REPO" --jq .default_branch)
