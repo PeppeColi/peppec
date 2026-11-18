@@ -9,6 +9,11 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Changed
+
+- The message "Could not open the pull request of the feature" arrives silently: the next run tries
+  again and it asks nothing of you.
+
 ## [2.21.3] - 2026-11-17
 
 ### Fixed

@@ -446,7 +446,7 @@ feature_finished() {
   decision=$(e2e_decision "$(jq -r '.body // ""' <<< "$parent")")
   pr=$(feature_pr "$pn" "$fb" "$(jq -r .title <<< "$parent")" "$decision")
   if [ -z "$pr" ]; then
-    notify "Could not open the pull request of the feature of #$pn ($fb into ${BASE_BRANCH:-main}): the next run tries again. ${RUN_URL:-}"
+    notify_info "Could not open the pull request of the feature of #$pn ($fb into ${BASE_BRANCH:-main}): the next run tries again. ${RUN_URL:-}"
     return 0
   fi
   # The base branch went on while the feature was built: it is brought in first, so what is
