@@ -9,6 +9,8 @@ history when this file was created.
 
 ## [Unreleased]
 
+## [2.21.4] - 2026-11-18
+
 ### Changed
 
 - The message "Could not open the pull request of the feature" arrives silently: the next run tries
@@ -837,7 +839,8 @@ history when this file was created.
 - First release: reusable workflows, the `rust-v1` preset, the Telegram bot, notifications also
   written to the job log.
 
-[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.21.3...HEAD
+[Unreleased]: https://github.com/PeppeColi/peppec/compare/v2.21.4...HEAD
+[2.21.4]: https://github.com/PeppeColi/peppec/compare/v2.21.3...v2.21.4
 [2.21.3]: https://github.com/PeppeColi/peppec/compare/v2.21.2...v2.21.3
 [2.21.2]: https://github.com/PeppeColi/peppec/compare/v2.21.1...v2.21.2
 [2.21.1]: https://github.com/PeppeColi/peppec/compare/v2.21.0...v2.21.1
