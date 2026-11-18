@@ -394,7 +394,7 @@ Change the state from the Telegram bot or the dashboard; editing the labels by h
 | Label | Meaning |
 |---|---|
 | `merge: manual` | You merge the pull requests of the agent branches (default) |
-| `merge: automatic` | The app merges the pull requests of the agent branches once the review passes |
+| `merge: automatic` | The app merges the pull requests of the agent branches into the base branch once the review passes, and a feature branch once its feature review and end-to-end tests pass (not with a manual check). Into a feature branch the app merges them in both modes, once the checks pass |
 | `schedule: always` | New issues start at any hour (default) |
 | `schedule: nightly` | New issues start only in the work window (`PEPPEC_WORK_START_HOUR`–`PEPPEC_WORK_END_HOUR`) |
 | `paused` 🔴 | No new issue starts; the one in progress goes on. Only Resume lifts it |

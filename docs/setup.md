@@ -362,7 +362,8 @@ printf 'name: wake\non: push\njobs:\n  w:\n    runs-on: ubuntu-latest\n    steps
 git add .github/workflows/wake.yml && git commit -m 'chore: wake the workflows' && git push --atomic origin HEAD:main HEAD:dev
 git rm .github/workflows/wake.yml && git commit -m 'chore: remove wake.yml' && git push --atomic origin HEAD:main HEAD:dev
 ```
- `peppec doctor` reports the case as a problem when no workflow has started from an event within half an hour of the last push to `main`.
+
+`peppec doctor` reports the case as a problem when no workflow has started from an event within half an hour of the last push to `main`.
 
 ### Feature branches
 
@@ -392,7 +393,7 @@ How it works:
 - **When the last work unit is merged** the workflow opens a pull request from the feature branch into the base branch (with your `PEPPEC_AGENT_TOKEN`, because CodeRabbit skips a pull request authored by a bot), brings the base branch into the feature (see below), and starts the feature review: the specification is the issue in progress, CodeRabbit reviews the whole feature on that pull request, and the agent answers on the feature branch (see [Feature branches](architecture.md#feature-branches)). Once the review and the end-to-end tests pass, in automatic mode the app merges that pull request with a merge commit, unless the specification asks for a [manual check](planning.md#manual-check); otherwise you get the "ready to be tried" message with the link of the pull request: try the feature on its branch, then merge it yourself. The merge closes the specification and removes the feature branch.
 - **The feature follows the base branch only at the end.** While it is built the feature branch is left alone. When it is finished the workflow merges the base branch into it. If the two conflict, it opens a sync work unit, a sub-issue of the specification: the workflow makes the merge, the agent resolves the conflict markers, and the app merges its pull request with a merge commit (a squash would bring the conflict back). The feature review starts once that work unit is merged. If the base branch moves again while a finished feature waits for you, the workflow merges it in again and tells you (the review that passed stands), or opens a new sync work unit (the feature is then reviewed again).
 - **Setup.** `peppec init` asks whether you want feature branches (it sets `PEPPEC_BRANCHES` to `feature=feature/{spec}/dev`, which you can change afterwards) and the two end-to-end commands below. Where rulesets exist it creates a ruleset "feature branches" that forbids force pushes on them, and adds `ci / e2e_all` to the required checks of a ruleset it creates. `peppec doctor` checks the templates and warns when `ci / e2e_all` is not required on the base branch.
-- **On the dashboard and in `/status`** every finished feature is listed under "Ready to try", with the link of its pull request; "Being checked" means the workflow is still bringing in the base branch or running its end-to-end tests.
+- **On the dashboard and in `/status`** every finished feature is listed under "Ready to try", with the link of its pull request; "Being checked" means the feature review, the base branch or the end-to-end tests are still under way.
 - **A variable, not `.github/peppec.yml`:** a feature branch carries the configuration of the day it was created.
 
 ### End-to-end tests
@@ -469,14 +470,14 @@ The final layout:
     └── summary     (the day of the last summary, created by the bot)
 ```
 
-## Phase 7 — End-to-end test
+## Phase 7 — Trying the installation
 
 Test during the day, with dummy issues and the work window overridden.
 
 - [ ] On `main`: CI green, ruleset active, bot answering `/status`
 - [ ] Create an easy issue labelled `ready` and `size: M`
 - [ ] Start it ignoring the window: `gh workflow run agent.yml -R <USER>/<REPO> -f force=true`
-- [ ] An `agent/issue-N` branch and a pull request labelled `review 1` appear; CI runs; a "@coderabbitai review" comment appears when CI is green
+- [ ] A branch for the issue (`fix/N-<title>` with feature branches, `agent/issue-N` without) and a pull request labelled `review 1` appear; CI runs; a "@coderabbitai review" comment appears when CI is green
 - [ ] In manual mode you get "ready to merge": merge and check that the next issue starts right away
 - [ ] Create a deliberately vague issue: a "Question on #N" reaches you on Telegram. It shows the answer the agent recommends with an Accept button. Press Accept, or reply, and check that the work resumes
 - [ ] Create an issue that asks to change a protected file: you get a question, or the queue stops with the list of files

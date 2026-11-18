@@ -58,11 +58,11 @@ This is the case with [feature branches](setup.md#feature-branches) and `PEPPEC_
 - **Or the scenarios to cover:** `/to-tickets` adds the work unit that writes them, `size: L`, blocked by the others. Each test is tagged or named with the number of the specification, so the command in `PEPPEC_E2E_FEATURE` selects it.
 - **Without the section they are required**, so a forgotten decision costs a hotfix rather than a gap.
 - **`ci / e2e_all` runs either way**: a feature with no new tests can still break old ones.
+- **`docs/agents/e2e.md`** says how this repository writes and runs them.
 
 ### Manual check
 
 In automatic mode the app merges a reviewed and tested feature into the base branch by itself. When the feature changes what only a person can judge (the user interface or text people see, stored data or its migrations, security or permissions, external services or payments), the planning session proposes a manual check, says which criterion applies, and asks you. If you agree it writes one line in the "End-to-end" section: `Manual: <what to check>`, after the line that decides the tests; with end-to-end tests per feature off, the section holds only that line. The feature then stops at "ready to be tried", in both merge modes, and the message quotes the line. Without it the feature needs no manual check.
-- **`docs/agents/e2e.md`** says how this repository writes and runs them.
 
 ## Working on an existing codebase
 

@@ -9,6 +9,12 @@ history when this file was created.
 
 ## [Unreleased]
 
+### Fixed
+
+- The control panel that `peppec init` creates describes `merge: automatic` as the setup guide
+  does: the app also merges a reviewed and tested feature, and merges into a feature branch in
+  both modes.
+
 ## [2.21.4] - 2026-11-18
 
 ### Changed

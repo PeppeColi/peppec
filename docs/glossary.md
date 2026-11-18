@@ -48,7 +48,7 @@ _Avoid_: slice, ticket, task (the task is what the agent receives), story
 A work unit the workflow opens when the base branch conflicts with a finished feature: the workflow makes the merge with the conflict markers, the agent resolves them.
 
 **Hotfix work unit**
-A work unit of size L the workflow opens when the end-to-end tests of a feature fail, with the end of the log. Report a problem opens work units of size S that are not hotfixes.
+A work unit on a hotfix branch of a feature (the `hotfix` template of `PEPPEC_BRANCHES`), built before the feature is merged. Two things open one: the workflow, when the end-to-end tests of the feature fail (size L, with the end of the log), and Report a problem on a feature not merged yet (size S). After the merge, Report a problem opens a `reported` issue instead.
 
 **Size**
 The label `size: S` or `size: L` on a work unit, or no label for M. It picks the model.
@@ -167,14 +167,14 @@ The branch work units are merged into: `main`, or the branch in `PEPPEC_BASE_BRA
 _Avoid_: default branch (GitHub's default branch may differ), target branch
 
 **Feature branch**
-With `PEPPEC_BRANCHES`, the integration branch of one specification: its work units are merged into it, and it reaches the base branch only through a pull request the owner merges.
+With `PEPPEC_BRANCHES`, the integration branch of one specification: its work units are merged into it, and it reaches the base branch only through its pull request, merged by the app in automatic mode (unless the specification asks for a manual check) and by the owner otherwise.
 _Avoid_: topic branch, epic branch
 
 **Agent branch**
 The branch of one issue: `agent/issue-N`, or a name from the `work`, `hotfix`, `sync` or `single` templates of `PEPPEC_BRANCHES`. The workflow merges and deletes only these.
 
 **Ready to be tried**
-A feature whose work units are all merged (and, with feature branches, whose base branch came in, feature review passed and end-to-end tests passed), waiting for the owner: in manual mode, or because of a manual check. The owner gets a message with Report a problem.
+A feature whose work units are all merged, waiting for the owner to try it. Without feature branches it is already on the base branch, in both merge modes. With feature branches its base branch came in, its feature review and end-to-end tests passed, and it waits for the owner's merge: in manual mode, or because of a manual check. The owner gets a message with Report a problem.
 _Avoid_: done, released
 
 **End-to-end tests**
