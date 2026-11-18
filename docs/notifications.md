@@ -29,6 +29,7 @@ Every message starts with the repository it comes from, as in `[owner/name]`. On
 | The base branch is back: the queue goes on | Nothing | 🔕 |
 | The end-to-end tests failed: #M will fix them | Nothing | 🔕 |
 | The base branch and a feature conflict: #M will resolve it | Nothing | 🔕 |
+| Could not open the pull request of the feature of #N: the next run tries again | Nothing | 🔕 |
 | The base branch changed and is merged into a feature | Try its latest version, if you are trying it | 🔕 |
 | Dashboard: … (the trace of what you did on the dashboard) | Nothing | 🔕 |
 | Daily summary | Read it; not sent on a day with nothing merged, blocked, asked or in queue | 🔕 |
